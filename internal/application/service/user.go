@@ -37,6 +37,10 @@ var (
 	jwtSecret     string
 )
 
+var ErrPasswordPolicy = errors.New("password must be 6-32 characters")
+
+const passwordResetTTL = 30 * time.Minute
+
 // getJwtSecret retrieves the JWT secret from the environment, falling back to a securely generated random secret.
 func getJwtSecret() string {
 	jwtSecretOnce.Do(func() {
@@ -232,6 +236,98 @@ func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*type
 		Token:        accessToken,
 		RefreshToken: refreshToken,
 	}, nil
+}
+
+// RequestPasswordReset creates a short-lived, single-use token for an
+// existing account. Unknown emails intentionally return the same success
+// shape without creating a token so attackers cannot enumerate users.
+func (s *userService) RequestPasswordReset(ctx context.Context, email string) (*types.PasswordResetRequestResult, error) {
+	result := &types.PasswordResetRequestResult{Success: true}
+	email = strings.TrimSpace(strings.ToLower(email))
+	if email == "" {
+		return result, nil
+	}
+
+	user, err := s.userRepo.GetUserByEmail(ctx, email)
+	if err != nil {
+		if isUserLookupNotFound(err) {
+			return result, nil
+		}
+		return nil, err
+	}
+	if user == nil || !user.IsActive {
+		return result, nil
+	}
+
+	resetToken, err := generateRandomString(32)
+	if err != nil {
+		return nil, fmt.Errorf("generate password reset token: %w", err)
+	}
+	now := time.Now()
+	if err := s.tokenRepo.CreateToken(ctx, &types.AuthToken{
+		ID:        uuid.New().String(),
+		UserID:    user.ID,
+		Token:     resetToken,
+		TokenType: types.AuthTokenTypePasswordReset,
+		ExpiresAt: now.Add(passwordResetTTL),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		return nil, err
+	}
+
+	result.ResetToken = resetToken
+	return result, nil
+}
+
+// ResetPassword updates a user's password from a valid reset token. The token
+// is consumed on success and all existing auth tokens are revoked so old
+// sessions cannot continue after the password changes.
+func (s *userService) ResetPassword(ctx context.Context, tokenValue, newPassword string) error {
+	tokenValue = strings.TrimSpace(tokenValue)
+	if tokenValue == "" {
+		return apprepo.ErrTokenNotFound
+	}
+	if err := validatePasswordPolicy(newPassword); err != nil {
+		return err
+	}
+
+	token, err := s.tokenRepo.GetTokenByValue(ctx, tokenValue)
+	if err != nil {
+		return err
+	}
+	if token == nil ||
+		token.TokenType != types.AuthTokenTypePasswordReset ||
+		token.IsRevoked ||
+		!token.ExpiresAt.After(time.Now()) {
+		return apprepo.ErrTokenNotFound
+	}
+
+	user, err := s.userRepo.GetUserByID(ctx, token.UserID)
+	if err != nil {
+		return err
+	}
+	if user == nil || !user.IsActive {
+		return apprepo.ErrUserNotFound
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+	now := time.Now()
+	user.PasswordHash = string(hashedPassword)
+	user.UpdatedAt = now
+	if err := s.userRepo.UpdateUser(ctx, user); err != nil {
+		return err
+	}
+
+	token.IsRevoked = true
+	token.UpdatedAt = now
+	if err := s.tokenRepo.UpdateToken(ctx, token); err != nil {
+		return err
+	}
+	return s.tokenRepo.RevokeTokensByUserID(ctx, user.ID)
 }
 
 // buildMembershipsForUser returns the user's tenant memberships projected
@@ -1272,6 +1368,13 @@ func sanitizeUsernameCandidate(value string) string {
 		result = strings.Trim(result[:50], "-._")
 	}
 	return result
+}
+
+func validatePasswordPolicy(password string) error {
+	if len(password) < 6 || len(password) > 32 {
+		return ErrPasswordPolicy
+	}
+	return nil
 }
 
 func isUserLookupNotFound(err error) bool {

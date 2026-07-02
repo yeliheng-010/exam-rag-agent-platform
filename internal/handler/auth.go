@@ -5,12 +5,15 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	appservice "github.com/Tencent/WeKnora/internal/application/service"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/logger"
@@ -218,6 +221,88 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	logger.Infof(ctx, "User logged in successfully, email: %s", email)
 	c.JSON(http.StatusOK, response)
+}
+
+// ForgotPassword godoc
+// @Summary      申请重置密码
+// @Description  为已存在账号创建短期重置令牌；未知邮箱同样返回成功，避免账号枚举
+// @Tags         认证
+// @Accept       json
+// @Produce      json
+// @Param        request  body      types.ForgotPasswordRequest  true  "重置密码申请"
+// @Success      200      {object}  types.ForgotPasswordResponse
+// @Failure      400      {object}  errors.AppError  "请求参数错误"
+// @Router       /auth/forgot-password [post]
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var req types.ForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		appErr := errors.NewValidationError("Invalid password reset request").WithDetails(err.Error())
+		c.Error(appErr)
+		return
+	}
+
+	result, err := h.userService.RequestPasswordReset(ctx, req.Email)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to request password reset for %s: %v",
+			secutils.SanitizeForLog(req.Email), err)
+		appErr := errors.NewInternalServerError("Password reset request failed").WithDetails(err.Error())
+		c.Error(appErr)
+		return
+	}
+
+	resp := types.ForgotPasswordResponse{
+		Success: true,
+		Message: "If the account exists, a reset token has been generated",
+	}
+	if shouldExposePasswordResetToken() && result != nil {
+		resp.ResetToken = result.ResetToken
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// ResetPassword godoc
+// @Summary      重置密码
+// @Description  使用一次性重置令牌设置新密码，并撤销该用户已有登录令牌
+// @Tags         认证
+// @Accept       json
+// @Produce      json
+// @Param        request  body      types.ResetPasswordRequest  true  "重置密码"
+// @Success      200      {object}  map[string]interface{}      "重置成功"
+// @Failure      400      {object}  errors.AppError             "请求参数错误"
+// @Router       /auth/reset-password [post]
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var req types.ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		appErr := errors.NewValidationError("Invalid password reset request").WithDetails(err.Error())
+		c.Error(appErr)
+		return
+	}
+
+	if err := h.userService.ResetPassword(ctx, req.Token, req.NewPassword); err != nil {
+		logger.Warnf(ctx, "Password reset rejected: %v", err)
+		if stderrors.Is(err, appservice.ErrPasswordPolicy) {
+			c.Error(errors.NewValidationError("Password must be 6-32 characters"))
+			return
+		}
+		c.Error(errors.NewBadRequestError("Invalid or expired password reset token"))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Password reset successfully",
+	})
+}
+
+func shouldExposePasswordResetToken() bool {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("WEKNORA_EXPOSE_PASSWORD_RESET_TOKEN")), "true") {
+		return true
+	}
+	return !strings.EqualFold(strings.TrimSpace(os.Getenv("GIN_MODE")), "release")
 }
 
 // GetOIDCAuthorizationURL godoc

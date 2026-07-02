@@ -19,6 +19,7 @@ import (
 //  1. Add a *T field below + JSON tag (snake_case, must match the front-end key).
 //  2. Extend the merge logic in service.UserService.UpdateUserPreferences.
 //  3. Surface the new knob in the frontend settings store.
+//
 // No DB DDL is required — preferences is a single jsonb column.
 type UserPreferences struct {
 	// EnableMemory mirrors the "开启记忆功能" switch in General Settings.
@@ -132,10 +133,32 @@ type AuthToken struct {
 	User *User `json:"user,omitempty" gorm:"foreignKey:UserID"`
 }
 
+const AuthTokenTypePasswordReset = "password_reset"
+
 // LoginRequest represents a login request
 type LoginRequest struct {
 	Email    string `json:"email"    binding:"required,email"`
 	Password string `json:"password" binding:"required,min=6"`
+}
+
+type ForgotPasswordRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type ForgotPasswordResponse struct {
+	Success    bool   `json:"success"`
+	Message    string `json:"message,omitempty"`
+	ResetToken string `json:"reset_token,omitempty"`
+}
+
+type ResetPasswordRequest struct {
+	Token       string `json:"token"        binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=6,max=32"`
+}
+
+type PasswordResetRequestResult struct {
+	Success    bool   `json:"success"`
+	ResetToken string `json:"reset_token,omitempty"`
 }
 
 type OIDCAuthURLResponse struct {

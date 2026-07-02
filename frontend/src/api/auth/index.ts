@@ -69,6 +69,17 @@ export interface OIDCConfigResponse {
   message?: string
 }
 
+export interface ForgotPasswordResponse {
+  success: boolean
+  message?: string
+  reset_token?: string
+}
+
+export interface ResetPasswordResponse {
+  success: boolean
+  message?: string
+}
+
 // 用户注册接口
 export interface RegisterRequest {
   username: string
@@ -247,6 +258,33 @@ export async function getOIDCConfig(): Promise<OIDCConfigResponse> {
       success: false,
       enabled: false,
       message: error.message || t('error.auth.loginFailed')
+    }
+  }
+}
+
+export async function requestPasswordReset(email: string): Promise<ForgotPasswordResponse> {
+  try {
+    const response = await post('/api/v1/auth/forgot-password', { email })
+    return response as unknown as ForgotPasswordResponse
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || t('error.auth.requestPasswordResetFailed')
+    }
+  }
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<ResetPasswordResponse> {
+  try {
+    const response = await post('/api/v1/auth/reset-password', {
+      token,
+      new_password: newPassword
+    })
+    return response as unknown as ResetPasswordResponse
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || t('error.auth.resetPasswordFailed')
     }
   }
 }

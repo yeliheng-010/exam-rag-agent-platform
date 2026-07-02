@@ -12,6 +12,11 @@ type UserService interface {
 	Register(ctx context.Context, req *types.RegisterRequest) (*types.User, error)
 	// Login authenticates a user and returns tokens
 	Login(ctx context.Context, req *types.LoginRequest) (*types.LoginResponse, error)
+	// RequestPasswordReset creates a short-lived reset token for an existing
+	// account while returning generic success for unknown emails.
+	RequestPasswordReset(ctx context.Context, email string) (*types.PasswordResetRequestResult, error)
+	// ResetPassword updates the password using a single-use reset token.
+	ResetPassword(ctx context.Context, token, newPassword string) error
 	// GetOIDCAuthorizationURL builds the third-party OIDC authorization URL
 	GetOIDCAuthorizationURL(ctx context.Context, redirectURI string) (*types.OIDCAuthURLResponse, error)
 	// LoginWithOIDC exchanges the callback code, auto-provisions users if needed, and completes login

@@ -199,6 +199,12 @@
                 {{ loading ? $t('auth.loggingIn') : $t('auth.login') }}
               </t-button>
 
+              <div class="password-reset-entry">
+                <t-button theme="primary" variant="text" size="small" :disabled="loading" @click="openPasswordReset">
+                  {{ $t('auth.forgotPassword') }}
+                </t-button>
+              </div>
+
               <div class="register-cta" v-if="registrationEnabled">
                 <div class="register-cta__divider">
                   <span>{{ $t('auth.firstTime') }}</span>
@@ -319,6 +325,61 @@
         </div>
       </div>
     </div>
+
+    <t-dialog v-model:visible="passwordResetVisible" :header="$t('auth.resetPasswordTitle')" width="480px"
+      :footer="false" :close-on-overlay-click="!passwordResetLoading" :close-on-esc-keydown="!passwordResetLoading"
+      destroy-on-close @close="handlePasswordResetClose">
+      <div class="password-reset-dialog">
+        <p class="password-reset-dialog__desc">
+          {{ passwordResetStep === 'request' ? $t('auth.resetPasswordRequestDesc') : $t('auth.resetPasswordConfirmDesc')
+          }}
+        </p>
+
+        <t-form v-if="passwordResetStep === 'request'" ref="passwordResetRequestFormRef" :data="passwordResetRequestData"
+          :rules="passwordResetRequestRules" layout="vertical" @submit="handleRequestPasswordReset">
+          <t-form-item :label="$t('auth.email')" name="email">
+            <t-input v-model="passwordResetRequestData.email" :placeholder="$t('auth.emailPlaceholder')" type="text"
+              autocomplete="email" size="large" :disabled="passwordResetLoading" @enter="handleRequestPasswordReset" />
+          </t-form-item>
+          <t-button type="submit" theme="primary" block :loading="passwordResetLoading" class="password-reset-submit">
+            {{ $t('auth.sendResetToken') }}
+          </t-button>
+        </t-form>
+
+        <t-form v-else ref="passwordResetConfirmFormRef" :data="passwordResetConfirmData"
+          :rules="passwordResetConfirmRules" layout="vertical" @submit="handleResetPassword">
+          <t-alert v-if="passwordResetTokenHint" theme="info" :message="$t('auth.devResetTokenHint')"
+            class="password-reset-token-alert">
+            <template #operation>
+              <t-button theme="primary" variant="text" size="small" @click="copyResetToken">
+                {{ $t('common.copy') }}
+              </t-button>
+            </template>
+          </t-alert>
+          <t-form-item :label="$t('auth.resetToken')" name="token">
+            <t-input v-model="passwordResetConfirmData.token" :placeholder="$t('auth.resetTokenPlaceholder')" size="large"
+              :disabled="passwordResetLoading" />
+          </t-form-item>
+          <t-form-item :label="$t('auth.newPassword')" name="newPassword">
+            <t-input v-model="passwordResetConfirmData.newPassword" :placeholder="$t('auth.passwordPlaceholder')"
+              type="password" autocomplete="new-password" size="large" :disabled="passwordResetLoading" />
+          </t-form-item>
+          <t-form-item :label="$t('auth.confirmPassword')" name="confirmPassword">
+            <t-input v-model="passwordResetConfirmData.confirmPassword"
+              :placeholder="$t('auth.confirmPasswordPlaceholder')" type="password" autocomplete="new-password"
+              size="large" :disabled="passwordResetLoading" @enter="handleResetPassword" />
+          </t-form-item>
+          <div class="password-reset-actions">
+            <t-button theme="default" variant="outline" :disabled="passwordResetLoading" @click="passwordResetStep = 'request'">
+              {{ $t('auth.backToEmail') }}
+            </t-button>
+            <t-button type="submit" theme="primary" :loading="passwordResetLoading">
+              {{ $t('auth.resetPasswordSubmit') }}
+            </t-button>
+          </div>
+        </t-form>
+      </div>
+    </t-dialog>
   </div>
 </template>
 
@@ -343,6 +404,8 @@ import {
   userInfoFromApi,
   getInvitationByToken,
   registerByInvite,
+  requestPasswordReset,
+  resetPassword,
   type InviteLookup,
 } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
@@ -390,6 +453,8 @@ const slides = [
 // Form references
 const formRef = ref()
 const registerFormRef = ref()
+const passwordResetRequestFormRef = ref()
+const passwordResetConfirmFormRef = ref()
 
 // State management
 const loading = ref(false)
@@ -398,6 +463,10 @@ const isRegisterMode = ref(false)
 const showLanguageMenu = ref(false)
 const oidcEnabled = ref(false)
 const oidcProviderName = ref('')
+const passwordResetVisible = ref(false)
+const passwordResetLoading = ref(false)
+const passwordResetStep = ref<'request' | 'confirm'>('request')
+const passwordResetTokenHint = ref('')
 // registrationEnabled defaults to true so that on first paint the Register
 // link is visible; the actual mode is fetched from /auth/config in onMounted.
 // In invite_only mode the link/card are hidden.
@@ -445,6 +514,16 @@ const registerData = reactive<{ [key: string]: any }>({
   confirmPassword: ''
 })
 
+const passwordResetRequestData = reactive<{ [key: string]: any }>({
+  email: ''
+})
+
+const passwordResetConfirmData = reactive<{ [key: string]: any }>({
+  token: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+
 // Login form validation rules
 const formRules = computed(() => ({
   email: [
@@ -487,6 +566,32 @@ const registerRules = computed(() => ({
     { required: true, message: t('auth.confirmPasswordRequired'), type: 'error' },
     {
       validator: (val: string) => val === registerData.password,
+      message: t('auth.passwordMismatch'),
+      type: 'error'
+    }
+  ]
+}))
+
+const passwordResetRequestRules = computed(() => ({
+  email: [
+    { required: true, message: t('auth.emailRequired'), type: 'error' },
+    { email: true, message: t('auth.emailInvalid'), type: 'error' }
+  ]
+}))
+
+const passwordResetConfirmRules = computed(() => ({
+  token: [
+    { required: true, message: t('auth.resetTokenRequired'), type: 'error' }
+  ],
+  newPassword: [
+    { required: true, message: t('auth.passwordRequired'), type: 'error' },
+    { min: 6, message: t('auth.resetPasswordMinLength'), type: 'error' },
+    { max: 32, message: t('auth.passwordMaxLength'), type: 'error' }
+  ],
+  confirmPassword: [
+    { required: true, message: t('auth.confirmPasswordRequired'), type: 'error' },
+    {
+      validator: (val: string) => val === passwordResetConfirmData.newPassword,
       message: t('auth.passwordMismatch'),
       type: 'error'
     }
@@ -601,6 +706,81 @@ const loadAuthConfig = async () => {
     registrationEnabled.value = response.registration_mode !== 'invite_only'
   } catch {
     registrationEnabled.value = true
+  }
+}
+
+const resetPasswordDialogState = () => {
+  passwordResetStep.value = 'request'
+  passwordResetTokenHint.value = ''
+  passwordResetRequestData.email = formData.email || ''
+  passwordResetConfirmData.token = ''
+  passwordResetConfirmData.newPassword = ''
+  passwordResetConfirmData.confirmPassword = ''
+}
+
+const openPasswordReset = () => {
+  resetPasswordDialogState()
+  passwordResetVisible.value = true
+}
+
+const handlePasswordResetClose = () => {
+  if (!passwordResetLoading.value) {
+    resetPasswordDialogState()
+  }
+}
+
+const handleRequestPasswordReset = async () => {
+  const valid = await passwordResetRequestFormRef.value?.validate()
+  if (valid !== true) return
+
+  passwordResetLoading.value = true
+  try {
+    const response = await requestPasswordReset(passwordResetRequestData.email)
+    if (!response.success) {
+      MessagePlugin.error(response.message || t('auth.resetPasswordRequestFailed'))
+      return
+    }
+    passwordResetTokenHint.value = response.reset_token || ''
+    passwordResetConfirmData.token = response.reset_token || ''
+    passwordResetStep.value = 'confirm'
+    MessagePlugin.success(t('auth.resetPasswordRequestSuccess'))
+  } catch (error: any) {
+    MessagePlugin.error(error.message || t('auth.resetPasswordRequestFailed'))
+  } finally {
+    passwordResetLoading.value = false
+  }
+}
+
+const copyResetToken = async () => {
+  if (!passwordResetTokenHint.value) return
+  try {
+    await navigator.clipboard.writeText(passwordResetTokenHint.value)
+    MessagePlugin.success(t('common.copied'))
+  } catch {
+    MessagePlugin.warning(passwordResetTokenHint.value)
+  }
+}
+
+const handleResetPassword = async () => {
+  const valid = await passwordResetConfirmFormRef.value?.validate()
+  if (valid !== true) return
+
+  passwordResetLoading.value = true
+  try {
+    const response = await resetPassword(passwordResetConfirmData.token, passwordResetConfirmData.newPassword)
+    if (!response.success) {
+      MessagePlugin.error(response.message || t('auth.resetPasswordFailed'))
+      return
+    }
+    MessagePlugin.success(t('auth.resetPasswordSuccess'))
+    formData.email = passwordResetRequestData.email
+    formData.password = ''
+    passwordResetVisible.value = false
+    resetPasswordDialogState()
+  } catch (error: any) {
+    MessagePlugin.error(error.message || t('auth.resetPasswordFailed'))
+  } finally {
+    passwordResetLoading.value = false
   }
 }
 
@@ -1476,6 +1656,50 @@ onMounted(async () => {
   font-weight: 500;
   font-family: var(--app-font-family);
   margin: 20px 0 16px 0;
+}
+
+.password-reset-entry {
+  display: flex;
+  justify-content: center;
+  margin: -4px 0 8px;
+}
+
+.password-reset-dialog {
+  &__desc {
+    margin: 0 0 18px;
+    color: var(--td-text-color-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  :deep(.t-form-item__label) {
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  :deep(.t-input) {
+    border-radius: 8px;
+  }
+}
+
+.password-reset-submit {
+  height: 42px;
+  border-radius: 8px;
+}
+
+.password-reset-token-alert {
+  margin-bottom: 16px;
+}
+
+.password-reset-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 4px;
+
+  .t-button {
+    min-width: 112px;
+  }
 }
 
 .oidc-divider {
