@@ -75,6 +75,23 @@ func TestExamRAGRouteGuardSourceMatrix(t *testing.T) {
 	})
 }
 
+func TestExamAdminMemberRouteGuardSourceMatrix(t *testing.T) {
+	sourceBytes, err := os.ReadFile("router.go")
+	if err != nil {
+		t.Fatalf("read router.go: %v", err)
+	}
+	source := string(sourceBytes)
+
+	mustContainAll(t, source, []string{
+		`tenantByID.POST("/members", g.Admin(), memberHandler.AddMember)`,
+		`tenantByID.PUT("/members/:user_id", g.Admin(), memberHandler.UpdateMemberRole)`,
+		`tenantByID.DELETE("/members/:user_id", g.Admin(), memberHandler.RemoveMember)`,
+		`tenantByID.POST("/invitations", g.Admin(), invitationHandler.CreateInvitation)`,
+		`tenantByID.DELETE("/invitations/:inv_id", g.Admin(), invitationHandler.RevokeInvitation)`,
+		`tenantByID.POST("/invite-links", g.Admin(), invitationHandler.CreateInviteLink)`,
+	})
+}
+
 func okHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

@@ -151,6 +151,9 @@ func (s *tenantInvitationService) Create(
 	if !role.IsValid() {
 		return nil, ErrInvalidTenantRole
 	}
+	if _, ok := callerTenantRole(ctx); ok && role == types.TenantRoleOwner && !callerIsOwner(ctx) {
+		return nil, ErrOwnerRoleRequired
+	}
 	// Reject early if the invitee is already an active member; the
 	// handler renders this as "they're already in" rather than the
 	// generic conflict.
@@ -339,6 +342,9 @@ func (s *tenantInvitationService) Revoke(ctx context.Context, invID uint64) erro
 	if inv == nil {
 		return ErrInvitationNotFound
 	}
+	if _, ok := callerTenantRole(ctx); ok && inv.Role == types.TenantRoleOwner && !callerIsOwner(ctx) {
+		return ErrOwnerRoleRequired
+	}
 	if inv.Status != types.TenantInvitationStatusPending {
 		return ErrInvitationNotPending
 	}
@@ -471,6 +477,9 @@ func (s *tenantInvitationService) CreateShareLink(
 ) (*types.TenantInvitation, string, error) {
 	if !role.IsValid() {
 		return nil, "", ErrInvalidTenantRole
+	}
+	if _, ok := callerTenantRole(ctx); ok && role == types.TenantRoleOwner && !callerIsOwner(ctx) {
+		return nil, "", ErrOwnerRoleRequired
 	}
 	token, err := generateShareLinkToken()
 	if err != nil {

@@ -36,6 +36,7 @@ export const useMenuStore = defineStore('menuStore', () => {
     { title: '', titleKey: 'menu.billing', icon: 'setting', path: 'billing', minRole: 'admin' },
     { title: '', titleKey: 'menu.review', icon: 'setting', path: 'review', minRole: 'contributor' },
     { title: '', titleKey: 'menu.examConfig', icon: 'setting', path: 'exam-config', minRole: 'admin' },
+    { title: '', titleKey: 'menu.admin', icon: 'user', path: 'admin', minRole: 'admin' },
     { title: '', titleKey: 'menu.integrations', icon: 'integration', path: 'integrations', minRole: 'admin' },
     { title: '', titleKey: 'menu.organizations', icon: 'organization', path: 'organizations', minRole: 'admin' },
     { title: '', titleKey: 'menu.settings', icon: 'setting', path: 'settings' },

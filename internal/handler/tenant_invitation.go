@@ -290,6 +290,8 @@ func (h *TenantInvitationHandler) CreateInvitation(c *gin.Context) {
 		switch {
 		case errors.Is(err, service.ErrInvalidTenantRole):
 			c.Error(apperrors.NewValidationError(err.Error()))
+		case errors.Is(err, service.ErrOwnerRoleRequired):
+			c.Error(apperrors.NewForbiddenError(err.Error()))
 		case errors.Is(err, service.ErrPendingInvitationExists):
 			c.Error(apperrors.NewConflictError(err.Error()))
 		case errors.Is(err, service.ErrAlreadyMember):
@@ -365,6 +367,8 @@ func (h *TenantInvitationHandler) RevokeInvitation(c *gin.Context) {
 		switch {
 		case errors.Is(err, service.ErrInvitationNotFound):
 			c.Error(apperrors.NewNotFoundError("invitation not found"))
+		case errors.Is(err, service.ErrOwnerRoleRequired):
+			c.Error(apperrors.NewForbiddenError(err.Error()))
 		case errors.Is(err, service.ErrInvitationNotPending):
 			c.Error(apperrors.NewConflictError(err.Error()))
 		default:

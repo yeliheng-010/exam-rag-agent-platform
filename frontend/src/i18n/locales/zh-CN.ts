@@ -9,6 +9,7 @@ export default {
     billing: "支付与权益",
     review: "审核工作台",
     examConfig: "考试域配置",
+    admin: "管理端",
     integrations: "发布集成",
     organizations: "共享空间",
     chat: "对话",
@@ -6046,9 +6047,16 @@ export default {
     title: "用户信息",
     description: "查看您的账户基础信息（用户 ID、用户名、邮箱、注册时间）",
   },
+  platformAdmin: {
+    title: "平台管理",
+    subtitle: "管理当前空间的成员、角色和邀请。管理员可以维护学生与老师角色，Owner 角色仅 Owner 可管理。",
+    tabs: {
+      members: "成员与角色",
+    },
+  },
   tenantMember: {
     title: "成员管理",
-    sectionDescription: "邀请伙伴加入当前空间并分配角色。只有 Owner 可以新增或移除成员。",
+    sectionDescription: "管理员可以邀请成员并分配学生 / 老师 / 管理员角色；Owner 角色仅 Owner 可管理。",
     learnRbacGuide: "了解 RBAC",
     totalCount: "共 {n} 位成员",
     listTitle: "空间成员",

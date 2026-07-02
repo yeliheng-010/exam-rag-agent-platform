@@ -260,6 +260,10 @@ func newServiceWithRepo() (interfaces.TenantMemberService, *fakeTenantMemberRepo
 	return NewTenantMemberService(r, nil), r
 }
 
+func tenantRoleCtx(role types.TenantRole) context.Context {
+	return context.WithValue(context.Background(), types.TenantRoleContextKey, role)
+}
+
 func TestTenantMemberService_AddMember_RejectsInvalidRole(t *testing.T) {
 	svc, _ := newServiceWithRepo()
 	_, err := svc.AddMember(context.Background(), "u1", 1, types.TenantRole("nonsense"), nil)
@@ -292,6 +296,36 @@ func TestTenantMemberService_AddMember_MapsDuplicateKeyRace(t *testing.T) {
 	_, err := svc.AddMember(context.Background(), "u_race", 1, types.TenantRoleContributor, nil)
 	if !errors.Is(err, ErrMembershipAlreadyExists) {
 		t.Fatalf("want ErrMembershipAlreadyExists on duplicate-key race, got %v", err)
+	}
+}
+
+func TestTenantMemberService_AddMember_AdminCanAddOrdinaryRole(t *testing.T) {
+	svc, _ := newServiceWithRepo()
+	mb, err := svc.AddMember(tenantRoleCtx(types.TenantRoleAdmin), "u-student", 1, types.TenantRoleViewer, nil)
+	if err != nil {
+		t.Fatalf("admin AddMember viewer: %v", err)
+	}
+	if mb == nil || mb.Role != types.TenantRoleViewer {
+		t.Fatalf("unexpected membership: %+v", mb)
+	}
+}
+
+func TestTenantMemberService_AddMember_AdminCannotAddOwner(t *testing.T) {
+	svc, _ := newServiceWithRepo()
+	_, err := svc.AddMember(tenantRoleCtx(types.TenantRoleAdmin), "u-owner", 1, types.TenantRoleOwner, nil)
+	if !errors.Is(err, ErrOwnerRoleRequired) {
+		t.Fatalf("want ErrOwnerRoleRequired, got %v", err)
+	}
+}
+
+func TestTenantMemberService_AddMember_OwnerCanAddOwner(t *testing.T) {
+	svc, _ := newServiceWithRepo()
+	mb, err := svc.AddMember(tenantRoleCtx(types.TenantRoleOwner), "u-owner", 1, types.TenantRoleOwner, nil)
+	if err != nil {
+		t.Fatalf("owner AddMember owner: %v", err)
+	}
+	if mb == nil || mb.Role != types.TenantRoleOwner {
+		t.Fatalf("unexpected membership: %+v", mb)
 	}
 }
 
@@ -370,6 +404,58 @@ func TestTenantMemberService_UpdateRole_ReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestTenantMemberService_UpdateRole_AdminCanManageOrdinaryRole(t *testing.T) {
+	svc, _ := newServiceWithRepo()
+	ctx := context.Background()
+	if _, err := svc.AddMember(ctx, "u-teacher", 1, types.TenantRoleContributor, nil); err != nil {
+		t.Fatalf("seed contributor: %v", err)
+	}
+	if err := svc.UpdateRole(tenantRoleCtx(types.TenantRoleAdmin), "u-teacher", 1, types.TenantRoleAdmin); err != nil {
+		t.Fatalf("admin should promote ordinary member to admin, got %v", err)
+	}
+}
+
+func TestTenantMemberService_UpdateRole_AdminCannotPromoteToOwner(t *testing.T) {
+	svc, _ := newServiceWithRepo()
+	ctx := context.Background()
+	if _, err := svc.AddMember(ctx, "u-teacher", 1, types.TenantRoleContributor, nil); err != nil {
+		t.Fatalf("seed contributor: %v", err)
+	}
+	err := svc.UpdateRole(tenantRoleCtx(types.TenantRoleAdmin), "u-teacher", 1, types.TenantRoleOwner)
+	if !errors.Is(err, ErrOwnerRoleRequired) {
+		t.Fatalf("want ErrOwnerRoleRequired, got %v", err)
+	}
+}
+
+func TestTenantMemberService_UpdateRole_AdminCannotDemoteOwner(t *testing.T) {
+	svc, _ := newServiceWithRepo()
+	ctx := context.Background()
+	if _, err := svc.EnsureOwner(ctx, "owner1", 1); err != nil {
+		t.Fatalf("seed owner1: %v", err)
+	}
+	if _, err := svc.AddMember(ctx, "owner2", 1, types.TenantRoleOwner, nil); err != nil {
+		t.Fatalf("seed owner2: %v", err)
+	}
+	err := svc.UpdateRole(tenantRoleCtx(types.TenantRoleAdmin), "owner1", 1, types.TenantRoleAdmin)
+	if !errors.Is(err, ErrOwnerRoleRequired) {
+		t.Fatalf("want ErrOwnerRoleRequired, got %v", err)
+	}
+}
+
+func TestTenantMemberService_UpdateRole_OwnerCanManageOwnerWhenOtherOwnerExists(t *testing.T) {
+	svc, _ := newServiceWithRepo()
+	ctx := context.Background()
+	if _, err := svc.EnsureOwner(ctx, "owner1", 1); err != nil {
+		t.Fatalf("seed owner1: %v", err)
+	}
+	if _, err := svc.AddMember(ctx, "owner2", 1, types.TenantRoleOwner, nil); err != nil {
+		t.Fatalf("seed owner2: %v", err)
+	}
+	if err := svc.UpdateRole(tenantRoleCtx(types.TenantRoleOwner), "owner1", 1, types.TenantRoleAdmin); err != nil {
+		t.Fatalf("owner should demote owner when another owner exists, got %v", err)
+	}
+}
+
 func TestTenantMemberService_RemoveMember_BlocksLastOwner(t *testing.T) {
 	svc, _ := newServiceWithRepo()
 	ctx := context.Background()
@@ -403,6 +489,35 @@ func TestTenantMemberService_RemoveMember_ReturnsNotFound(t *testing.T) {
 	svc, _ := newServiceWithRepo()
 	if err := svc.RemoveMember(context.Background(), "ghost", 1); !errors.Is(err, ErrMembershipNotFound) {
 		t.Fatalf("want ErrMembershipNotFound, got %v", err)
+	}
+}
+
+func TestTenantMemberService_RemoveMember_AdminCannotRemoveOwner(t *testing.T) {
+	svc, _ := newServiceWithRepo()
+	ctx := context.Background()
+	if _, err := svc.EnsureOwner(ctx, "owner1", 1); err != nil {
+		t.Fatalf("seed owner1: %v", err)
+	}
+	if _, err := svc.AddMember(ctx, "owner2", 1, types.TenantRoleOwner, nil); err != nil {
+		t.Fatalf("seed owner2: %v", err)
+	}
+	err := svc.RemoveMember(tenantRoleCtx(types.TenantRoleAdmin), "owner1", 1)
+	if !errors.Is(err, ErrOwnerRoleRequired) {
+		t.Fatalf("want ErrOwnerRoleRequired, got %v", err)
+	}
+}
+
+func TestTenantMemberService_RemoveMember_OwnerCanRemoveOwnerWhenOtherOwnerExists(t *testing.T) {
+	svc, _ := newServiceWithRepo()
+	ctx := context.Background()
+	if _, err := svc.EnsureOwner(ctx, "owner1", 1); err != nil {
+		t.Fatalf("seed owner1: %v", err)
+	}
+	if _, err := svc.AddMember(ctx, "owner2", 1, types.TenantRoleOwner, nil); err != nil {
+		t.Fatalf("seed owner2: %v", err)
+	}
+	if err := svc.RemoveMember(tenantRoleCtx(types.TenantRoleOwner), "owner1", 1); err != nil {
+		t.Fatalf("owner should remove owner when another owner exists, got %v", err)
 	}
 }
 

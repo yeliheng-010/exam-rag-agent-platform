@@ -9,6 +9,7 @@ export default {
     billing: 'Billing',
     review: 'Review',
     examConfig: 'Exam Config',
+    admin: 'Admin',
     integrations: 'Publish & Integrations',
     organizations: 'Shared Spaces',
     chat: 'Chat',
@@ -6036,9 +6037,18 @@ export default {
     title: 'User Profile',
     description: 'View your account info (user ID, username, email, registration time).',
   },
+  platformAdmin: {
+    title: 'Platform Admin',
+    subtitle:
+      'Manage members, roles, and invitations for the current workspace. Admins can maintain student and teacher roles; Owner remains Owner-only.',
+    tabs: {
+      members: 'Members & roles',
+    },
+  },
   tenantMember: {
     title: 'Members',
-    sectionDescription: 'Invite teammates to the tenant and manage their roles. Only Owner can add or remove members.',
+    sectionDescription:
+      'Admins can invite members and assign student / teacher / admin roles; Owner can only be managed by an Owner.',
     learnRbacGuide: 'Learn about RBAC',
     totalCount: '{n} members',
     listTitle: 'Workspace members',

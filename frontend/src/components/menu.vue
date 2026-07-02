@@ -85,7 +85,7 @@
                         <div class="menu_item-box">
                             <div class="menu_icon">
                                 <img class="icon"
-                                    :src="getImgSrc(item.icon == 'zhishiku' ? knowledgeIcon : item.icon == 'agent' ? agentIcon : item.icon == 'integration' ? integrationIcon : item.icon == 'organization' ? organizationIcon : item.icon == 'logout' ? logoutIcon : item.icon == 'setting' ? settingIcon : prefixIcon)"
+                                    :src="getImgSrc(item.icon == 'zhishiku' ? knowledgeIcon : item.icon == 'agent' ? agentIcon : item.icon == 'integration' ? integrationIcon : item.icon == 'organization' ? organizationIcon : item.icon == 'user' ? userIcon : item.icon == 'logout' ? logoutIcon : item.icon == 'setting' ? settingIcon : prefixIcon)"
                                     alt="">
                             </div>
                             <template v-if="!uiStore.sidebarCollapsed">
@@ -424,6 +424,8 @@ const isMenuItemActive = (itemPath: string): boolean => {
             return currentRoute === 'reviewHome';
         case 'exam-config':
             return currentRoute === 'examConfigHome';
+        case 'admin':
+            return currentRoute === 'platformAdmin';
         case 'agents':
             return currentRoute === 'agentList';
         case 'integrations':
@@ -467,6 +469,7 @@ const topMenuItems = computed<MenuItem[]>(() => {
         item.path === 'billing' ||
         item.path === 'review' ||
         item.path === 'exam-config' ||
+        item.path === 'admin' ||
         item.path === 'integrations' ||
         item.path === 'organizations' ||
         item.path === 'creatChat'
@@ -485,6 +488,7 @@ const bottomMenuItems = computed<MenuItem[]>(() => {
             item.path === 'billing' ||
             item.path === 'review' ||
             item.path === 'exam-config' ||
+            item.path === 'admin' ||
             item.path === 'integrations' ||
             item.path === 'organizations' ||
             item.path === 'creatChat'
@@ -1071,6 +1075,7 @@ let settingIcon = ref('setting.svg');
 let agentIcon = ref('agent.svg');
 let integrationIcon = ref('integration.svg');
 let organizationIcon = ref('organization.svg');
+let userIcon = ref('user.svg');
 let pathPrefix = ref(route.name)
 const getIcon = (path: string) => {
     // 根据当前路由状态更新所有图标
@@ -1080,6 +1085,7 @@ const getIcon = (path: string) => {
     const agentsActiveState = route.name === 'agentList';
     const integrationsActiveState = route.name === 'integrations';
     const organizationsActiveState = route.name === 'organizationList';
+    const adminActiveState = route.name === 'platformAdmin';
 
     // 知识库图标：只在知识库页面显示绿色
     knowledgeIcon.value = kbActiveState.isKbActive ? 'zhishiku-green.svg' : 'zhishiku.svg';
@@ -1091,6 +1097,9 @@ const getIcon = (path: string) => {
 
     // 组织图标：只在组织页面显示绿色
     organizationIcon.value = organizationsActiveState ? 'organization-green.svg' : 'organization.svg';
+
+    // 管理端图标：只在平台管理页显示绿色
+    userIcon.value = adminActiveState ? 'user-green.svg' : 'user.svg';
 
     // 对话图标：只在对话创建页面显示绿色，其他情况显示默认
     prefixIcon.value = creatChatActiveState.isCreatChatActive ? 'prefixIcon-green.svg' : 'prefixIcon.svg';
@@ -1125,6 +1134,8 @@ const handleMenuClick = async (path: string) => {
         router.push('/platform/review')
     } else if (path === 'exam-config') {
         router.push('/platform/exam-config')
+    } else if (path === 'admin') {
+        router.push('/platform/admin')
     } else if (path === 'agents') {
         router.push('/platform/agents')
     } else if (path === 'integrations') {

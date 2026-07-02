@@ -256,6 +256,36 @@ func TestInvitationService_Create_DedupsPending(t *testing.T) {
 	}
 }
 
+func TestInvitationService_Create_AdminCanInviteOrdinaryRole(t *testing.T) {
+	svc, _, _ := newInvitationSvc()
+	inv, err := svc.Create(tenantRoleCtx(types.TenantRoleAdmin), 1, "u-student", types.TenantRoleViewer, nil, "")
+	if err != nil {
+		t.Fatalf("admin Create viewer invitation: %v", err)
+	}
+	if inv == nil || inv.Role != types.TenantRoleViewer {
+		t.Fatalf("unexpected invitation: %+v", inv)
+	}
+}
+
+func TestInvitationService_Create_AdminCannotInviteOwner(t *testing.T) {
+	svc, _, _ := newInvitationSvc()
+	_, err := svc.Create(tenantRoleCtx(types.TenantRoleAdmin), 1, "u-owner", types.TenantRoleOwner, nil, "")
+	if !errors.Is(err, ErrOwnerRoleRequired) {
+		t.Fatalf("want ErrOwnerRoleRequired, got %v", err)
+	}
+}
+
+func TestInvitationService_Create_OwnerCanInviteOwner(t *testing.T) {
+	svc, _, _ := newInvitationSvc()
+	inv, err := svc.Create(tenantRoleCtx(types.TenantRoleOwner), 1, "u-owner", types.TenantRoleOwner, nil, "")
+	if err != nil {
+		t.Fatalf("owner Create owner invitation: %v", err)
+	}
+	if inv == nil || inv.Role != types.TenantRoleOwner {
+		t.Fatalf("unexpected invitation: %+v", inv)
+	}
+}
+
 func TestInvitationService_Accept_OnlyByInvitee(t *testing.T) {
 	svc, _, _ := newInvitationSvc()
 	ctx := context.Background()
@@ -366,6 +396,18 @@ func TestInvitationService_Revoke_MarksRevoked(t *testing.T) {
 	}
 }
 
+func TestInvitationService_Revoke_AdminCannotRevokeOwnerInvitation(t *testing.T) {
+	svc, _, _ := newInvitationSvc()
+	inv, err := svc.Create(tenantRoleCtx(types.TenantRoleOwner), 1, "u-owner", types.TenantRoleOwner, nil, "")
+	if err != nil {
+		t.Fatalf("seed owner invite: %v", err)
+	}
+	err = svc.Revoke(tenantRoleCtx(types.TenantRoleAdmin), inv.ID)
+	if !errors.Is(err, ErrOwnerRoleRequired) {
+		t.Fatalf("want ErrOwnerRoleRequired, got %v", err)
+	}
+}
+
 func TestInvitationService_LazySweepExpires(t *testing.T) {
 	// Drop a row directly into the repo with an ExpiresAt in the past,
 	// then call ListByInvitee — the sweep must flip it to expired
@@ -458,6 +500,27 @@ func TestInvitationService_CreateShareLink_RejectsInvalidRole(t *testing.T) {
 		context.Background(), 1, types.TenantRole("magician"), nil, "")
 	if !errors.Is(err, ErrInvalidTenantRole) {
 		t.Fatalf("want ErrInvalidTenantRole, got %v", err)
+	}
+}
+
+func TestInvitationService_CreateShareLink_AdminCanCreateOrdinaryRole(t *testing.T) {
+	svc, _, _ := newInvitationSvc()
+	inv, plain, err := svc.CreateShareLink(
+		tenantRoleCtx(types.TenantRoleAdmin), 1, types.TenantRoleContributor, nil, "")
+	if err != nil {
+		t.Fatalf("admin CreateShareLink contributor: %v", err)
+	}
+	if plain == "" || inv == nil || inv.Role != types.TenantRoleContributor {
+		t.Fatalf("unexpected share link: inv=%+v token=%q", inv, plain)
+	}
+}
+
+func TestInvitationService_CreateShareLink_AdminCannotCreateOwnerRole(t *testing.T) {
+	svc, _, _ := newInvitationSvc()
+	_, _, err := svc.CreateShareLink(
+		tenantRoleCtx(types.TenantRoleAdmin), 1, types.TenantRoleOwner, nil, "")
+	if !errors.Is(err, ErrOwnerRoleRequired) {
+		t.Fatalf("want ErrOwnerRoleRequired, got %v", err)
 	}
 }
 

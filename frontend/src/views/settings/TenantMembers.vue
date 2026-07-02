@@ -219,7 +219,7 @@
                         clearable />
                     </t-form-item>
                     <t-form-item :label="$t('tenantMember.add.roleLabel')" name="role">
-                      <t-select v-model="addForm.role" :options="roleOptions" :popup-props="roleSelectPopupProps" />
+                      <t-select v-model="addForm.role" :options="assignableRoleOptions" :popup-props="roleSelectPopupProps" />
                     </t-form-item>
                   </t-form>
                   <div v-else class="invite-confirm-body">
@@ -268,7 +268,7 @@
                     </p>
                     <t-form :data="shareLinkForm" :label-width="80">
                       <t-form-item :label="$t('tenantMember.add.roleLabel')" name="role">
-                        <t-select v-model="shareLinkForm.role" :options="roleOptions"
+                        <t-select v-model="shareLinkForm.role" :options="assignableRoleOptions"
                           :popup-props="roleSelectPopupProps" />
                       </t-form-item>
                     </t-form>
@@ -334,10 +334,10 @@
               </template>
               <template #role="{ row }">
                 <div class="role-cell">
-                  <t-select v-if="canManage && row.user_id !== currentUserId" :model-value="row.role"
+                  <t-select v-if="canEditMember(row)" :model-value="row.role"
                     class="member-role-select" size="small" :popup-props="roleSelectPopupProps"
                     @change="(val: string) => onRoleChange(row, val)">
-                    <t-option v-for="opt in roleOptions" :key="opt.value" :value="opt.value" :label="opt.label">
+                    <t-option v-for="opt in editableRoleOptions(row)" :key="opt.value" :value="opt.value" :label="opt.label">
                       <span class="role-option">
                         <t-icon :name="roleIcon(opt.value)" class="role-option-icon" />
                         <span>{{ opt.label }}</span>
@@ -352,7 +352,7 @@
               <template #joined_at="{ row }">{{ formatDate(row.joined_at) }}</template>
               <template #actions="{ row }">
                 <t-popconfirm
-                  v-if="canManage && row.user_id !== currentUserId"
+                  v-if="canRemoveMember(row)"
                   :content="$t('tenantMember.remove.confirmBody', { name: row.username || row.email })"
                   :confirm-btn="{ content: $t('tenantMember.remove.confirm'), theme: 'danger' }"
                   :cancel-btn="{ content: $t('common.cancel') }"
@@ -643,6 +643,12 @@ const currentRole = computed<TenantRole | ''>(() => (authStore.currentTenantRole
 // who actually need them. Local Owners of their own tenant come in via
 // the role branch.
 const canManage = computed(
+  () =>
+    currentRole.value === 'owner' ||
+    currentRole.value === 'admin' ||
+    authStore.canAccessAllTenants === true,
+)
+const canManageOwnerRoles = computed(
   () => currentRole.value === 'owner' || authStore.canAccessAllTenants === true,
 )
 // Admin+ (and cross-tenant superusers) can view the audit log. Mirrors
@@ -668,6 +674,28 @@ const roleOptions = computed(() => [
   { label: t('tenantMember.role.viewer'), value: 'viewer' },
 ])
 
+const assignableRoleOptions = computed(() =>
+  canManageOwnerRoles.value
+    ? roleOptions.value
+    : roleOptions.value.filter((opt) => opt.value !== 'owner'),
+)
+
+function canEditMember(row: TenantMember): boolean {
+  if (!canManage.value || row.user_id === currentUserId.value) return false
+  return row.role !== 'owner' || canManageOwnerRoles.value
+}
+
+function canRemoveMember(row: TenantMember): boolean {
+  return canEditMember(row)
+}
+
+function editableRoleOptions(row: TenantMember) {
+  if (row.role === 'owner' && canManageOwnerRoles.value) {
+    return roleOptions.value
+  }
+  return assignableRoleOptions.value
+}
+
 /** 下拉层须高于邀请浮层（3050）与组织设置全屏遮罩，否则会被压住 */
 const roleSelectPopupProps = {
   zIndex: 6200,
@@ -690,7 +718,7 @@ const roleMatrix: Record<TenantRole, RolePerm[]> = {
     { key: 'readAll', has: true },
   ],
   admin: [
-    { key: 'manageMembers', has: false },
+    { key: 'manageMembers', has: true },
     { key: 'manageTenantConfig', has: false },
     { key: 'manageInfra', has: true },
     { key: 'createOwnKB', has: true },

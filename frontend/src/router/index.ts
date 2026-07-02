@@ -147,6 +147,12 @@ const router = createRouter({
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
+          path: "admin",
+          name: "platformAdmin",
+          component: () => import("../views/admin/AdminHome.vue"),
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'admin' as RoleKey }
+        },
+        {
           path: "tenant",
           redirect: "/platform/settings"
         },

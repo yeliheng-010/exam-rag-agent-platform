@@ -514,9 +514,9 @@ func RegisterChatRoutes(r *gin.RouterGroup, handler *session.Handler, g *rbacGua
 //   - DELETE /:id         Owner+ (also normally a CanAccessAllTenants op)
 //   - POST  /:id/api-key  Owner+ (rotating the tenant API key is sensitive)
 //   - GET    /:id/members            Viewer+ (any member can see who else is in)
-//   - POST   /:id/members            Owner+ (only Owner can add new members)
-//   - PUT    /:id/members/:user_id   Owner+ (only Owner can change roles)
-//   - DELETE /:id/members/:user_id   Owner+ (only Owner can remove members)
+//   - POST   /:id/members            Admin+ (Owner role assignment still requires Owner)
+//   - PUT    /:id/members/:user_id   Admin+ (Owner role changes still require Owner)
+//   - DELETE /:id/members/:user_id   Admin+ (Owner removal still requires Owner)
 //   - POST   /:id/leave              Viewer+ (any member can quit on their own)
 //
 // All /tenants/:id endpoints share g.PathTenantMatch() at the group
@@ -582,16 +582,17 @@ func RegisterTenantRoutes(
 			tenantByID.POST("/api-principal-test-token", g.Owner(), handler.CreateAPIPrincipalTestToken)
 
 			// Tenant member management (PR 3 of #1303). Listing is
-			// Viewer+ so any active member can see the roster; mutation
-			// is Owner+ because membership changes are the highest-impact
-			// tenant op. /:id/leave is Viewer+ — any member can quit on
-			// their own; the service still rejects when it would leave
-			// the tenant without an Owner.
+			// Viewer+ so any active member can see the roster. Mutation is
+			// Admin+ for the exam-platform management model: tenant admins
+			// can assign student/teacher/admin roles, while service-level
+			// guards keep Owner assignment/demotion/removal Owner-only.
+			// /:id/leave is Viewer+ — any member can quit on their own; the
+			// service still rejects when it would leave the tenant without an Owner.
 			if memberHandler != nil {
 				tenantByID.GET("/members", g.Viewer(), memberHandler.ListMembers)
-				tenantByID.POST("/members", g.Owner(), memberHandler.AddMember)
-				tenantByID.PUT("/members/:user_id", g.Owner(), memberHandler.UpdateMemberRole)
-				tenantByID.DELETE("/members/:user_id", g.Owner(), memberHandler.RemoveMember)
+				tenantByID.POST("/members", g.Admin(), memberHandler.AddMember)
+				tenantByID.PUT("/members/:user_id", g.Admin(), memberHandler.UpdateMemberRole)
+				tenantByID.DELETE("/members/:user_id", g.Admin(), memberHandler.RemoveMember)
 				tenantByID.POST("/leave", g.Viewer(), memberHandler.LeaveTenant)
 			}
 
@@ -600,19 +601,20 @@ func RegisterTenantRoutes(
 			// so the invitee gets to confirm via /me/invitations
 			// before any tenant_members row is written. List is
 			// Viewer+ so any member can see pending invites in the
-			// management view; create/revoke are Owner+ to match the
-			// existing /members mutation gates. nil-skip pattern
+			// management view; create/revoke are Admin+ to match the
+			// /members mutation gates. Owner-role invites remain Owner-only
+			// in the service layer. nil-skip pattern
 			// mirrors memberHandler above for environments built
 			// without the invitation dependency wired.
 			if invitationHandler != nil {
 				tenantByID.GET("/invitations", g.Viewer(), invitationHandler.ListTenantInvitations)
-				tenantByID.POST("/invitations", g.Owner(), invitationHandler.CreateInvitation)
-				tenantByID.DELETE("/invitations/:inv_id", g.Owner(), invitationHandler.RevokeInvitation)
+				tenantByID.POST("/invitations", g.Admin(), invitationHandler.CreateInvitation)
+				tenantByID.DELETE("/invitations/:inv_id", g.Admin(), invitationHandler.RevokeInvitation)
 				// Share-link create lives under /invite-links so the URL
 				// reads as "create a link" rather than another flavour
 				// of /invitations; the underlying row still lives in the
 				// tenant_invitations table and shows up in the GET above.
-				tenantByID.POST("/invite-links", g.Owner(), invitationHandler.CreateInviteLink)
+				tenantByID.POST("/invite-links", g.Admin(), invitationHandler.CreateInviteLink)
 			}
 
 			// Audit log feed (PR 6 of #1303). Admin+ so denied-action

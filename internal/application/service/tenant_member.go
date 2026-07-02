@@ -58,6 +58,12 @@ var (
 	// without an active Owner. Demoting the last Owner or removing them
 	// is forbidden; an explicit ownership transfer must happen first.
 	ErrLastOwner = errors.New("cannot demote or remove the last active owner of the tenant")
+
+	// ErrOwnerRoleRequired is returned when a tenant Admin attempts an
+	// ownership-sensitive operation. Admins can manage ordinary members
+	// for the exam platform, but Owner assignment, demotion, and removal
+	// remain reserved for an existing Owner.
+	ErrOwnerRoleRequired = errors.New("owner role is required to manage tenant owners")
 )
 
 const (
@@ -69,6 +75,19 @@ const (
 type tenantMemberService struct {
 	repo  interfaces.TenantMemberRepository
 	audit interfaces.AuditLogService // optional; nil ⇒ no audit, business ops still succeed
+}
+
+func callerTenantRole(ctx context.Context) (types.TenantRole, bool) {
+	v, ok := ctx.Value(types.TenantRoleContextKey).(types.TenantRole)
+	if !ok || !v.IsValid() {
+		return "", false
+	}
+	return v, true
+}
+
+func callerIsOwner(ctx context.Context) bool {
+	role, ok := callerTenantRole(ctx)
+	return ok && role == types.TenantRoleOwner
 }
 
 // NewTenantMemberService constructs the service. Wired up via the DI
@@ -123,6 +142,9 @@ func (s *tenantMemberService) AddMember(
 ) (*types.TenantMember, error) {
 	if !role.IsValid() {
 		return nil, ErrInvalidTenantRole
+	}
+	if _, ok := callerTenantRole(ctx); ok && role == types.TenantRoleOwner && !callerIsOwner(ctx) {
+		return nil, ErrOwnerRoleRequired
 	}
 	existing, err := s.repo.Get(ctx, userID, tenantID)
 	if err != nil {
@@ -281,6 +303,10 @@ func (s *tenantMemberService) UpdateRole(
 	if current == nil {
 		return ErrMembershipNotFound
 	}
+	if _, ok := callerTenantRole(ctx); ok && !callerIsOwner(ctx) &&
+		(current.Role == types.TenantRoleOwner || newRole == types.TenantRoleOwner) {
+		return ErrOwnerRoleRequired
+	}
 	if current.Role == newRole {
 		return nil
 	}
@@ -351,6 +377,9 @@ func (s *tenantMemberService) RemoveMember(ctx context.Context, userID string, t
 	}
 	if current == nil {
 		return ErrMembershipNotFound
+	}
+	if _, ok := callerTenantRole(ctx); ok && current.Role == types.TenantRoleOwner && !callerIsOwner(ctx) {
+		return ErrOwnerRoleRequired
 	}
 	if current.Role == types.TenantRoleOwner {
 		err := s.repo.RemoveOwnerAtomically(ctx, userID, tenantID)
