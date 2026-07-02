@@ -175,15 +175,18 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
   }
 
   /** 并行预取对话输入栏及列表页常用的租户级资源 */
-  async function prefetchChatInput(force = false): Promise<void> {
+  async function prefetchChatInput(force = false, options?: { includeAgents?: boolean }): Promise<void> {
     const orgStore = useOrganizationStore()
-    await Promise.all([
+    const tasks: Promise<unknown>[] = [
       ensureKnowledgeBases(force),
-      ensureAgents(force),
       ensureModels(force),
       ensureWebSearchProviders(force),
       orgStore.fetchOrganizations({ force }),
-    ])
+    ]
+    if (options?.includeAgents !== false) {
+      tasks.push(ensureAgents(force))
+    }
+    await Promise.all(tasks)
   }
 
   async function ensureAgentKnowledgeBases(agentId: string, force = false): Promise<any[]> {

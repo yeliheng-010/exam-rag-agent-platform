@@ -25,7 +25,6 @@ export const useMenuStore = defineStore('menuStore', () => {
       icon: 'prefixIcon',
       path: 'creatChat',
       childrenPath: 'chat',
-      minRole: 'contributor',
       children: createMenuChildren()
     },
     { title: '', titleKey: 'menu.learning', icon: 'zhishiku', path: 'learning' },

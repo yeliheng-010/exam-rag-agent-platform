@@ -33,6 +33,7 @@ import GlobalInvitationBell from '@/components/GlobalInvitationBell.vue'
 import NewUserGuide from '@/components/NewUserGuide.vue'
 import { useCommandPaletteStore } from '@/stores/commandPalette'
 import { useChatResourcesStore } from '@/stores/chatResources'
+import { useAuthStore } from '@/stores/auth'
 import { getKnowledgeBaseById } from '@/api/knowledge-base/index'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
@@ -41,6 +42,7 @@ let { requestMethod } = useKnowledgeBase()
 const route = useRoute();
 const router = useRouter();
 const commandPaletteStore = useCommandPaletteStore();
+const authStore = useAuthStore();
 let ismask = ref(false)
 let uploadInput = ref();
 const { t } = useI18n();
@@ -220,7 +222,9 @@ onMounted(() => {
     // /platform/knowledge-search?q=foo 重定向后携带 ?cmdk=foo
     maybeOpenCmdkFromRoute()
     // 后台预取对话输入栏资源，进入 creatChat / chat 时复用缓存
-    void useChatResourcesStore().prefetchChatInput()
+    void useChatResourcesStore().prefetchChatInput(false, {
+        includeAgents: authStore.hasRole('contributor')
+    })
 });
 
 // 监听路由变化，兼容 SPA 内部跳转时的 ?cmdk= 参数

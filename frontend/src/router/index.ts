@@ -195,19 +195,19 @@ const router = createRouter({
           path: "creatChat",
           name: "globalCreatChat",
           component: () => import("../views/creatChat/creatChat.vue"),
-          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
+          meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "knowledge-bases/:kbId/creatChat",
           name: "kbCreatChat",
           component: () => import("../views/creatChat/creatChat.vue"),
-          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
+          meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "chat/:chatid",
           name: "chat",
           component: () => import("../views/chat/index.vue"),
-          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
+          meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "organizations",

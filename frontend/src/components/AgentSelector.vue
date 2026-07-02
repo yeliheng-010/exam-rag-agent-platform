@@ -4,7 +4,7 @@
       <div class="agent-selector-dropdown" :style="dropdownStyle" @click.stop>
         <div class="agent-selector-header">
           <span>{{ $t('agent.selectAgent') }}</span>
-          <router-link to="/platform/agents" class="agent-selector-add" @click="$emit('close')">
+          <router-link v-if="canManageAgents" to="/platform/agents" class="agent-selector-add" @click="$emit('close')">
             <span class="add-icon">+</span>
             <span class="add-text">{{ $t('agent.manageAgents') }}</span>
           </router-link>
@@ -170,6 +170,7 @@ import { useSettingsStore } from '@/stores/settings';
 import type { SharedAgentInfo } from '@/api/organization';
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom';
 import { type ModelConfig } from '@/api/model';
+import { useAuthStore } from '@/stores/auth';
 import {
   getAgentNotReadyReasonKeys,
   resolveAgentNotReadySection,
@@ -183,6 +184,7 @@ const { t, locale } = useI18n();
 const router = useRouter();
 const orgStore = useOrganizationStore();
 const settingsStore = useSettingsStore();
+const authStore = useAuthStore();
 
 const props = defineProps<{
   visible: boolean;
@@ -216,6 +218,7 @@ const DETAIL_BRIDGE_OVERLAP = 10;
 const DETAIL_HIDE_DELAY_MS = 400;
 
 const agentsList = computed(() => props.agents ?? []);
+const canManageAgents = computed(() => authStore.hasRole('contributor'));
 
 const builtinAgents = computed(() => {
   const apiBuiltins = agentsList.value.filter(a => a.is_builtin);

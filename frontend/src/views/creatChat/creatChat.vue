@@ -63,6 +63,7 @@ import { getSuggestedQuestions } from "@/api/agent/index";
 import type { SuggestedQuestion } from "@/api/agent/index";
 import { useMenuStore } from '@/stores/menu';
 import { useSettingsStore } from '@/stores/settings';
+import { useAuthStore } from '@/stores/auth';
 import { useUIStore } from '@/stores/ui';
 import { useRoute, useRouter } from 'vue-router';
 import { MessagePlugin } from 'tdesign-vue-next';
@@ -74,6 +75,7 @@ const router = useRouter();
 const route = useRoute();
 const usemenuStore = useMenuStore();
 const settingsStore = useSettingsStore();
+const authStore = useAuthStore();
 const uiStore = useUIStore();
 const { t } = useI18n();
 const { navigateToKnowledgeBaseList } = useKnowledgeBaseCreationNavigation();
@@ -134,6 +136,11 @@ const onQuestionsEntered = () => {
 };
 
 const fetchSuggestedQuestions = async () => {
+    if (!authStore.hasRole('contributor')) {
+        suggestedQuestions.value = [];
+        sqLoading.value = false;
+        return;
+    }
     const fetchId = ++suggestedQuestionsFetchId;
     sqLoading.value = true;
     try {

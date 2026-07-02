@@ -70,6 +70,8 @@ export interface CmdkMsgGroup {
 export function useCmdkSearch(options: {
   /** When set, scopes knowledge search to these KBs. Re-evaluated on each search. */
   lockedKbIds?: () => string[]
+  /** Whether agent results should be preloaded and searched for the current role. */
+  includeAgents?: () => boolean
   /** How many knowledge chunks to keep after grouping; default no-cap. */
   chunkLimit?: number
   /** Debounce delay in ms. */
@@ -149,6 +151,11 @@ export function useCmdkSearch(options: {
   // Agents (own + shared). Lazily loaded & cached; no backend search endpoint
   // exists so we always filter client-side.
   const ensureAgents = async (): Promise<void> => {
+    if (options.includeAgents?.() === false) {
+      agents.value = []
+      agentsLoaded.value = false
+      return
+    }
     if (agentsLoaded.value) return
     if (agentsLoadingPromise) return agentsLoadingPromise
     agentsLoadingPromise = (async () => {
@@ -350,7 +357,9 @@ export function useCmdkSearch(options: {
     // keystroke. Sessions come from the menuStore (already populated by the
     // sidebar) so no extra fetch needed here.
     ensureKbs()
-    ensureAgents()
+    if (options.includeAgents?.() !== false) {
+      ensureAgents()
+    }
   })
 
   return {

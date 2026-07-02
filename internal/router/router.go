@@ -384,8 +384,9 @@ func RegisterKnowledgeBaseRoutes(r *gin.RouterGroup, handler *handler.KnowledgeB
 	{
 		// 创建知识库 — Contributor+ (no :id, role-only floor)
 		kb.POST("", g.Contributor(), handler.CreateKnowledgeBase)
-		// 获取知识库列表 — Contributor+，学生不进入生产资料中心
-		kb.GET("", g.Contributor(), handler.ListKnowledgeBases)
+		// 获取知识库列表 — Viewer+。学生需要在基础问答里选择可访问知识库；
+		// 生产资料管理能力仍由创建/详情/编辑等路由单独收紧。
+		kb.GET("", g.Viewer(), handler.ListKnowledgeBases)
 		// 获取知识库详情 — Contributor+ 且对 KB 有 read 权限
 		kb.GET("/:id", g.Contributor(), g.KBAccessRead("id"), handler.GetKnowledgeBase)
 		// 更新知识库 — 创建者本人 OR Admin+ 且对 KB 有 write 权限
@@ -484,10 +485,10 @@ func RegisterSessionRoutes(r *gin.RouterGroup, handler *session.Handler, g *rbac
 	}
 }
 
-// RegisterChatRoutes 注册路由。考试平台中知识库和智能体对话属于
-// 老师/运营使用的生产资料与工具面，学生不直接进入这些原生能力。
+// RegisterChatRoutes 注册路由。基础知识库问答是学生端学习能力；
+// 智能体编排与工具调用仍属于老师/运营的生产工具面。
 func RegisterChatRoutes(r *gin.RouterGroup, handler *session.Handler, g *rbacGuards) {
-	knowledgeChat := r.Group("/knowledge-chat", g.Contributor())
+	knowledgeChat := r.Group("/knowledge-chat", g.Viewer())
 	{
 		knowledgeChat.POST("/:session_id", handler.KnowledgeQA)
 	}
@@ -499,7 +500,7 @@ func RegisterChatRoutes(r *gin.RouterGroup, handler *session.Handler, g *rbacGua
 	}
 
 	// 新增知识检索接口，不需要session_id
-	knowledgeSearch := r.Group("/knowledge-search", g.Contributor())
+	knowledgeSearch := r.Group("/knowledge-search", g.Viewer())
 	{
 		knowledgeSearch.POST("", handler.SearchKnowledge)
 	}

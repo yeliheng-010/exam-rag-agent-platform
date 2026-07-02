@@ -70,7 +70,6 @@ export function buildCommands(ctx: CommandContext): CmdkCommand[] {
       id: 'new-chat',
       label: t('commandPalette.quick.newChat'),
       icon: 'chat-add',
-      minRole: 'contributor',
       keywords: ['new', 'chat', 'conversation', '新建', '对话', 'создать'],
       run: () => {
         close()

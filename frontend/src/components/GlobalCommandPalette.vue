@@ -90,15 +90,15 @@
           </ResultGroup>
 
           <!-- KB name matches -->
-          <ResultGroup v-if="isGroupVisible('kbs') && kbMatches.length" :label="t('commandPalette.group.kbs')">
-            <ResultItem v-for="(kb, i) in kbMatches" :key="'k-' + kb.id" :index="flatIndexFor('kbs', i)"
+          <ResultGroup v-if="isGroupVisible('kbs') && visibleKbMatches.length" :label="t('commandPalette.group.kbs')">
+            <ResultItem v-for="(kb, i) in visibleKbMatches" :key="'k-' + kb.id" :index="flatIndexFor('kbs', i)"
               :selected="selectedIndex === flatIndexFor('kbs', i)" :shortcut="shortcutFor(flatIndexFor('kbs', i))"
               icon-name="folder" :title="kb.name" @primary="openKb(kb.id)" @hover="selectItemAt($event)" />
           </ResultGroup>
 
           <!-- Agent matches -->
-          <ResultGroup v-if="isGroupVisible('agents') && agentMatches.length" :label="t('commandPalette.group.agents')">
-            <ResultItem v-for="(a, i) in agentMatches" :key="'a-' + a.id" :index="flatIndexFor('agents', i)"
+          <ResultGroup v-if="isGroupVisible('agents') && visibleAgentMatches.length" :label="t('commandPalette.group.agents')">
+            <ResultItem v-for="(a, i) in visibleAgentMatches" :key="'a-' + a.id" :index="flatIndexFor('agents', i)"
               :selected="selectedIndex === flatIndexFor('agents', i)" :shortcut="shortcutFor(flatIndexFor('agents', i))"
               icon-name="user-circle" :title="a.name" :subtitle="a.description" @primary="openAgent(a.id)"
               @hover="selectItemAt($event)" />
@@ -200,6 +200,7 @@ const {
   clearResults,
 } = useCmdkSearch({
   lockedKbIds: () => (activeKbScope.value ? [activeKbScope.value.id] : []),
+  includeAgents: () => authStore.hasRole('contributor'),
 })
 
 const drawerVisible = ref(false)
@@ -260,6 +261,9 @@ const allCommands = computed(() => {
 })
 
 const filteredCommands = computed(() => filterCommands(allCommands.value, query.value))
+const canOpenResourceManagers = computed(() => authStore.hasRole('contributor'))
+const visibleKbMatches = computed(() => canOpenResourceManagers.value ? kbMatches.value : [])
+const visibleAgentMatches = computed(() => canOpenResourceManagers.value ? agentMatches.value : [])
 
 // Stable index layout — keep group order consistent so flatIndexFor is cheap.
 // Groups always render in the same order; individual groups hide themselves
@@ -274,7 +278,9 @@ const groupOrder = computed<readonly string[]>(() => {
     // Scoped to one KB: only chunks make sense (messages disabled in useSearch).
     return ['chunks'] as const
   }
-  return ['chunks', 'messages', 'kbs', 'agents', 'sessions', 'commands'] as const
+  return canOpenResourceManagers.value
+    ? ['chunks', 'messages', 'kbs', 'agents', 'sessions', 'commands'] as const
+    : ['chunks', 'messages', 'sessions', 'commands'] as const
 })
 
 const groupSizes = computed<Record<string, number>>(() => ({
@@ -282,8 +288,8 @@ const groupSizes = computed<Record<string, number>>(() => ({
   commands: query.value.trim() ? filteredCommands.value.length : allCommands.value.length,
   chunks: flatChunkItems.value.length,
   messages: flatMessageItems.value.length,
-  kbs: kbMatches.value.length,
-  agents: agentMatches.value.length,
+  kbs: visibleKbMatches.value.length,
+  agents: visibleAgentMatches.value.length,
   sessions: sessionMatches.value.length,
 }))
 
@@ -340,11 +346,11 @@ const flatItems = computed<FlatItem[]>(() => {
         })
       })
     } else if (g === 'kbs') {
-      kbMatches.value.forEach((kb) => {
+      visibleKbMatches.value.forEach((kb) => {
         out.push({ key: `kb:${kb.id}`, group: g, run: () => openKb(kb.id) })
       })
     } else if (g === 'agents') {
-      agentMatches.value.forEach((a) => {
+      visibleAgentMatches.value.forEach((a) => {
         out.push({ key: `agent:${a.id}`, group: g, run: () => openAgent(a.id) })
       })
     } else if (g === 'sessions') {
@@ -386,6 +392,10 @@ const primaryActionForSelected = (ev?: { cmd: boolean }) => {
 }
 
 const openChunk = (item: FlatChunkItem) => {
+  if (!canOpenResourceManagers.value) {
+    cmdEnterChunk(item)
+    return
+  }
   commandPaletteStore.pushRecent(query.value)
   commandPaletteStore.closePalette()
   if (!item.file.kbId) return

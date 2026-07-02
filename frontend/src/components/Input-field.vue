@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { onBeforeRouteUpdate } from 'vue-router';
 import { MessagePlugin } from "tdesign-vue-next";
 import { useSettingsStore } from '@/stores/settings';
+import { useAuthStore } from '@/stores/auth';
 import { useUIStore } from '@/stores/ui';
 import { useMenuStore } from '@/stores/menu';
 import { listKnowledgeBases, searchKnowledge, batchQueryKnowledge, listKnowledgeTags } from '@/api/knowledge-base';
@@ -41,6 +42,7 @@ import type { MentionItem, MentionItemType, MentionRequestItem } from '@/types/m
 const route = useRoute();
 const router = useRouter();
 const settingsStore = useSettingsStore();
+const authStore = useAuthStore();
 const uiStore = useUIStore();
 const orgStore = useOrganizationStore();
 const menuStore = useMenuStore();
@@ -147,6 +149,7 @@ const selectedAgentId = computed({
   get: () => settingsStore.selectedAgentId || BUILTIN_QUICK_ANSWER_ID,
   set: (val: string) => settingsStore.selectAgent(val)
 });
+const canUseAgentMode = computed(() => authStore.hasRole('contributor'));
 const selectedAgent = computed(() => {
   // When a shared-agent source tenant is set, resolve from sharedAgents FIRST.
   // Builtin agents (e.g. builtin-smart-reasoning) use the same constant ID across
@@ -171,6 +174,7 @@ const selectedAgent = computed(() => {
 
 // 判断是否为自定义智能体（非内置）
 const isCustomAgent = computed(() => {
+  if (!canUseAgentMode.value) return false;
   const agent = selectedAgent.value;
   return agent && !agent.is_builtin;
 });
@@ -1732,15 +1736,22 @@ onMounted(() => {
   // Embed 渠道由宿主注入 agent/KB，勿拉取需 JWT 的平台资源
   if (props.embeddedMode) return;
 
+  if (!canUseAgentMode.value && settingsStore.selectedAgentId !== BUILTIN_QUICK_ANSWER_ID) {
+    settingsStore.selectAgent(BUILTIN_QUICK_ANSWER_ID);
+  }
+
   // 并行拉取；若 platform 已预取且缓存未过期则直接复用
-  initChatModelSelection();
-  void Promise.all([
+  const tasks: Promise<unknown>[] = [
     loadKnowledgeBases(),
     loadWebSearchConfig(),
     loadChatModels(),
-    loadAgents(),
     loadMCPServices(),
-  ]);
+  ];
+  if (canUseAgentMode.value) {
+    tasks.push(loadAgents());
+  }
+  initChatModelSelection();
+  void Promise.all(tasks);
   window.addEventListener(CHAT_FILE_DROP_EVENT, handleChatFileDrop as EventListener);
 
   // 从持久化恢复 fileId -> kbId，刷新后共享知识库文件可带 kb_id 拉取（仅保留当前仍选中的文件）
@@ -1859,7 +1870,7 @@ const createSession = async (val: string) => {
   // 发送前校验当前选中的智能体（含默认快速问答）是否已配置完成
   const agentToCheck = selectedAgent.value;
   let actualAgent = agentToCheck;
-  if (agentToCheck.is_builtin && !settingsStore.selectedAgentSourceTenantId) {
+  if (canUseAgentMode.value && agentToCheck.is_builtin && !settingsStore.selectedAgentSourceTenantId) {
     let builtin = agents.value.find(a => a.id === selectedAgentId.value);
     if (!builtin) {
       await loadAgents();
@@ -1999,6 +2010,9 @@ const updateAgentModeDropdownPosition = () => {
 };
 
 const toggleAgentModeSelector = () => {
+  if (!canUseAgentMode.value) {
+    return;
+  }
   // 互斥
   showMention.value = false;
   showModelSelector.value = false;
@@ -2216,6 +2230,7 @@ const handleGoToWebSearchSettings = () => {
 };
 
 const handleGoToAgentSettings = (section?: string) => {
+  if (!canUseAgentMode.value) return;
   const agent = selectedAgent.value;
   if (!agent) {
     router.push('/platform/agents');
@@ -2269,6 +2284,7 @@ const goToAgentEditor = (
   highlight?: AgentNotReadyReasonKey,
   sourceTenantId?: string,
 ) => {
+  if (!canUseAgentMode.value) return;
   router.push({
     path: '/platform/agents',
     query: {
@@ -2466,7 +2482,7 @@ defineExpose({
         <!-- 左侧控制按钮 -->
         <div class="control-left" v-if="!embeddedMode">
           <!-- Agent 模式切换按钮 -->
-          <div ref="agentModeButtonRef" class="control-btn agent-mode-btn" :class="{
+          <div v-if="canUseAgentMode" ref="agentModeButtonRef" class="control-btn agent-mode-btn" :class="{
             'is-normal': !isCustomAgent && !isAgentEnabled,
             'is-agent': !isCustomAgent && isAgentEnabled,
             'is-custom': isCustomAgent
