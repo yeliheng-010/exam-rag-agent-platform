@@ -6,6 +6,7 @@ import { autoSetup, getCurrentUser, userInfoFromApi } from '@/api/auth'
 /** Lite /桌面 WebView 硬刷新时可能只打开 `/`，用 session 记住上次页面以便恢复 */
 const LITE_LAST_PATH_KEY = 'weknora_lite_last_path'
 const AUTO_SETUP_FAILED_KEY = 'weknora_auto_setup_failed'
+type RoleKey = 'viewer' | 'contributor' | 'admin' | 'owner'
 
 function shouldTryAutoSetup() {
   return localStorage.getItem(AUTO_SETUP_FAILED_KEY) !== 'true'
@@ -113,13 +114,13 @@ const router = createRouter({
           path: "question-banks",
           name: "questionBankList",
           component: () => import("../views/question-bank/QuestionBankList.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
         },
         {
           path: "question-banks/:bankId",
           name: "questionBankDetail",
           component: () => import("../views/question-bank/QuestionBankDetail.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
         },
         {
           path: "billing",
@@ -159,13 +160,13 @@ const router = createRouter({
           path: "knowledge-bases",
           name: "knowledgeBaseList",
           component: () => import("../views/knowledge/KnowledgeBaseList.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
         },
         {
           path: "knowledge-bases/:kbId",
           name: "knowledgeBaseDetail",
           component: () => import("../views/knowledge/KnowledgeBase.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
         },
         {
           path: "knowledge-search",
@@ -182,7 +183,7 @@ const router = createRouter({
           path: "agents",
           name: "agentList",
           component: () => import("../views/agent/AgentList.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
         },
         {
           path: "integrations",
@@ -194,19 +195,19 @@ const router = createRouter({
           path: "creatChat",
           name: "globalCreatChat",
           component: () => import("../views/creatChat/creatChat.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
         },
         {
           path: "knowledge-bases/:kbId/creatChat",
           name: "kbCreatChat",
           component: () => import("../views/creatChat/creatChat.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
         },
         {
           path: "chat/:chatid",
           name: "chat",
           component: () => import("../views/chat/index.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
         },
         {
           path: "organizations",
@@ -400,6 +401,12 @@ router.beforeEach(async (to, from, next) => {
       next('/platform/learning')
       return
     }
+  }
+
+  const minRole = to.meta.minRole as RoleKey | undefined
+  if (minRole && !authStore.hasRole(minRole)) {
+    next('/platform/learning')
+    return
   }
 
   next()

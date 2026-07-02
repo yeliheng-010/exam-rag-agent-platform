@@ -5,10 +5,16 @@
         <h2>班级中心</h2>
         <p>老师创建班级，学生通过班级关系访问对应资料、题库与练习任务。</p>
       </div>
-      <t-button theme="primary" @click="openCreateDialog">
-        <template #icon><t-icon name="add" /></template>
-        创建班级
-      </t-button>
+      <div class="header-actions">
+        <t-button theme="default" variant="outline" @click="openJoinDialog">
+          <template #icon><t-icon name="login" /></template>
+          加入班级
+        </t-button>
+        <t-button v-if="canCreateClass" theme="primary" @click="openCreateDialog">
+          <template #icon><t-icon name="add" /></template>
+          创建班级
+        </t-button>
+      </div>
     </div>
 
     <t-loading :loading="loading">
@@ -33,7 +39,10 @@
       </div>
       <t-empty v-else-if="!loading" description="暂无班级">
         <template #action>
-          <t-button theme="primary" @click="openCreateDialog">创建第一个班级</t-button>
+          <t-space>
+            <t-button theme="default" variant="outline" @click="openJoinDialog">输入邀请码加入</t-button>
+            <t-button v-if="canCreateClass" theme="primary" @click="openCreateDialog">创建第一个班级</t-button>
+          </t-space>
         </template>
       </t-empty>
     </t-loading>
@@ -61,25 +70,44 @@
         </t-form-item>
       </t-form>
     </t-dialog>
+
+    <t-dialog
+      v-model:visible="joinVisible"
+      header="加入班级"
+      :confirm-btn="{ content: '提交申请', loading: joining }"
+      @confirm="submitJoin"
+    >
+      <t-form ref="joinFormRef" :data="joinForm" :rules="joinRules" label-align="top">
+        <t-form-item label="班级邀请码" name="invite_code">
+          <t-input v-model="joinForm.invite_code" placeholder="输入老师提供的邀请码" :maxlength="32" />
+        </t-form-item>
+      </t-form>
+    </t-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormInstanceFunctions, FormRule } from 'tdesign-vue-next'
 import { listExamDomains } from '@/api/exam/domain'
-import { createExamClass, listExamClasses } from '@/api/exam/class'
+import { createExamClass, listExamClasses, requestJoinExamClass } from '@/api/exam/class'
+import { useAuthStore } from '@/stores/auth'
 import type { ExamClass, ExamDomain } from '@/types/exam'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const loading = ref(false)
 const creating = ref(false)
+const joining = ref(false)
 const createVisible = ref(false)
+const joinVisible = ref(false)
 const classes = ref<ExamClass[]>([])
 const domains = ref<ExamDomain[]>([])
 const formRef = ref<FormInstanceFunctions>()
+const joinFormRef = ref<FormInstanceFunctions>()
+const canCreateClass = computed(() => authStore.hasRole('contributor'))
 
 const form = ref({
   name: '',
@@ -88,8 +116,16 @@ const form = ref({
   member_limit: 50,
 })
 
+const joinForm = ref({
+  invite_code: '',
+})
+
 const rules: Record<string, FormRule[]> = {
   name: [{ required: true, message: '请输入班级名称', type: 'error' }],
+}
+
+const joinRules: Record<string, FormRule[]> = {
+  invite_code: [{ required: true, message: '请输入班级邀请码', type: 'error' }],
 }
 
 const domainName = (domainId?: string) => {
@@ -118,6 +154,7 @@ const loadData = async () => {
 }
 
 const openCreateDialog = () => {
+  if (!canCreateClass.value) return
   form.value = {
     name: '',
     description: '',
@@ -125,6 +162,11 @@ const openCreateDialog = () => {
     member_limit: 50,
   }
   createVisible.value = true
+}
+
+const openJoinDialog = () => {
+  joinForm.value = { invite_code: '' }
+  joinVisible.value = true
 }
 
 const submitCreate = async () => {
@@ -148,6 +190,27 @@ const submitCreate = async () => {
     MessagePlugin.error(error?.message || '创建班级失败')
   } finally {
     creating.value = false
+  }
+}
+
+const submitJoin = async () => {
+  const result = await joinFormRef.value?.validate()
+  if (result !== true) return
+
+  joining.value = true
+  try {
+    const member = await requestJoinExamClass(joinForm.value.invite_code.trim())
+    joinVisible.value = false
+    if (member.data?.status === 'active') {
+      MessagePlugin.success('你已在该班级中')
+    } else {
+      MessagePlugin.success('加入申请已提交，等待老师审核')
+    }
+    await loadData()
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '加入班级失败')
+  } finally {
+    joining.value = false
   }
 }
 
@@ -182,6 +245,13 @@ onMounted(loadData)
     font-size: 14px;
     line-height: 22px;
   }
+}
+
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .class-grid {

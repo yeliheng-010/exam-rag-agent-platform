@@ -70,6 +70,7 @@ export function buildCommands(ctx: CommandContext): CmdkCommand[] {
       id: 'new-chat',
       label: t('commandPalette.quick.newChat'),
       icon: 'chat-add',
+      minRole: 'contributor',
       keywords: ['new', 'chat', 'conversation', '新建', '对话', 'создать'],
       run: () => {
         close()
@@ -80,6 +81,7 @@ export function buildCommands(ctx: CommandContext): CmdkCommand[] {
       id: 'open-kb-list',
       label: t('commandPalette.quick.knowledgeBases'),
       icon: 'folder',
+      minRole: 'contributor',
       keywords: ['kb', 'knowledge', 'base', '知识库', '文档'],
       run: () => {
         close()
@@ -90,6 +92,7 @@ export function buildCommands(ctx: CommandContext): CmdkCommand[] {
       id: 'open-agents',
       label: t('commandPalette.quick.agents'),
       icon: 'user-circle',
+      minRole: 'contributor',
       keywords: ['agent', 'bot', '智能体', '助手'],
       run: () => {
         close()

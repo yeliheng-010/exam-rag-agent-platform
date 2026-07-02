@@ -24,6 +24,7 @@ const (
 type ExamClassMemberStatus string
 
 const (
+	ExamClassMemberStatusPending ExamClassMemberStatus = "pending"
 	ExamClassMemberStatusActive  ExamClassMemberStatus = "active"
 	ExamClassMemberStatusRemoved ExamClassMemberStatus = "removed"
 )
@@ -69,4 +70,8 @@ type CreateExamClassRequest struct {
 	Description string  `json:"description" binding:"omitempty,max=1000"`
 	DomainID    *string `json:"domain_id"`
 	MemberLimit *int    `json:"member_limit"`
+}
+
+type JoinExamClassRequest struct {
+	InviteCode string `json:"invite_code" binding:"required,min=1,max=32"`
 }

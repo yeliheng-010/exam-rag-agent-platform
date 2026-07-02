@@ -384,10 +384,10 @@ func RegisterKnowledgeBaseRoutes(r *gin.RouterGroup, handler *handler.KnowledgeB
 	{
 		// 创建知识库 — Contributor+ (no :id, role-only floor)
 		kb.POST("", g.Contributor(), handler.CreateKnowledgeBase)
-		// 获取知识库列表 — Viewer+ (no :id, role-only floor)
-		kb.GET("", g.Viewer(), handler.ListKnowledgeBases)
-		// 获取知识库详情 — Viewer+ 且对 KB 有 read 权限
-		kb.GET("/:id", g.Viewer(), g.KBAccessRead("id"), handler.GetKnowledgeBase)
+		// 获取知识库列表 — Contributor+，学生不进入生产资料中心
+		kb.GET("", g.Contributor(), handler.ListKnowledgeBases)
+		// 获取知识库详情 — Contributor+ 且对 KB 有 read 权限
+		kb.GET("/:id", g.Contributor(), g.KBAccessRead("id"), handler.GetKnowledgeBase)
 		// 更新知识库 — 创建者本人 OR Admin+ 且对 KB 有 write 权限
 		kb.PUT("/:id", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), handler.UpdateKnowledgeBase)
 		// 删除知识库 — 创建者本人 OR Admin+ 且对 KB 有 write 权限
@@ -399,17 +399,17 @@ func RegisterKnowledgeBaseRoutes(r *gin.RouterGroup, handler *handler.KnowledgeB
 		// no edit permission is required. The OwnedKBOrAdmin guard was
 		// removed accordingly. The route still requires KB read access
 		// so callers can't poke at KBs they can't see.
-		kb.PUT("/:id/pin", g.Viewer(), g.KBAccessRead("id"), handler.TogglePinKnowledgeBase)
-		// 混合搜索 — Viewer+ 且对 KB 有 read 权限 (read-only)
+		kb.PUT("/:id/pin", g.Contributor(), g.KBAccessRead("id"), handler.TogglePinKnowledgeBase)
+		// 混合搜索 — Contributor+ 且对 KB 有 read 权限 (read-only)
 		// POST is preferred; GET with JSON body is kept for backward compatibility (#1727).
-		kb.POST("/:id/hybrid-search", g.Viewer(), g.KBAccessRead("id"), handler.HybridSearch)
-		kb.GET("/:id/hybrid-search", g.Viewer(), g.KBAccessRead("id"), handler.HybridSearch)
+		kb.POST("/:id/hybrid-search", g.Contributor(), g.KBAccessRead("id"), handler.HybridSearch)
+		kb.GET("/:id/hybrid-search", g.Contributor(), g.KBAccessRead("id"), handler.HybridSearch)
 		// 拷贝知识库 — Contributor+ (副本归调用者所有；不需要原 KB 的所有权)
 		kb.POST("/copy", g.Contributor(), handler.CopyKnowledgeBase)
-		// 获取知识库复制进度 — Viewer+
-		kb.GET("/copy/progress/:task_id", g.Viewer(), handler.GetKBCloneProgress)
-		// 获取可移动目标知识库列表 — Viewer+ 且对 KB 有 read 权限
-		kb.GET("/:id/move-targets", g.Viewer(), g.KBAccessRead("id"), handler.ListMoveTargets)
+		// 获取知识库复制进度 — Contributor+
+		kb.GET("/copy/progress/:task_id", g.Contributor(), handler.GetKBCloneProgress)
+		// 获取可移动目标知识库列表 — Contributor+ 且对 KB 有 read 权限
+		kb.GET("/:id/move-targets", g.Contributor(), g.KBAccessRead("id"), handler.ListMoveTargets)
 	}
 }
 
@@ -484,23 +484,22 @@ func RegisterSessionRoutes(r *gin.RouterGroup, handler *session.Handler, g *rbac
 	}
 }
 
-// RegisterChatRoutes 注册路由。Chat endpoints are tenant-member usage
-// surfaces; Viewer+ is sufficient because per-session/per-agent
-// authorisation is enforced inside the handlers.
+// RegisterChatRoutes 注册路由。考试平台中知识库和智能体对话属于
+// 老师/运营使用的生产资料与工具面，学生不直接进入这些原生能力。
 func RegisterChatRoutes(r *gin.RouterGroup, handler *session.Handler, g *rbacGuards) {
-	knowledgeChat := r.Group("/knowledge-chat", g.Viewer())
+	knowledgeChat := r.Group("/knowledge-chat", g.Contributor())
 	{
 		knowledgeChat.POST("/:session_id", handler.KnowledgeQA)
 	}
 
 	// Agent-based chat
-	agentChat := r.Group("/agent-chat", g.Viewer())
+	agentChat := r.Group("/agent-chat", g.Contributor())
 	{
 		agentChat.POST("/:session_id", handler.AgentQA)
 	}
 
 	// 新增知识检索接口，不需要session_id
-	knowledgeSearch := r.Group("/knowledge-search", g.Viewer())
+	knowledgeSearch := r.Group("/knowledge-search", g.Contributor())
 	{
 		knowledgeSearch.POST("", handler.SearchKnowledge)
 	}
@@ -977,16 +976,16 @@ func RegisterVectorStoreRoutes(r *gin.RouterGroup, h *handler.VectorStoreHandler
 func RegisterCustomAgentRoutes(r *gin.RouterGroup, agentHandler *handler.CustomAgentHandler, g *rbacGuards) {
 	agents := r.Group("/agents")
 	{
-		// Get placeholder definitions (must be before /:id to avoid conflict) — Viewer+
-		agents.GET("/placeholders", g.Viewer(), agentHandler.GetPlaceholders)
-		// List smart-reasoning agent type presets (rag-qa / wiki-qa / hybrid / custom) — Viewer+
-		agents.GET("/type-presets", g.Viewer(), agentHandler.GetAgentTypePresets)
+		// Get placeholder definitions (must be before /:id to avoid conflict) — Contributor+
+		agents.GET("/placeholders", g.Contributor(), agentHandler.GetPlaceholders)
+		// List smart-reasoning agent type presets (rag-qa / wiki-qa / hybrid / custom) — Contributor+
+		agents.GET("/type-presets", g.Contributor(), agentHandler.GetAgentTypePresets)
 		// Create custom agent — Contributor+
 		agents.POST("", g.Contributor(), agentHandler.CreateAgent)
-		// List all agents (including built-in) — Viewer+
-		agents.GET("", g.Viewer(), agentHandler.ListAgents)
-		// Get agent by ID — Viewer+
-		agents.GET("/:id", g.Viewer(), agentHandler.GetAgent)
+		// List all agents (including built-in) — Contributor+
+		agents.GET("", g.Contributor(), agentHandler.ListAgents)
+		// Get agent by ID — Contributor+
+		agents.GET("/:id", g.Contributor(), agentHandler.GetAgent)
 		// Update agent — creator OR Admin+
 		agents.PUT("/:id", g.OwnedAgentOrAdmin(), agentHandler.UpdateAgent)
 		// Delete agent — creator OR Admin+
@@ -995,7 +994,7 @@ func RegisterCustomAgentRoutes(r *gin.RouterGroup, agentHandler *handler.CustomA
 		agents.POST("/:id/copy", g.Contributor(), agentHandler.CopyAgent)
 	}
 	// Registered outside the group to avoid Gin route conflict with /agents/:id/shares in organization routes
-	r.GET("/agents/:id/suggested-questions", g.Viewer(), agentHandler.GetSuggestedQuestions)
+	r.GET("/agents/:id/suggested-questions", g.Contributor(), agentHandler.GetSuggestedQuestions)
 }
 
 // RegisterUserFavoriteRoutes wires the per-user starred-resource endpoints.

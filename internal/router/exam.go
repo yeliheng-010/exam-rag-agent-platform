@@ -24,14 +24,18 @@ func RegisterExamRoutes(
 
 		exam.GET("/classes", g.Viewer(), classHandler.ListClasses)
 		exam.POST("/classes", g.Contributor(), classHandler.CreateClass)
+		exam.POST("/classes/join", g.Viewer(), classHandler.RequestJoinClass)
 		exam.GET("/classes/:class_id", g.Viewer(), classHandler.GetClass)
+		exam.GET("/classes/:class_id/members", g.Viewer(), classHandler.ListClassMembers)
+		exam.POST("/classes/:class_id/members/:user_id/approve", g.Viewer(), classHandler.ApproveClassMember)
+		exam.POST("/classes/:class_id/members/:user_id/reject", g.Viewer(), classHandler.RejectClassMember)
 
-		exam.GET("/question-banks", g.Viewer(), questionHandler.ListQuestionBanks)
+		exam.GET("/question-banks", g.Contributor(), questionHandler.ListQuestionBanks)
 		exam.POST("/question-banks", g.Contributor(), questionHandler.CreateQuestionBank)
-		exam.GET("/question-banks/:bank_id", g.Viewer(), questionHandler.GetQuestionBank)
+		exam.GET("/question-banks/:bank_id", g.Contributor(), questionHandler.GetQuestionBank)
 
-		exam.GET("/resources", g.Viewer(), resourceHandler.ListResources)
+		exam.GET("/resources", g.Contributor(), resourceHandler.ListResources)
 		exam.POST("/resources/knowledge-bases/:kb_id/bind", g.Contributor(), resourceHandler.BindKnowledgeBase)
-		exam.GET("/resources/knowledge-bases/:kb_id", g.Viewer(), resourceHandler.GetKnowledgeBaseBinding)
+		exam.GET("/resources/knowledge-bases/:kb_id", g.Contributor(), resourceHandler.GetKnowledgeBaseBinding)
 	}
 }

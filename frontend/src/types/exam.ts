@@ -1,5 +1,6 @@
 export type ExamSpaceType = 'public' | 'personal' | 'class'
 export type ExamClassRole = 'teacher' | 'assistant' | 'student'
+export type ExamClassMemberStatus = 'pending' | 'active' | 'removed'
 export type ReviewStatus = 'private' | 'pending' | 'approved' | 'rejected'
 export type ExamResourceType = 'knowledge_base'
 export type ExamMaterialType = 'learning_material' | 'exam_paper' | 'answer_key' | 'explanation'
@@ -49,6 +50,18 @@ export interface ExamClass {
   invite_code_expires_at?: string
   member_limit: number
   status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ExamClassMember {
+  id: string
+  class_id: string
+  user_id: string
+  tenant_id: number
+  role: ExamClassRole
+  status: ExamClassMemberStatus
+  joined_at: string
   created_at: string
   updated_at: string
 }

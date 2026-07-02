@@ -80,6 +80,14 @@ func TestRequireRole_RejectsBelowMin(t *testing.T) {
 	}
 }
 
+func TestRequireRole_ViewerCannotUseContributorGate(t *testing.T) {
+	w := rbacTestHarness(types.TenantRoleViewer, "student-1",
+		RequireRole(types.TenantRoleContributor, cfgRBAC(true)))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("Viewer/student must NOT clear Contributor gate, got %d", w.Code)
+	}
+}
+
 func TestRequireRole_FailOpenWhenRBACDisabled(t *testing.T) {
 	// EnableRBAC=false: the middleware should log but not block, so the
 	// downstream handler still runs. This is the rollout-safety guarantee.
