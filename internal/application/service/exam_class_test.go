@@ -178,6 +178,26 @@ func (r *fakeExamDomainRepo) GetSubjectByID(context.Context, string) (*types.Exa
 	return nil, repository.ErrExamSubjectNotFound
 }
 
+type fakeExamTeacherAccess struct {
+	approved map[string]bool
+}
+
+func newFakeExamTeacherAccess() *fakeExamTeacherAccess {
+	return &fakeExamTeacherAccess{approved: map[string]bool{}}
+}
+
+func (s *fakeExamTeacherAccess) setApproved(tenantID uint64, userID string, approved bool) {
+	s.approved[teacherApplicationKey(tenantID, userID)] = approved
+}
+
+func (s *fakeExamTeacherAccess) IsApprovedTeacher(_ context.Context, tenantID uint64, userID string) (bool, error) {
+	return s.approved[teacherApplicationKey(tenantID, userID)], nil
+}
+
+func newExamClassServiceForTest(repo *fakeExamClassRepo, teacherAccess *fakeExamTeacherAccess) *examClassService {
+	return NewExamClassService(repo, &fakeExamSpaceRepo{}, &fakeExamDomainRepo{}, teacherAccess).(*examClassService)
+}
+
 func seedExamClass(repo *fakeExamClassRepo, classID string, tenantID uint64, ownerID string, inviteCode string) *types.ExamClass {
 	class := &types.ExamClass{
 		ID:          classID,
@@ -214,7 +234,7 @@ func TestExamClassJoinRequiresTeacherApproval(t *testing.T) {
 	repo := newFakeExamClassRepo()
 	seedExamClass(repo, "class-1", 1, "teacher-1", "CLASSCODE")
 	seedExamClassMember(repo, "class-1", 1, "teacher-1", types.ExamClassRoleTeacher, types.ExamClassMemberStatusActive)
-	svc := NewExamClassService(repo, &fakeExamSpaceRepo{}, &fakeExamDomainRepo{})
+	svc := newExamClassServiceForTest(repo, newFakeExamTeacherAccess())
 
 	member, err := svc.RequestJoinClass(context.Background(), 1, "student-1", &types.JoinExamClassRequest{
 		InviteCode: " classcode ",
@@ -248,7 +268,7 @@ func TestExamClassOnlyTeacherOrAssistantCanReviewJoinRequests(t *testing.T) {
 	seedExamClass(repo, "class-1", 1, "teacher-1", "CLASSCODE")
 	seedExamClassMember(repo, "class-1", 1, "student-1", types.ExamClassRoleStudent, types.ExamClassMemberStatusActive)
 	seedExamClassMember(repo, "class-1", 1, "student-2", types.ExamClassRoleStudent, types.ExamClassMemberStatusPending)
-	svc := NewExamClassService(repo, &fakeExamSpaceRepo{}, &fakeExamDomainRepo{})
+	svc := newExamClassServiceForTest(repo, newFakeExamTeacherAccess())
 
 	_, err := svc.ApproveClassMember(context.Background(), 1, "student-1", "class-1", "student-2")
 	if !errors.Is(err, ErrExamPermissionDenied) {
@@ -260,5 +280,36 @@ func TestExamClassOnlyTeacherOrAssistantCanReviewJoinRequests(t *testing.T) {
 	}
 	if member.Status != types.ExamClassMemberStatusPending {
 		t.Fatalf("denied approval changed status to %s", member.Status)
+	}
+}
+
+func TestExamClassCreateRequiresApprovedTeacher(t *testing.T) {
+	repo := newFakeExamClassRepo()
+	teacherAccess := newFakeExamTeacherAccess()
+	svc := newExamClassServiceForTest(repo, teacherAccess)
+
+	_, err := svc.CreateClass(context.Background(), 1, "student-1", &types.CreateExamClassRequest{
+		Name: "IELTS Reading",
+	})
+	if !errors.Is(err, ErrExamPermissionDenied) {
+		t.Fatalf("unapproved user create class error = %v, want ErrExamPermissionDenied", err)
+	}
+
+	teacherAccess.setApproved(1, "teacher-1", true)
+	class, err := svc.CreateClass(context.Background(), 1, "teacher-1", &types.CreateExamClassRequest{
+		Name: "IELTS Reading",
+	})
+	if err != nil {
+		t.Fatalf("approved teacher CreateClass returned error: %v", err)
+	}
+	if class.OwnerUserID != "teacher-1" {
+		t.Fatalf("class owner = %s, want teacher-1", class.OwnerUserID)
+	}
+	member, err := repo.GetMember(context.Background(), class.ID, 1, "teacher-1")
+	if err != nil {
+		t.Fatalf("creator should be active class member: %v", err)
+	}
+	if member.Role != types.ExamClassRoleTeacher {
+		t.Fatalf("creator class role = %s, want teacher", member.Role)
 	}
 }

@@ -17,24 +17,36 @@ import (
 const defaultExamClassMemberLimit = 50
 
 type examClassService struct {
-	classRepo  interfaces.ExamClassRepository
-	spaceRepo  interfaces.ExamSpaceRepository
-	domainRepo interfaces.ExamDomainRepository
+	classRepo            interfaces.ExamClassRepository
+	spaceRepo            interfaces.ExamSpaceRepository
+	domainRepo           interfaces.ExamDomainRepository
+	teacherAccessService interfaces.ExamTeacherAccessService
 }
 
 func NewExamClassService(
 	classRepo interfaces.ExamClassRepository,
 	spaceRepo interfaces.ExamSpaceRepository,
 	domainRepo interfaces.ExamDomainRepository,
+	teacherAccessService interfaces.ExamTeacherAccessService,
 ) interfaces.ExamClassService {
 	return &examClassService{
-		classRepo:  classRepo,
-		spaceRepo:  spaceRepo,
-		domainRepo: domainRepo,
+		classRepo:            classRepo,
+		spaceRepo:            spaceRepo,
+		domainRepo:           domainRepo,
+		teacherAccessService: teacherAccessService,
 	}
 }
 
 func (s *examClassService) CreateClass(ctx context.Context, tenantID uint64, userID string, req *types.CreateExamClassRequest) (*types.ExamClass, error) {
+	if s.teacherAccessService != nil {
+		approved, err := s.teacherAccessService.IsApprovedTeacher(ctx, tenantID, userID)
+		if err != nil {
+			return nil, err
+		}
+		if !approved {
+			return nil, ErrExamPermissionDenied
+		}
+	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		return nil, ErrExamInvalidRequest

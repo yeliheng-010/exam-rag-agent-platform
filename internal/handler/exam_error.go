@@ -20,6 +20,7 @@ func writeExamError(c *gin.Context, err error, fallback string) {
 		errors.Is(err, repository.ErrExamSubjectNotFound),
 		errors.Is(err, repository.ErrExamSpaceNotFound),
 		errors.Is(err, repository.ErrExamClassNotFound),
+		errors.Is(err, repository.ErrExamTeacherApplicationNotFound),
 		errors.Is(err, repository.ErrQuestionBankNotFound),
 		errors.Is(err, repository.ErrExamResourceNotFound):
 		c.Error(apperrors.NewNotFoundError("Exam resource not found"))

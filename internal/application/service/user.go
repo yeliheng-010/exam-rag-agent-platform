@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -24,7 +25,6 @@ import (
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
-	secutils "github.com/Tencent/WeKnora/internal/utils"
 )
 
 type oidcAuthorizationState struct {
@@ -39,7 +39,10 @@ var (
 
 var ErrPasswordPolicy = errors.New("password must be 6-32 characters")
 
-const passwordResetTTL = 30 * time.Minute
+const (
+	passwordResetTTL            = 30 * time.Minute
+	defaultExamSchoolTenantName = "Exam RAG School"
+)
 
 // getJwtSecret retrieves the JWT secret from the environment, falling back to a securely generated random secret.
 func getJwtSecret() string {
@@ -112,17 +115,9 @@ func (s *userService) Register(ctx context.Context, req *types.RegisterRequest) 
 		return nil, errors.New("failed to process password")
 	}
 
-	// Create default tenant for the user
-	// Note: RetrieverEngines is left empty - system will use defaults from RETRIEVE_DRIVER env
-	tenant := &types.Tenant{
-		Name:        fmt.Sprintf("%s's Workspace", secutils.SanitizeForLog(req.Username)),
-		Description: "Default workspace",
-		Status:      "active",
-	}
-
-	createdTenant, err := s.tenantService.CreateTenant(ctx, tenant)
+	schoolTenant, createdSchool, err := s.ensureExamSchoolTenant(ctx)
 	if err != nil {
-		logger.Errorf(ctx, "Failed to create tenant")
+		logger.Errorf(ctx, "Failed to resolve exam school tenant: %v", err)
 		return nil, errors.New("failed to create workspace")
 	}
 
@@ -132,7 +127,7 @@ func (s *userService) Register(ctx context.Context, req *types.RegisterRequest) 
 		Username:     req.Username,
 		Email:        req.Email,
 		PasswordHash: string(hashedPassword),
-		TenantID:     createdTenant.ID,
+		TenantID:     schoolTenant.ID,
 		IsActive:     true,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
@@ -144,20 +139,60 @@ func (s *userService) Register(ctx context.Context, req *types.RegisterRequest) 
 		return nil, errors.New("failed to create user")
 	}
 
-	// Public self-service signup starts at the least-privileged tenant role.
-	// Teacher/admin/owner permissions are assigned later by an administrator.
-	// Failure here only logs — the user record already exists, and the auth
-	// middleware's orphan-tenant recovery path will recreate a Viewer row on
-	// next login without granting management permissions.
 	if s.memberService != nil {
-		if _, err := s.memberService.AddMember(ctx, user.ID, createdTenant.ID, types.TenantRoleViewer, nil); err != nil {
-			logger.Errorf(ctx, "Failed to create viewer membership for user %s tenant %d: %v",
-				user.ID, createdTenant.ID, err)
+		if createdSchool {
+			if _, err := s.memberService.EnsureOwner(ctx, user.ID, schoolTenant.ID); err != nil {
+				logger.Errorf(ctx, "Failed to create owner membership for first school user %s tenant %d: %v",
+					user.ID, schoolTenant.ID, err)
+			}
+		} else {
+			if _, err := s.memberService.AddMember(ctx, user.ID, schoolTenant.ID, types.TenantRoleViewer, nil); err != nil {
+				logger.Errorf(ctx, "Failed to create viewer membership for user %s tenant %d: %v",
+					user.ID, schoolTenant.ID, err)
+			}
 		}
 	}
 
 	logger.Info(ctx, "User registered successfully")
 	return user, nil
+}
+
+func (s *userService) ensureExamSchoolTenant(ctx context.Context) (*types.Tenant, bool, error) {
+	tenants, err := s.tenantService.ListTenants(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	for _, tenant := range sortTenantsByCreatedAtAsc(tenants) {
+		if tenant != nil && tenant.Status == "active" {
+			return tenant, false, nil
+		}
+	}
+	tenant := &types.Tenant{
+		Name:        defaultExamSchoolTenantName,
+		Description: "Shared school workspace for the exam RAG platform.",
+		Status:      "active",
+	}
+	createdTenant, err := s.tenantService.CreateTenant(ctx, tenant)
+	if err != nil {
+		return nil, false, err
+	}
+	return createdTenant, true, nil
+}
+
+func sortTenantsByCreatedAtAsc(tenants []*types.Tenant) []*types.Tenant {
+	out := make([]*types.Tenant, 0, len(tenants))
+	for _, tenant := range tenants {
+		if tenant != nil {
+			out = append(out, tenant)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out
 }
 
 // Login authenticates a user and returns tokens

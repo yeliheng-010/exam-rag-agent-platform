@@ -4,6 +4,7 @@ export type ExamClassMemberStatus = 'pending' | 'active' | 'removed'
 export type ReviewStatus = 'private' | 'pending' | 'approved' | 'rejected'
 export type ExamResourceType = 'knowledge_base'
 export type ExamMaterialType = 'learning_material' | 'exam_paper' | 'answer_key' | 'explanation'
+export type ExamTeacherApplicationStatus = 'pending' | 'approved' | 'rejected'
 
 export interface ExamDomain {
   id: string
@@ -64,6 +65,22 @@ export interface ExamClassMember {
   joined_at: string
   created_at: string
   updated_at: string
+}
+
+export interface ExamTeacherApplication {
+  id: string
+  tenant_id: number
+  user_id: string
+  status: ExamTeacherApplicationStatus
+  reason: string
+  reviewer_id?: string
+  review_note: string
+  reviewed_at?: string
+  created_at: string
+  updated_at: string
+  user_email?: string
+  username?: string
+  reviewer_name?: string
 }
 
 export interface QuestionBank {

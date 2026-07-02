@@ -9,6 +9,7 @@ func RegisterExamRoutes(
 	r *gin.RouterGroup,
 	domainHandler *handler.ExamDomainHandler,
 	spaceHandler *handler.ExamSpaceHandler,
+	teacherApplicationHandler *handler.ExamTeacherApplicationHandler,
 	classHandler *handler.ExamClassHandler,
 	questionHandler *handler.ExamQuestionHandler,
 	resourceHandler *handler.ExamResourceHandler,
@@ -22,8 +23,14 @@ func RegisterExamRoutes(
 		exam.GET("/spaces", g.Viewer(), spaceHandler.ListSpaces)
 		exam.POST("/spaces/personal/ensure", g.Viewer(), spaceHandler.EnsurePersonalSpace)
 
+		exam.GET("/teacher-applications/me", g.Viewer(), teacherApplicationHandler.GetMine)
+		exam.POST("/teacher-applications", g.Viewer(), teacherApplicationHandler.Apply)
+		exam.GET("/admin/teacher-applications", g.Admin(), teacherApplicationHandler.List)
+		exam.POST("/admin/teacher-applications/:application_id/approve", g.Admin(), teacherApplicationHandler.Approve)
+		exam.POST("/admin/teacher-applications/:application_id/reject", g.Admin(), teacherApplicationHandler.Reject)
+
 		exam.GET("/classes", g.Viewer(), classHandler.ListClasses)
-		exam.POST("/classes", g.Contributor(), classHandler.CreateClass)
+		exam.POST("/classes", g.Viewer(), classHandler.CreateClass)
 		exam.POST("/classes/join", g.Viewer(), classHandler.RequestJoinClass)
 		exam.GET("/classes/:class_id", g.Viewer(), classHandler.GetClass)
 		exam.GET("/classes/:class_id/members", g.Viewer(), classHandler.ListClassMembers)

@@ -161,6 +161,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewExamDomainRepository))
 	must(container.Provide(repository.NewExamSpaceRepository))
 	must(container.Provide(repository.NewExamClassRepository))
+	must(container.Provide(repository.NewExamTeacherApplicationRepository))
 	must(container.Provide(repository.NewExamQuestionRepository))
 	must(container.Provide(repository.NewExamResourceRepository))
 	must(container.Provide(repository.NewKBShareRepository))
@@ -192,6 +193,10 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewOrganizationService))
 	must(container.Provide(service.NewExamDomainService))
 	must(container.Provide(service.NewExamSpaceService))
+	must(container.Provide(service.NewExamTeacherApplicationService))
+	must(container.Provide(func(s interfaces.ExamTeacherApplicationService) interfaces.ExamTeacherAccessService {
+		return s
+	}))
 	must(container.Provide(service.NewExamClassService))
 	must(container.Provide(service.NewExamQuestionService))
 	must(container.Provide(service.NewExamResourceService))
@@ -353,6 +358,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewOrganizationHandler))
 	must(container.Provide(handler.NewExamDomainHandler))
 	must(container.Provide(handler.NewExamSpaceHandler))
+	must(container.Provide(handler.NewExamTeacherApplicationHandler))
 	must(container.Provide(handler.NewExamClassHandler))
 	must(container.Provide(handler.NewExamQuestionHandler))
 	must(container.Provide(handler.NewExamResourceHandler))

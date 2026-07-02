@@ -14,6 +14,11 @@
     </div>
 
     <t-tabs v-model="activeTab" class="admin-tabs">
+      <t-tab-panel value="teacherApplications" label="班主任申请">
+        <section class="admin-section">
+          <TeacherApplications />
+        </section>
+      </t-tab-panel>
       <t-tab-panel value="members" :label="$t('platformAdmin.tabs.members')">
         <section class="admin-section">
           <TenantMembers />
@@ -27,13 +32,14 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import TeacherApplications from '@/views/admin/TeacherApplications.vue'
 import TenantMembers from '@/views/settings/TenantMembers.vue'
 
 type TenantRole = 'owner' | 'admin' | 'contributor' | 'viewer'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
-const activeTab = ref('members')
+const activeTab = ref('teacherApplications')
 
 const currentRole = computed(() => (authStore.currentTenantRole || 'viewer') as TenantRole)
 const roleLabel = computed(() => t(`tenantMember.role.${currentRole.value}`))

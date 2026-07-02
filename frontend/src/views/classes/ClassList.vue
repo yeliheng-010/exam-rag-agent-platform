@@ -3,9 +3,16 @@
     <div class="exam-header">
       <div>
         <h2>班级中心</h2>
-        <p>老师创建班级，学生通过班级关系访问对应资料、题库与练习任务。</p>
+        <p>班主任创建班级，学生通过邀请码申请加入，审核通过后访问对应资料、题库与练习任务。</p>
       </div>
       <div class="header-actions">
+        <t-tag v-if="teacherApplication" :theme="teacherStatusTheme" variant="light">
+          {{ teacherStatusText }}
+        </t-tag>
+        <t-button v-if="!canCreateClass" theme="primary" variant="outline" @click="openTeacherDialog">
+          <template #icon><t-icon name="user-add" /></template>
+          申请成为班主任
+        </t-button>
         <t-button theme="default" variant="outline" @click="openJoinDialog">
           <template #icon><t-icon name="login" /></template>
           加入班级
@@ -41,6 +48,7 @@
         <template #action>
           <t-space>
             <t-button theme="default" variant="outline" @click="openJoinDialog">输入邀请码加入</t-button>
+            <t-button v-if="!canCreateClass" theme="primary" variant="outline" @click="openTeacherDialog">申请成为班主任</t-button>
             <t-button v-if="canCreateClass" theme="primary" @click="openCreateDialog">创建第一个班级</t-button>
           </t-space>
         </template>
@@ -83,6 +91,23 @@
         </t-form-item>
       </t-form>
     </t-dialog>
+
+    <t-dialog
+      v-model:visible="teacherVisible"
+      header="申请成为班主任"
+      :confirm-btn="{ content: '提交申请', loading: applyingTeacher }"
+      @confirm="submitTeacherApplication"
+    >
+      <t-form ref="teacherFormRef" :data="teacherForm" label-align="top">
+        <t-form-item label="申请理由" name="reason">
+          <t-textarea
+            v-model="teacherForm.reason"
+            placeholder="可以写明你负责的考试方向、班级规模或教学计划"
+            :maxlength="500"
+          />
+        </t-form-item>
+      </t-form>
+    </t-dialog>
   </div>
 </template>
 
@@ -91,23 +116,38 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormInstanceFunctions, FormRule } from 'tdesign-vue-next'
-import { listExamDomains } from '@/api/exam/domain'
 import { createExamClass, listExamClasses, requestJoinExamClass } from '@/api/exam/class'
+import { listExamDomains } from '@/api/exam/domain'
+import { applyTeacher, getMyTeacherApplication } from '@/api/exam/teacher'
 import { useAuthStore } from '@/stores/auth'
-import type { ExamClass, ExamDomain } from '@/types/exam'
+import type { ExamClass, ExamDomain, ExamTeacherApplication } from '@/types/exam'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const loading = ref(false)
 const creating = ref(false)
 const joining = ref(false)
+const applyingTeacher = ref(false)
 const createVisible = ref(false)
 const joinVisible = ref(false)
+const teacherVisible = ref(false)
 const classes = ref<ExamClass[]>([])
 const domains = ref<ExamDomain[]>([])
+const teacherApplication = ref<ExamTeacherApplication | null>(null)
 const formRef = ref<FormInstanceFunctions>()
 const joinFormRef = ref<FormInstanceFunctions>()
-const canCreateClass = computed(() => authStore.hasRole('contributor'))
+const teacherFormRef = ref<FormInstanceFunctions>()
+const canCreateClass = computed(() => teacherApplication.value?.status === 'approved')
+const teacherStatusText = computed(() => {
+  if (teacherApplication.value?.status === 'approved') return '班主任'
+  if (teacherApplication.value?.status === 'rejected') return '申请未通过'
+  return '班主任申请待审核'
+})
+const teacherStatusTheme = computed(() => {
+  if (teacherApplication.value?.status === 'approved') return 'success'
+  if (teacherApplication.value?.status === 'rejected') return 'danger'
+  return 'warning'
+})
 
 const form = ref({
   name: '',
@@ -118,6 +158,10 @@ const form = ref({
 
 const joinForm = ref({
   invite_code: '',
+})
+
+const teacherForm = ref({
+  reason: '',
 })
 
 const rules: Record<string, FormRule[]> = {
@@ -143,9 +187,17 @@ const formatDate = (value?: string) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const [classRes, domainRes] = await Promise.all([listExamClasses(), listExamDomains()])
-    classes.value = classRes.data || []
-    domains.value = domainRes.data || []
+    const [classRes, domainRes, teacherRes] = await Promise.allSettled([
+      listExamClasses(),
+      listExamDomains(),
+      getMyTeacherApplication(),
+    ])
+    classes.value = classRes.status === 'fulfilled' ? classRes.value.data || [] : []
+    domains.value = domainRes.status === 'fulfilled' ? domainRes.value.data || [] : []
+    teacherApplication.value = teacherRes.status === 'fulfilled' ? teacherRes.value.data || null : null
+    if (teacherApplication.value?.status === 'approved') {
+      await authStore.refreshFromAuthMe()
+    }
   } catch (error: any) {
     MessagePlugin.error(error?.message || '班级列表加载失败')
   } finally {
@@ -167,6 +219,27 @@ const openCreateDialog = () => {
 const openJoinDialog = () => {
   joinForm.value = { invite_code: '' }
   joinVisible.value = true
+}
+
+const openTeacherDialog = () => {
+  teacherForm.value = {
+    reason: teacherApplication.value?.status === 'rejected' ? teacherApplication.value.reason || '' : '',
+  }
+  teacherVisible.value = true
+}
+
+const submitTeacherApplication = async () => {
+  applyingTeacher.value = true
+  try {
+    const res = await applyTeacher({ reason: teacherForm.value.reason.trim() })
+    teacherApplication.value = res.data
+    teacherVisible.value = false
+    MessagePlugin.success('班主任申请已提交，等待管理员审核')
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '提交班主任申请失败')
+  } finally {
+    applyingTeacher.value = false
+  }
 }
 
 const submitCreate = async () => {
@@ -329,5 +402,19 @@ onMounted(loadData)
   border-top: 1px solid var(--td-component-stroke);
   color: var(--td-text-color-placeholder);
   font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .exam-page {
+    padding: 20px 16px;
+  }
+
+  .exam-header {
+    flex-direction: column;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+  }
 }
 </style>
