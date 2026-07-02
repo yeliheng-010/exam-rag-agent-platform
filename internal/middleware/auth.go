@@ -476,16 +476,16 @@ func principalTenantIDFromClaims(claims jwt.MapClaims) uint64 {
 //     → grant Admin in the target tenant. Org admins are intentionally not
 //     promoted to Owner; tenant deletion / API-key rotation should always
 //     stay with a real Owner inside the target tenant. Cross-tenant access
-//     is also never allowed to trigger the orphan-tenant auto-promotion
+//     is also never allowed to trigger the orphan-tenant auto-heal
 //     below — a superuser only visits, never claims ownership.
 //  3. No membership but the tenant currently has zero active members AND
 //     the caller is authenticating into their own home tenant (i.e.
 //     targetTenantID == user.TenantID and this is not a cross-tenant
 //     switch). This is the API-key-only orphan-tenant self-heal path:
-//     the registrant becomes Owner of the tenant their own user record
-//     points to. Any other path (cross-tenant switch, JWT minted for a
-//     foreign tenant, etc.) is intentionally excluded to avoid silent
-//     ownership grabs.
+//     the user gets a Viewer membership so login can proceed without
+//     granting management permissions. Any other path (cross-tenant
+//     switch, JWT minted for a foreign tenant, etc.) is intentionally
+//     excluded to avoid silent membership grabs.
 //  4. Otherwise → return ok=false. Caller decides:
 //     - When EnableRBAC=true (or cfg unavailable): treat as 403.
 //     - When EnableRBAC=false: fail open with Admin so existing deployments
@@ -539,22 +539,22 @@ func resolveTenantRole(
 	}
 
 	// 3. 孤儿租户自愈：仅当用户登录的是自己的 home tenant、且该租户尚无任何活跃成员时
-	//    允许自动晋升为 Owner。跨租户 switch / JWT 指向他人租户的场景一律不进入此分支，
-	//    防止越权获得他人租户的 Owner 权限。
+	//    自动补一个 Viewer membership。公开注册用户不能借自愈路径拿到 Owner；
+	//    跨租户 switch / JWT 指向他人租户的场景一律不进入此分支。
 	isHomeTenant := !crossTenantSwitch && targetTenantID == user.TenantID
 	if isHomeTenant {
 		hasAny, anyErr := memberService.HasAnyMembers(ctx, targetTenantID)
 		if anyErr == nil && !hasAny {
 			if _, e := memberService.AddMember(
-				ctx, user.ID, targetTenantID, types.TenantRoleOwner, nil,
+				ctx, user.ID, targetTenantID, types.TenantRoleViewer, nil,
 			); e == nil {
 				logger.Infof(ctx,
-					"[audit] Auto-promoted user %s to Owner of orphan tenant %d (home_tenant=true)",
+					"[audit] Auto-healed user %s as Viewer of orphan tenant %d (home_tenant=true)",
 					user.ID, targetTenantID,
 				)
-				return types.TenantRoleOwner, true
+				return types.TenantRoleViewer, true
 			} else {
-				logger.Warnf(ctx, "Failed to auto-promote user %s in tenant %d: %v",
+				logger.Warnf(ctx, "Failed to auto-heal viewer membership for user %s in tenant %d: %v",
 					user.ID, targetTenantID, e)
 			}
 		}

@@ -13,6 +13,8 @@ export interface CmdkCommand {
   label: string
   /** TDesign icon name rendered on the left. */
   icon: string
+  /** Minimum tenant role needed for this quick navigation command. */
+  minRole?: 'viewer' | 'contributor' | 'admin' | 'owner'
   /** Extra tokens used purely for fuzzy matching (aliases, synonyms). */
   keywords?: string[]
   /** Executed on primary action. Should close the palette itself if needed. */
@@ -33,6 +35,37 @@ export interface CommandContext {
 export function buildCommands(ctx: CommandContext): CmdkCommand[] {
   const { router, t, close } = ctx
   return [
+    {
+      id: 'open-learning',
+      label: t('commandPalette.quick.learning'),
+      icon: 'school',
+      keywords: ['study', 'learning', 'exam', '学习', '考试', '首页'],
+      run: () => {
+        close()
+        router.push('/platform/learning')
+      },
+    },
+    {
+      id: 'open-classes',
+      label: t('commandPalette.quick.classes'),
+      icon: 'usergroup',
+      keywords: ['class', 'classes', 'students', '班级', '学生', '老师'],
+      run: () => {
+        close()
+        router.push('/platform/classes')
+      },
+    },
+    {
+      id: 'open-question-banks',
+      label: t('commandPalette.quick.questionBanks'),
+      icon: 'folder',
+      minRole: 'contributor',
+      keywords: ['question', 'bank', 'exam', '题库', '试题', '真题'],
+      run: () => {
+        close()
+        router.push('/platform/question-banks')
+      },
+    },
     {
       id: 'new-chat',
       label: t('commandPalette.quick.newChat'),
@@ -67,6 +100,7 @@ export function buildCommands(ctx: CommandContext): CmdkCommand[] {
       id: 'open-organizations',
       label: t('commandPalette.quick.organizations'),
       icon: 'usergroup',
+      minRole: 'admin',
       keywords: ['org', 'organization', 'team', 'space', '组织', '共享'],
       run: () => {
         close()

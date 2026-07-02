@@ -140,13 +140,14 @@ func (s *userService) Register(ctx context.Context, req *types.RegisterRequest) 
 		return nil, errors.New("failed to create user")
 	}
 
-	// Bootstrap an Owner membership so the registrant has full control over
-	// the tenant their account just created. Failure here only logs — the
-	// user record exists and the auth middleware's orphan-tenant recovery
-	// path will recreate the membership on next login.
+	// Public self-service signup starts at the least-privileged tenant role.
+	// Teacher/admin/owner permissions are assigned later by an administrator.
+	// Failure here only logs — the user record already exists, and the auth
+	// middleware's orphan-tenant recovery path will recreate a Viewer row on
+	// next login without granting management permissions.
 	if s.memberService != nil {
-		if _, err := s.memberService.EnsureOwner(ctx, user.ID, createdTenant.ID); err != nil {
-			logger.Errorf(ctx, "Failed to create owner membership for user %s tenant %d: %v",
+		if _, err := s.memberService.AddMember(ctx, user.ID, createdTenant.ID, types.TenantRoleViewer, nil); err != nil {
+			logger.Errorf(ctx, "Failed to create viewer membership for user %s tenant %d: %v",
 				user.ID, createdTenant.ID, err)
 		}
 	}
@@ -323,7 +324,7 @@ func (s *userService) buildMembershipsForUser(
 // synthFallbackMembership returns a single-row membership list inferred
 // from User.TenantID. Used when the membership table has not been
 // populated yet (e.g. during the rollout window where the migration has
-// run but the auth middleware's auto-promotion hasn't fired) so the
+// run but the auth middleware's auto-heal hasn't fired) so the
 // response shape stays consistent.
 //
 // The fallback role is intentionally TenantRoleViewer (least privilege):
@@ -332,7 +333,7 @@ func (s *userService) buildMembershipsForUser(
 // is temporarily unavailable, showing a Viewer UI is preferable to
 // granting a misleading Owner UI that would surface admin controls the
 // backend will then 403. Once the membership row appears (via the auth
-// middleware's home-tenant auto-promotion or an admin invitation) the
+// middleware's home-tenant auto-heal or an admin invitation) the
 // next /auth/me-style refresh will upgrade the UI to the real role.
 func synthFallbackMembership(user *types.User, activeTenant *types.Tenant) []types.Membership {
 	if user == nil || user.TenantID == 0 {

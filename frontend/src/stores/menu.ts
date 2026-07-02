@@ -11,6 +11,7 @@ interface MenuItem {
   icon: string
   path: string
   childrenPath?: string
+  minRole?: 'viewer' | 'contributor' | 'admin' | 'owner'
   children?: MenuChild[]
 }
 
@@ -26,10 +27,17 @@ export const useMenuStore = defineStore('menuStore', () => {
       childrenPath: 'chat',
       children: createMenuChildren()
     },
+    { title: '', titleKey: 'menu.learning', icon: 'zhishiku', path: 'learning' },
+    { title: '', titleKey: 'menu.classes', icon: 'organization', path: 'classes' },
+    { title: '', titleKey: 'menu.questionBank', icon: 'zhishiku', path: 'question-banks', minRole: 'contributor' },
     { title: '', titleKey: 'menu.knowledgeBase', icon: 'zhishiku', path: 'knowledge-bases' },
     { title: '', titleKey: 'menu.agents', icon: 'agent', path: 'agents' },
-    { title: '', titleKey: 'menu.integrations', icon: 'integration', path: 'integrations' },
-    { title: '', titleKey: 'menu.organizations', icon: 'organization', path: 'organizations' },
+    { title: '', titleKey: 'menu.analytics', icon: 'integration', path: 'analytics', minRole: 'admin' },
+    { title: '', titleKey: 'menu.billing', icon: 'setting', path: 'billing', minRole: 'admin' },
+    { title: '', titleKey: 'menu.review', icon: 'setting', path: 'review', minRole: 'contributor' },
+    { title: '', titleKey: 'menu.examConfig', icon: 'setting', path: 'exam-config', minRole: 'admin' },
+    { title: '', titleKey: 'menu.integrations', icon: 'integration', path: 'integrations', minRole: 'admin' },
+    { title: '', titleKey: 'menu.organizations', icon: 'organization', path: 'organizations', minRole: 'admin' },
     { title: '', titleKey: 'menu.settings', icon: 'setting', path: 'settings' },
     { title: '', titleKey: 'menu.logout', icon: 'logout', path: 'logout' }
   ])
@@ -61,16 +69,14 @@ export const useMenuStore = defineStore('menuStore', () => {
 
   const liteHiddenPaths = new Set(['logout', 'organizations'])
 
-  // 共享空间 (organizations) 仅对当前租户的 admin / owner 暴露入口。
-  // viewer / contributor 即便在共享空间里拥有资源，也无需自行管理共享关系，
-  // 入口在侧栏只会徒增噪音；后端 RBAC 才是权限的最终来源（见 middleware/rbac.go）。
+  // 侧栏只展示当前角色自然能使用的模块；后端 RBAC 才是权限最终来源。
   const visibleMenuArr = computed(() => {
     const authStore = useAuthStore()
     return menuArr.filter(item => {
       if (authStore.isLiteMode && liteHiddenPaths.has(item.path)) {
         return false
       }
-      if (item.path === 'organizations' && !authStore.hasRole('admin')) {
+      if (item.minRole && !authStore.hasRole(item.minRole)) {
         return false
       }
       return true

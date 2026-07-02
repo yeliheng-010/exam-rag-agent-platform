@@ -2,7 +2,7 @@
     <div class="aside_box" :class="{ 'aside_box--collapsed': uiStore.sidebarCollapsed }">
         <!-- 展开时：Logo + 搜索/折叠按钮同行 -->
         <div class="logo_row" v-if="!uiStore.sidebarCollapsed">
-            <div class="logo_box" @click="router.push('/platform/knowledge-bases')" style="cursor: pointer;">
+            <div class="logo_box" @click="router.push('/platform/learning')" style="cursor: pointer;">
                 <img class="logo" src="@/assets/img/weknora.png" alt="">
                 <sup v-if="isLiteEdition" class="lite-badge">Lite</sup>
             </div>
@@ -410,6 +410,20 @@ const isMenuItemActive = (itemPath: string): boolean => {
             return currentRoute === 'knowledgeBaseList' ||
                 currentRoute === 'knowledgeBaseDetail' ||
                 currentRoute === 'knowledgeBaseSettings';
+        case 'learning':
+            return currentRoute === 'learningHome';
+        case 'classes':
+            return currentRoute === 'classList' || currentRoute === 'classDetail';
+        case 'question-banks':
+            return currentRoute === 'questionBankList' || currentRoute === 'questionBankDetail';
+        case 'analytics':
+            return currentRoute === 'analyticsHome';
+        case 'billing':
+            return currentRoute === 'billingHome';
+        case 'review':
+            return currentRoute === 'reviewHome';
+        case 'exam-config':
+            return currentRoute === 'examConfigHome';
         case 'agents':
             return currentRoute === 'agentList';
         case 'integrations':
@@ -444,13 +458,37 @@ const getIconActiveState = (itemPath: string) => {
 // 分离上下两部分菜单（使用 visibleMenuArr 以便 lite 模式过滤 logout）
 const topMenuItems = computed<MenuItem[]>(() => {
     return (visibleMenuArr.value as unknown as MenuItem[]).filter((item: MenuItem) =>
-        item.path === 'knowledge-bases' || item.path === 'agents' || item.path === 'integrations' || item.path === 'organizations' || item.path === 'creatChat'
+        item.path === 'learning' ||
+        item.path === 'classes' ||
+        item.path === 'question-banks' ||
+        item.path === 'knowledge-bases' ||
+        item.path === 'agents' ||
+        item.path === 'analytics' ||
+        item.path === 'billing' ||
+        item.path === 'review' ||
+        item.path === 'exam-config' ||
+        item.path === 'integrations' ||
+        item.path === 'organizations' ||
+        item.path === 'creatChat'
     );
 });
 
 const bottomMenuItems = computed<MenuItem[]>(() => {
     return (visibleMenuArr.value as unknown as MenuItem[]).filter((item: MenuItem) => {
-        if (item.path === 'knowledge-bases' || item.path === 'agents' || item.path === 'integrations' || item.path === 'organizations' || item.path === 'creatChat') {
+        if (
+            item.path === 'learning' ||
+            item.path === 'classes' ||
+            item.path === 'question-banks' ||
+            item.path === 'knowledge-bases' ||
+            item.path === 'agents' ||
+            item.path === 'analytics' ||
+            item.path === 'billing' ||
+            item.path === 'review' ||
+            item.path === 'exam-config' ||
+            item.path === 'integrations' ||
+            item.path === 'organizations' ||
+            item.path === 'creatChat'
+        ) {
             return false;
         }
         return true;
@@ -1073,6 +1111,20 @@ const handleMenuClick = async (path: string) => {
         } else {
             router.push('/platform/knowledge-bases')
         }
+    } else if (path === 'learning') {
+        router.push('/platform/learning')
+    } else if (path === 'classes') {
+        router.push('/platform/classes')
+    } else if (path === 'question-banks') {
+        router.push('/platform/question-banks')
+    } else if (path === 'analytics') {
+        router.push('/platform/analytics')
+    } else if (path === 'billing') {
+        router.push('/platform/billing')
+    } else if (path === 'review') {
+        router.push('/platform/review')
+    } else if (path === 'exam-config') {
+        router.push('/platform/exam-config')
     } else if (path === 'agents') {
         router.push('/platform/agents')
     } else if (path === 'integrations') {

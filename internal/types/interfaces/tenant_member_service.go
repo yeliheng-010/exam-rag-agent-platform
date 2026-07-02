@@ -16,11 +16,12 @@ type TenantMemberService interface {
 	// (user, tenant) already has an active membership.
 	AddMember(ctx context.Context, userID string, tenantID uint64, role types.TenantRole, invitedBy *string) (*types.TenantMember, error)
 
-	// EnsureOwner is an idempotent helper used by the registration flow:
+	// EnsureOwner is an idempotent helper for explicit owner bootstrap
+	// flows such as admin-created tenants:
 	// if the user already has an active membership in the tenant, return
-	// it; otherwise create one with role=owner. This is the common path
-	// for self-service registration where the registrant becomes the
-	// Owner of the tenant their account just created.
+	// it; otherwise create one with role=owner. Public self-service
+	// registration should use AddMember(..., TenantRoleViewer, ...)
+	// so new users start least-privileged.
 	EnsureOwner(ctx context.Context, userID string, tenantID uint64) (*types.TenantMember, error)
 
 	// GetMembership returns the active (user, tenant) membership, or
@@ -38,10 +39,9 @@ type TenantMemberService interface {
 	ListMembersPage(ctx context.Context, tenantID uint64, query string, page, pageSize int) ([]*types.TenantMember, int64, error)
 
 	// HasAnyMembers reports whether the tenant has at least one active
-	// member. The auth middleware uses this to recover orphan tenants
-	// (e.g. API-key-only tenants that never had a human member): the
-	// first human authenticating into such a tenant is auto-promoted
-	// to Owner.
+	// member. The auth middleware uses this to recover orphan home tenants
+	// with a least-privileged Viewer row so login can proceed without
+	// granting management permissions.
 	HasAnyMembers(ctx context.Context, tenantID uint64) (bool, error)
 
 	// UpdateRole changes the role of an existing membership while

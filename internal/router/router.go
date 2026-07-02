@@ -78,6 +78,11 @@ type RouterParams struct {
 	UserFavoriteHandler          *handler.UserResourceFavoriteHandler
 	SkillHandler                 *handler.SkillHandler
 	OrganizationHandler          *handler.OrganizationHandler
+	ExamDomainHandler            *handler.ExamDomainHandler
+	ExamSpaceHandler             *handler.ExamSpaceHandler
+	ExamClassHandler             *handler.ExamClassHandler
+	ExamQuestionHandler          *handler.ExamQuestionHandler
+	ExamResourceHandler          *handler.ExamResourceHandler
 	IMHandler                    *handler.IMHandler
 	EmbedChannelHandler          *handler.EmbedChannelHandler
 	EmbedChannelService          interfaces.EmbedChannelService
@@ -225,6 +230,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, rbacGuards)
 		RegisterSkillRoutes(v1, params.SkillHandler, rbacGuards)
 		RegisterOrganizationRoutes(v1, params.OrganizationHandler, rbacGuards)
+		RegisterExamRoutes(v1, params.ExamDomainHandler, params.ExamSpaceHandler, params.ExamClassHandler, params.ExamQuestionHandler, params.ExamResourceHandler, rbacGuards)
 		RegisterIMChannelRoutes(v1, params.IMHandler, rbacGuards)
 		RegisterEmbedChannelRoutes(v1, params.EmbedChannelHandler, rbacGuards)
 		RegisterDataSourceRoutes(v1, params.DataSourceHandler, params.DataSourceCredentialsHandler, rbacGuards)

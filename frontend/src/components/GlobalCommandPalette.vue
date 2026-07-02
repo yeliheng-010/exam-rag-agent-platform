@@ -256,11 +256,7 @@ const allCommands = computed(() => {
     t,
     close: () => commandPaletteStore.closePalette(),
   })
-  // 共享空间入口与侧栏菜单保持一致：viewer / contributor 看不到。
-  if (!authStore.hasRole('admin')) {
-    return cmds.filter((c) => c.id !== 'open-organizations')
-  }
-  return cmds
+  return cmds.filter((c) => !c.minRole || authStore.hasRole(c.minRole))
 })
 
 const filteredCommands = computed(() => filterCommands(allCommands.value, query.value))

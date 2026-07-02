@@ -1,7 +1,14 @@
 export default {
   menu: {
+    learning: "学习中心",
+    classes: "班级中心",
+    questionBank: "题库中心",
     knowledgeBase: "知识库",
     agents: "智能体",
+    analytics: "学习分析",
+    billing: "支付与权益",
+    review: "审核工作台",
+    examConfig: "考试域配置",
     integrations: "发布集成",
     organizations: "共享空间",
     chat: "对话",
@@ -4870,6 +4877,9 @@ export default {
       keyword: "关键字",
     },
     quick: {
+      learning: "打开学习中心",
+      classes: "打开班级中心",
+      questionBanks: "打开题库中心",
       newChat: "新建对话",
       knowledgeBases: "打开知识库",
       agents: "打开智能体",

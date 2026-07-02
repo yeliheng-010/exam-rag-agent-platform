@@ -774,6 +774,7 @@ func (h *AuthHandler) AutoSetup(c *gin.Context) {
 	}
 
 	tenant, _ := h.tenantService.GetTenantByID(ctx, user.TenantID)
+	memberships := h.userService.BuildLoginMemberships(ctx, user, tenant)
 
 	logger.Info(ctx, "Auto-setup: completed successfully")
 	c.JSON(http.StatusOK, &types.LoginResponse{
@@ -781,19 +782,12 @@ func (h *AuthHandler) AutoSetup(c *gin.Context) {
 		Message:      "Auto-setup successful",
 		User:         user,
 		ActiveTenant: tenant,
-		Memberships: []types.Membership{{
-			TenantID:   user.TenantID,
-			TenantName: tenantNameOrEmpty(tenant),
-			Role:       types.TenantRoleOwner,
-		}},
+		Memberships:  memberships,
 		Token:        accessToken,
 		RefreshToken: refreshToken,
 	})
 }
 
-// tenantNameOrEmpty returns t.Name when t is non-nil, "" otherwise.
-// Used by AutoSetup to populate Membership.TenantName without crashing
-// if the tenant lookup failed.
 func tenantNameOrEmpty(t *types.Tenant) string {
 	if t == nil {
 		return ""

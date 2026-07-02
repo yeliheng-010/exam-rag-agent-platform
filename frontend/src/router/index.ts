@@ -23,7 +23,9 @@ function isLiteSpaDefaultEntry(to: RouteLocationNormalized) {
   return (
     to.path === '/' ||
     to.path === '/platform' ||
+    to.path === '/platform/learning' ||
     to.path === '/platform/knowledge-bases' ||
+    to.name === 'learningHome' ||
     to.name === 'knowledgeBaseList'
   )
 }
@@ -43,7 +45,7 @@ const router = createRouter({
   routes: [
     {
       path: "/",
-      redirect: "/platform/knowledge-bases",
+      redirect: "/platform/learning",
     },
     {
       path: "/login",
@@ -85,10 +87,64 @@ const router = createRouter({
     {
       path: "/platform",
       name: "Platform",
-      redirect: "/platform/knowledge-bases",
+      redirect: "/platform/learning",
       component: () => import("../views/platform/index.vue"),
       meta: { requiresInit: true, requiresAuth: true },
       children: [
+        {
+          path: "learning",
+          name: "learningHome",
+          component: () => import("../views/learning/LearningHome.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: "classes",
+          name: "classList",
+          component: () => import("../views/classes/ClassList.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: "classes/:classId",
+          name: "classDetail",
+          component: () => import("../views/classes/ClassDetail.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: "question-banks",
+          name: "questionBankList",
+          component: () => import("../views/question-bank/QuestionBankList.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: "question-banks/:bankId",
+          name: "questionBankDetail",
+          component: () => import("../views/question-bank/QuestionBankDetail.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: "billing",
+          name: "billingHome",
+          component: () => import("../views/billing/BillingHome.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: "review",
+          name: "reviewHome",
+          component: () => import("../views/review/ReviewHome.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: "analytics",
+          name: "analyticsHome",
+          component: () => import("../views/analytics/AnalyticsHome.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: "exam-config",
+          name: "examConfigHome",
+          component: () => import("../views/exam-config/ExamConfigHome.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
         {
           path: "tenant",
           redirect: "/platform/settings"
@@ -298,7 +354,7 @@ router.beforeEach(async (to, from, next) => {
   if (to.meta.requiresAuth === false || to.meta.requiresInit === false) {
     // 如果已登录用户访问登录页面，重定向到知识库列表页面
     if (to.path === '/login' && authStore.isLoggedIn) {
-      next('/platform/knowledge-bases')
+      next('/platform/learning')
       return
     }
     next()
@@ -341,7 +397,7 @@ router.beforeEach(async (to, from, next) => {
   // the bounce. This is UI-only; the server enforces the real check.
   if (to.meta.requiresSystemAdmin === true) {
     if (!authStore.isSystemAdmin) {
-      next('/platform/knowledge-bases')
+      next('/platform/learning')
       return
     }
   }

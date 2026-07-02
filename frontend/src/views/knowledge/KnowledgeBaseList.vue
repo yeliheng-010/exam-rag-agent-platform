@@ -19,6 +19,45 @@
         </div>
       </div>
       <div class="kb-list-main">
+        <div class="exam-resource-filter">
+          <t-select
+            v-model="examFilter.spaceId"
+            :loading="examMetaLoading"
+            placeholder="考试空间"
+            clearable
+            filterable
+            class="exam-filter-select"
+          >
+            <t-option v-for="space in examSpaces" :key="space.id" :value="space.id" :label="formatExamSpaceLabel(space)" />
+          </t-select>
+          <t-select
+            v-model="examFilter.domainId"
+            :loading="examMetaLoading"
+            placeholder="考试方向"
+            clearable
+            class="exam-filter-select"
+            @change="handleExamFilterDomainChange"
+          >
+            <t-option v-for="domain in examDomains" :key="domain.id" :value="domain.id" :label="domain.name" />
+          </t-select>
+          <t-select
+            v-model="examFilter.subjectId"
+            :disabled="!examFilter.domainId"
+            :loading="examSubjectsLoading"
+            placeholder="科目 / 模块"
+            clearable
+            class="exam-filter-select"
+          >
+            <t-option v-for="subject in examSubjects" :key="subject.id" :value="subject.id" :label="subject.name" />
+          </t-select>
+          <t-select v-model="examFilter.materialType" placeholder="资料类型" clearable class="exam-filter-select">
+            <t-option value="learning_material" label="学习资料" />
+            <t-option value="exam_paper" label="试卷" />
+            <t-option value="answer_key" label="答案" />
+            <t-option value="explanation" label="解析" />
+          </t-select>
+        </div>
+
         <!-- creator filter intentionally removed from chrome: every card
              already shows its creator via ResourceOriginBadge / avatar, so
              a dedicated horizontal switch added more noise than signal.
@@ -91,7 +130,7 @@
         <!-- 卡片网格：全部 / 收藏 / 最近 — 共用同一份卡片模板，
              仅依赖 filteredKnowledgeBases 切片即可切换视图 -->
         <div
-          v-if="(spaceSelection === 'all' || spaceSelection === 'favorites' || spaceSelection === 'recents') && filteredKnowledgeBases.length > 0"
+          v-if="!examResourcesLoading && (spaceSelection === 'all' || spaceSelection === 'favorites' || spaceSelection === 'recents') && filteredKnowledgeBases.length > 0"
           class="kb-card-wrap">
           <!-- 置顶分组标题 -->
           <div
@@ -362,7 +401,7 @@
           </template>
         </div>
 
-        <div v-if="spaceSelection === 'mine' && sortedMineKbs.length > 0" class="kb-card-wrap">
+        <div v-if="!examResourcesLoading && spaceSelection === 'mine' && sortedMineKbs.length > 0" class="kb-card-wrap">
           <!-- 置顶分组标题 -->
           <div v-if="sortedMineKbs[0] && sortedMineKbs[0].is_pinned" class="kb-section-header kb-section-header-pinned"
             role="button" tabindex="0" @click="toggleKbSection('pinned')"
@@ -518,7 +557,10 @@
         <div v-if="spaceSelectionOrgId && spaceKbsLoading" class="kb-list-main-loading">
           <t-loading size="medium" text="" />
         </div>
-        <div v-else-if="spaceSelectionOrgId && sortedSpaceKbsList.length > 0" class="kb-card-wrap">
+        <div v-else-if="examResourcesLoading" class="kb-list-main-loading exam-resources-loading">
+          <t-loading size="medium" text="筛选中" />
+        </div>
+        <div v-else-if="!examResourcesLoading && spaceSelectionOrgId && sortedSpaceKbsList.length > 0" class="kb-card-wrap">
           <template v-for="(shared, index) in sortedSpaceKbsList"
             :key="'shared-' + (shared.share_id || `agent-${shared.knowledge_base?.id}-${shared.source_from_agent?.agent_id || ''}`)">
             <!-- 我共享的：本空间下我自己创建并共享进来的条目，只在第一条 is_mine 上挂标题 -->
@@ -610,7 +652,15 @@
         </div>
 
         <!-- 全部空状态：保留「新建知识库」CTA，因为是租户没有任何 KB 的真空场景 -->
-        <div v-if="spaceSelection === 'all' && filteredKnowledgeBases.length === 0 && !loading" class="empty-state">
+        <div
+          v-if="hasExamFilter && !loading && !spaceKbsLoading && !examResourcesLoading && currentVisibleKbCount === 0"
+          class="empty-state exam-filter-empty">
+          <t-icon name="filter-clear" size="48px" class="empty-icon" />
+          <span class="empty-txt">没有匹配的考试资料</span>
+          <span class="empty-desc">调整考试空间、方向、科目或资料类型后再试。</span>
+        </div>
+
+        <div v-if="!hasExamFilter && spaceSelection === 'all' && filteredKnowledgeBases.length === 0 && !loading" class="empty-state">
           <img class="empty-img" src="@/assets/img/upload.svg" alt="">
           <span class="empty-txt">{{ $t('knowledgeList.empty.title') }}</span>
           <span class="empty-desc">{{ $t('knowledgeList.empty.description') }}</span>
@@ -623,7 +673,7 @@
 
         <!-- 收藏空状态：不放创建按钮——「没有收藏」 ≠ 「没有知识库」，
              正确引导是「去星标一下」，不是「再建一个」。 -->
-        <div v-if="spaceSelection === 'favorites' && filteredKnowledgeBases.length === 0 && !loading"
+        <div v-if="!hasExamFilter && spaceSelection === 'favorites' && filteredKnowledgeBases.length === 0 && !loading"
           class="empty-state">
           <t-icon name="star" size="48px" class="empty-icon" />
           <span class="empty-txt">{{ $t('knowledgeList.empty.favoritesTitle') }}</span>
@@ -631,14 +681,14 @@
         </div>
 
         <!-- 最近空状态：同理，引导是「去打开一个」。 -->
-        <div v-if="spaceSelection === 'recents' && filteredKnowledgeBases.length === 0 && !loading" class="empty-state">
+        <div v-if="!hasExamFilter && spaceSelection === 'recents' && filteredKnowledgeBases.length === 0 && !loading" class="empty-state">
           <t-icon name="history" size="48px" class="empty-icon" />
           <span class="empty-txt">{{ $t('knowledgeList.empty.recentsTitle') }}</span>
           <span class="empty-desc">{{ $t('knowledgeList.empty.recentsDescription') }}</span>
         </div>
 
         <!-- 我的知识库空状态 -->
-        <div v-if="spaceSelection === 'mine' && kbs.length === 0 && !loading" class="empty-state">
+        <div v-if="!hasExamFilter && spaceSelection === 'mine' && kbs.length === 0 && !loading" class="empty-state">
           <img class="empty-img" src="@/assets/img/upload.svg" alt="">
           <span class="empty-txt">{{ $t('knowledgeList.empty.title') }}</span>
           <span class="empty-desc">{{ $t('knowledgeList.empty.description') }}</span>
@@ -650,7 +700,7 @@
         </div>
 
         <!-- 空间下知识库空状态 -->
-        <div v-if="spaceSelectionOrgId && !spaceKbsLoading && spaceKbsList.length === 0" class="empty-state">
+        <div v-if="!hasExamFilter && spaceSelectionOrgId && !spaceKbsLoading && spaceKbsList.length === 0" class="empty-state">
           <img class="empty-img" src="@/assets/img/upload.svg" alt="">
           <span class="empty-txt">{{ $t('knowledgeList.empty.sharedTitle') }}</span>
           <span class="empty-desc">{{ $t('knowledgeList.empty.sharedDescription') }}</span>
@@ -781,6 +831,10 @@ import { useTenantModelReadiness } from '@/composables/useTenantModelReadiness'
 import { useI18n } from 'vue-i18n'
 import { useListUrlState } from '@/composables/useListUrlState'
 import { useResourcePins } from '@/composables/useResourcePins'
+import { listExamDomains, listExamSubjects } from '@/api/exam/domain'
+import { listExamSpaces } from '@/api/exam/space'
+import { listExamResources } from '@/api/exam/resource'
+import type { ExamDomain, ExamMaterialType, ExamSpace, ExamSpaceResource, ExamSubject } from '@/types/exam'
 
 const router = useRouter()
 const route = useRoute()
@@ -833,10 +887,12 @@ interface KB {
   question_generation_config?: { enabled?: boolean; question_count?: number };
   knowledge_count?: number;
   chunk_count?: number;
+  created_at?: string;
   isProcessing?: boolean;
   processing_count?: number;
   share_count?: number;
   is_pinned?: boolean;
+  pinned_at?: string;
   // creator_id is the owner-id matched against authStore.user.id when
   // gating the per-card more-menu (Settings / Delete). Empty for legacy
   // KBs created before PR 5; those fall back to the role gate.
@@ -861,6 +917,43 @@ const UPLOAD_CLEANUP_DELAY = 10000
 const shareDialogVisible = ref(false)
 const sharingKbId = ref('')
 const sharingKbName = ref('')
+const examMetaLoading = ref(false)
+const examResourcesLoading = ref(false)
+const examSubjectsLoading = ref(false)
+const examSpaces = ref<ExamSpace[]>([])
+const examDomains = ref<ExamDomain[]>([])
+const examSubjects = ref<ExamSubject[]>([])
+const examResources = ref<ExamSpaceResource[]>([])
+let examResourceRequestSeq = 0
+const examFilter = ref<{
+  spaceId: string
+  domainId: string
+  subjectId: string
+  materialType: ExamMaterialType | ''
+}>({
+  spaceId: '',
+  domainId: '',
+  subjectId: '',
+  materialType: '',
+})
+const hasExamFilter = computed(() => {
+  const filter = examFilter.value
+  return !!(filter.spaceId || filter.domainId || filter.subjectId || filter.materialType)
+})
+const examResourceKbIds = computed(() => {
+  if (!hasExamFilter.value) return null
+  return new Set(examResources.value.map(resource => resource.resource_id))
+})
+const filterByExamResources = <T extends { id: string }>(items: T[]): T[] => {
+  const allowedIds = examResourceKbIds.value
+  if (!allowedIds) return items
+  return items.filter(item => allowedIds.has(item.id))
+}
+const filterSpaceKbsByExamResources = <T extends { knowledge_base?: { id: string } }>(items: T[]): T[] => {
+  const allowedIds = examResourceKbIds.value
+  if (!allowedIds) return items
+  return items.filter(item => item.knowledge_base?.id && allowedIds.has(item.knowledge_base.id))
+}
 
 // Shared knowledge bases (everything cross-tenant shared to me, including
 // viewer-only). Used by the per-space views and the "all" aggregate so
@@ -906,7 +999,7 @@ const spaceKbsLoading = ref(false)
 // previous version only bucketed by isMyKb and silently demoted these
 // pinned-but-teammate KBs.
 const sortedMineKbs = computed<KB[]>(() => {
-  return [...kbs.value].sort((a, b) => {
+  return filterByExamResources([...kbs.value]).sort((a, b) => {
     const ap = a.is_pinned ? 0 : 1
     const bp = b.is_pinned ? 0 : 1
     if (ap !== bp) return ap - bp
@@ -927,7 +1020,7 @@ const sortedMineKbs = computed<KB[]>(() => {
 // 空间视角下的稳定排序：我创建的（is_mine）放在前面，剩下的共享部分再按
 // 可编辑 / 仅查看 排序——这样空间列表跟「全部」视图的视觉顺序一致。
 const sortedSpaceKbsList = computed(() => {
-  return [...spaceKbsList.value].sort((a, b) => {
+  return filterSpaceKbsByExamResources([...spaceKbsList.value]).sort((a, b) => {
     const aMine = a.is_mine ? 0 : 1
     const bMine = b.is_mine ? 0 : 1
     if (aMine !== bMine) return aMine - bMine
@@ -1135,13 +1228,13 @@ const spaceKbSectionCounts = computed<Record<KbSectionKey, number>>(() => {
 // preserved via the upstream array (pins order is ts-desc).
 const filteredKnowledgeBases = computed(() => {
   if (spaceSelection.value === 'favorites') {
-    return favoritesList.value
+    return filterByExamResources(favoritesList.value)
   }
   if (spaceSelection.value === 'recents') {
-    return recentsList.value
+    return filterByExamResources(recentsList.value)
   }
   if (spaceSelection.value === 'mine') {
-    return kbs.value.map(kb => ({ ...kb, isMine: true as const }))
+    return filterByExamResources(kbs.value).map(kb => ({ ...kb, isMine: true as const }))
   }
   if (spaceSelection.value !== 'all') {
     return []
@@ -1153,15 +1246,17 @@ const filteredKnowledgeBases = computed(() => {
   // ≥2 entries (#795). mergeAllScopeKnowledgeBases de-duplicates by KB id
   // (owned wins; most-privileged share kept) while preserving the existing
   // pinned → mine → teammate → shared(editable-first) ordering.
-  return mergeAllScopeKnowledgeBases(
+  const merged = mergeAllScopeKnowledgeBases(
     kbs.value as unknown as OwnedKnowledgeBase[],
     sharedKbs.value as unknown as SharedKnowledgeBaseLike[],
     authStore.user?.id,
   ) as unknown as Array<(KB & { isMine: true }) | (SharedKnowledgeBase['knowledge_base'] & { isMine: false; permission: string; shared_at: string; share_id: string } & any)>
+  return filterByExamResources(merged)
 })
 
 const showKbListEmpty = computed(() => {
   if (loading.value) return false
+  if (hasExamFilter.value) return false
   if (!authStore.hasRole('contributor')) return false
   if (spaceSelection.value === 'all' && filteredKnowledgeBases.value.length === 0) return true
   if (spaceSelection.value === 'mine' && kbs.value.length === 0) return true
@@ -1199,6 +1294,95 @@ const applyKbListData = (data: any[]) => {
     processing_count: kb.processing_count || 0
   }))
 }
+
+const formatExamSpaceLabel = (space: ExamSpace) => {
+  if (space.space_type === 'personal') return `${space.name} · 个人`
+  if (space.space_type === 'class') return `${space.name} · 班级`
+  if (space.space_type === 'public') return `${space.name} · 公共`
+  return space.name
+}
+
+const loadExamMeta = async () => {
+  examMetaLoading.value = true
+  try {
+    const [spacesRes, domainsRes] = await Promise.all([
+      listExamSpaces(),
+      listExamDomains(),
+    ])
+    examSpaces.value = spacesRes.success && spacesRes.data ? spacesRes.data : []
+    examDomains.value = domainsRes.success && domainsRes.data ? domainsRes.data : []
+  } catch (error: any) {
+    console.warn('[KnowledgeBaseList] failed to load exam metadata:', error)
+    MessagePlugin.warning(error?.message || '考试筛选数据加载失败')
+  } finally {
+    examMetaLoading.value = false
+  }
+}
+
+const loadExamFilterSubjects = async () => {
+  const domainId = examFilter.value.domainId
+  if (!domainId) {
+    examSubjects.value = []
+    examFilter.value.subjectId = ''
+    return
+  }
+  examSubjectsLoading.value = true
+  try {
+    const res = await listExamSubjects(domainId)
+    examSubjects.value = res.success && res.data ? res.data : []
+    if (examFilter.value.subjectId && !examSubjects.value.some(subject => subject.id === examFilter.value.subjectId)) {
+      examFilter.value.subjectId = ''
+    }
+  } catch (error: any) {
+    console.warn('[KnowledgeBaseList] failed to load exam subjects:', error)
+    MessagePlugin.warning(error?.message || '科目数据加载失败')
+    examSubjects.value = []
+  } finally {
+    examSubjectsLoading.value = false
+  }
+}
+
+const loadExamResourcesForFilter = async () => {
+  const requestSeq = ++examResourceRequestSeq
+  if (!hasExamFilter.value) {
+    examResources.value = []
+    examResourcesLoading.value = false
+    return
+  }
+  examResourcesLoading.value = true
+  try {
+    const filter = examFilter.value
+    const res = await listExamResources({
+      resource_type: 'knowledge_base',
+      space_id: filter.spaceId || undefined,
+      domain_id: filter.domainId || undefined,
+      subject_id: filter.subjectId || undefined,
+      material_type: filter.materialType || undefined,
+    })
+    if (requestSeq !== examResourceRequestSeq) return
+    examResources.value = res.success && res.data ? res.data : []
+  } catch (error: any) {
+    if (requestSeq !== examResourceRequestSeq) return
+    console.warn('[KnowledgeBaseList] failed to load exam resources:', error)
+    MessagePlugin.warning(error?.message || '考试资料筛选失败')
+    examResources.value = []
+  } finally {
+    if (requestSeq === examResourceRequestSeq) {
+      examResourcesLoading.value = false
+    }
+  }
+}
+
+const handleExamFilterDomainChange = () => {
+  examFilter.value.subjectId = ''
+  loadExamFilterSubjects()
+}
+
+const currentVisibleKbCount = computed(() => {
+  if (spaceSelectionOrgId.value) return sortedSpaceKbsList.value.length
+  if (spaceSelection.value === 'mine') return sortedMineKbs.value.length
+  return filteredKnowledgeBases.value.length
+})
 
 const fetchList = (force = false) => {
   loading.value = true
@@ -1251,7 +1435,21 @@ watch(creatorFilter, () => {
   fetchList(true)
 })
 
+watch(
+  () => [
+    examFilter.value.spaceId,
+    examFilter.value.domainId,
+    examFilter.value.subjectId,
+    examFilter.value.materialType,
+  ],
+  () => {
+    loadExamResourcesForFilter()
+  },
+)
+
 onMounted(() => {
+  loadExamMeta()
+  loadExamResourcesForFilter()
   fetchList().then(() => {
     // 检查路由参数中是否有需要高亮的知识库ID
     const highlightKbId = route.query.highlightKbId as string
@@ -1797,6 +1995,29 @@ const handleUploadFinishedEvent = (event: Event) => {
   padding: 0 28px 8px 0;
   scrollbar-width: auto;
   scrollbar-color: auto;
+}
+
+.exam-resource-filter {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+  padding: 0 0 12px;
+  margin-bottom: 4px;
+  background: var(--td-bg-color-container);
+  box-shadow: 0 -8px 0 0 var(--td-bg-color-container);
+}
+
+.exam-filter-select {
+  min-width: 0;
+}
+
+.exam-resources-loading {
+  margin-top: 8px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
 }
 
 .kb-list-main-loading {
@@ -2742,13 +2963,27 @@ const handleUploadFinishedEvent = (event: Event) => {
 }
 
 // 响应式布局
+@media (max-width: 899px) {
+  .exam-resource-filter {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (min-width: 900px) {
+  .exam-resource-filter {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+
   .kb-card-wrap {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (min-width: 1250px) {
+  .exam-resource-filter {
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+  }
+
   .kb-card-wrap {
     grid-template-columns: repeat(3, 1fr);
   }

@@ -1,7 +1,14 @@
 export default {
   menu: {
+    learning: 'Learning',
+    classes: 'Classes',
+    questionBank: 'Question Banks',
     knowledgeBase: 'Knowledge Base',
     agents: 'Agents',
+    analytics: 'Analytics',
+    billing: 'Billing',
+    review: 'Review',
+    examConfig: 'Exam Config',
     integrations: 'Publish & Integrations',
     organizations: 'Shared Spaces',
     chat: 'Chat',
@@ -4857,6 +4864,9 @@ export default {
       keyword: 'Keyword',
     },
     quick: {
+      learning: 'Open learning center',
+      classes: 'Open classes',
+      questionBanks: 'Open question banks',
       newChat: 'New conversation',
       knowledgeBases: 'Open knowledge bases',
       agents: 'Open agents',

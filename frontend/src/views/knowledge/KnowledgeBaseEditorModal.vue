@@ -143,6 +143,80 @@
                           :maxlength="50"
                         />
                       </div>
+                      <div v-if="mode === 'create'" class="exam-binding-panel">
+                        <div class="exam-binding-header">
+                          <div>
+                            <label class="form-label required">考试平台归属</label>
+                            <p class="form-tip">选择资料进入哪个个人或班级空间，并标记高考 / 雅思与资料用途。</p>
+                          </div>
+                          <t-button size="small" variant="text" theme="primary" @click="refreshExamOptions">
+                            <template #icon><t-icon name="refresh" /></template>
+                            刷新
+                          </t-button>
+                        </div>
+                        <div class="exam-binding-grid">
+                          <div class="form-item">
+                            <label class="form-label required">空间</label>
+                            <t-select
+                              v-model="formData.examBinding.spaceId"
+                              :loading="examOptionsLoading"
+                              placeholder="选择个人空间或班级空间"
+                              clearable
+                              filterable
+                            >
+                              <t-option
+                                v-for="space in examSpaces"
+                                :key="space.id"
+                                :value="space.id"
+                                :label="formatExamSpaceLabel(space)"
+                              />
+                            </t-select>
+                          </div>
+                          <div class="form-item">
+                            <label class="form-label required">考试方向</label>
+                            <t-select
+                              v-model="formData.examBinding.domainId"
+                              :loading="examOptionsLoading"
+                              placeholder="选择高考或雅思"
+                              clearable
+                              @change="handleExamDomainChange"
+                            >
+                              <t-option
+                                v-for="domain in examDomains"
+                                :key="domain.id"
+                                :value="domain.id"
+                                :label="domain.name"
+                              />
+                            </t-select>
+                          </div>
+                          <div class="form-item">
+                            <label class="form-label">科目 / 模块</label>
+                            <t-select
+                              v-model="formData.examBinding.subjectId"
+                              :disabled="!formData.examBinding.domainId"
+                              :loading="examSubjectsLoading"
+                              placeholder="可选"
+                              clearable
+                            >
+                              <t-option
+                                v-for="subject in examSubjects"
+                                :key="subject.id"
+                                :value="subject.id"
+                                :label="subject.name"
+                              />
+                            </t-select>
+                          </div>
+                          <div class="form-item">
+                            <label class="form-label required">资料类型</label>
+                            <t-select v-model="formData.examBinding.materialType">
+                              <t-option value="learning_material" label="学习资料" />
+                              <t-option value="exam_paper" label="试卷" />
+                              <t-option value="answer_key" label="答案" />
+                              <t-option value="explanation" label="解析" />
+                            </t-select>
+                          </div>
+                        </div>
+                      </div>
                       <div class="form-item">
                         <label class="form-label">{{ $t('knowledgeEditor.basic.descriptionLabel') }}</label>
                         <t-textarea
@@ -414,6 +488,10 @@ import GraphSettings from './settings/GraphSettings.vue'
 import KBShareSettings from './settings/KBShareSettings.vue'
 import DataSourceSettings from './settings/DataSourceSettings.vue'
 import { useI18n } from 'vue-i18n'
+import { listExamDomains, listExamSubjects } from '@/api/exam/domain'
+import { ensurePersonalExamSpace, listExamSpaces } from '@/api/exam/space'
+import { bindKnowledgeBaseResource } from '@/api/exam/resource'
+import type { ExamDomain, ExamMaterialType, ExamSpace, ExamSubject } from '@/types/exam'
 
 const uiStore = useUIStore()
 const authStore = useAuthStore()
@@ -484,6 +562,11 @@ const initialStorageProvider = ref<string>('')
 const tenantDefaultStorageProvider = ref('local')
 const initialIndexingStrategy = ref<any>(null)
 const dsCount = ref(0)
+const examOptionsLoading = ref(false)
+const examSubjectsLoading = ref(false)
+const examSpaces = ref<ExamSpace[]>([])
+const examDomains = ref<ExamDomain[]>([])
+const examSubjects = ref<ExamSubject[]>([])
 // Identifier of the user who created this KB. Empty for older rows
 // that predate per-KB ownership tracking; those KBs have no "owner" and
 // only tenant Admin+ can mutate their share settings.
@@ -707,7 +790,78 @@ const initFormData = (type: 'document' | 'faq' = 'document') => {
       engineType: undefined as string | undefined,
       status: undefined as string | undefined,
     },
+    examBinding: {
+      spaceId: '',
+      domainId: '',
+      subjectId: '',
+      materialType: 'learning_material' as ExamMaterialType,
+    },
   }
+}
+
+const formatExamSpaceLabel = (space: ExamSpace) => {
+  const prefix = space.space_type === 'personal'
+    ? '个人'
+    : space.space_type === 'class'
+      ? '班级'
+      : '公共'
+  return `${prefix} · ${space.name}`
+}
+
+const loadExamSubjects = async (domainId: string) => {
+  examSubjects.value = []
+  if (!domainId) return
+  examSubjectsLoading.value = true
+  try {
+    const result = await listExamSubjects(domainId)
+    examSubjects.value = result.data || []
+  } catch (error) {
+    console.error('Failed to load exam subjects:', error)
+    MessagePlugin.error('科目列表加载失败')
+  } finally {
+    examSubjectsLoading.value = false
+  }
+}
+
+const applyDefaultExamBinding = async () => {
+  if (!formData.value?.examBinding) return
+  const binding = formData.value.examBinding
+  if (!binding.spaceId) {
+    binding.spaceId = examSpaces.value.find((space) => space.space_type === 'personal')?.id || examSpaces.value[0]?.id || ''
+  }
+  if (!binding.domainId) {
+    binding.domainId = examDomains.value[0]?.id || ''
+  }
+  if (binding.domainId) {
+    await loadExamSubjects(binding.domainId)
+  }
+}
+
+const refreshExamOptions = async () => {
+  if (props.mode !== 'create') return
+  examOptionsLoading.value = true
+  try {
+    await ensurePersonalExamSpace()
+    const [spacesResult, domainsResult] = await Promise.all([
+      listExamSpaces(),
+      listExamDomains(),
+    ])
+    examSpaces.value = spacesResult.data || []
+    examDomains.value = domainsResult.data || []
+    await applyDefaultExamBinding()
+  } catch (error) {
+    console.error('Failed to load exam resource options:', error)
+    MessagePlugin.error('考试空间配置加载失败')
+  } finally {
+    examOptionsLoading.value = false
+  }
+}
+
+const handleExamDomainChange = async (value: string | number | boolean) => {
+  if (!formData.value?.examBinding) return
+  const domainId = typeof value === 'string' ? value : ''
+  formData.value.examBinding.subjectId = ''
+  await loadExamSubjects(domainId)
 }
 
 // 加载所有模型
@@ -1043,6 +1197,25 @@ const validateForm = (): boolean => {
     return false
   }
 
+  if (props.mode === 'create') {
+    const binding = formData.value.examBinding
+    if (!binding?.spaceId) {
+      MessagePlugin.warning('请选择考试平台空间')
+      currentSection.value = 'basic'
+      return false
+    }
+    if (!binding?.domainId) {
+      MessagePlugin.warning('请选择考试方向')
+      currentSection.value = 'basic'
+      return false
+    }
+    if (!binding?.materialType) {
+      MessagePlugin.warning('请选择资料类型')
+      currentSection.value = 'basic'
+      return false
+    }
+  }
+
   return true
 }
 
@@ -1211,6 +1384,13 @@ const doSubmit = async () => {
       if (!result.success || !result.data?.id) {
         throw new Error(result.message || t('knowledgeEditor.messages.createFailed'))
       }
+      const binding = formData.value.examBinding
+      await bindKnowledgeBaseResource(result.data.id, {
+        space_id: binding.spaceId,
+        domain_id: binding.domainId,
+        subject_id: binding.subjectId || undefined,
+        material_type: binding.materialType,
+      })
       MessagePlugin.success(t('knowledgeEditor.messages.createSuccess'))
       markContextualGuideDone('kbCreate')
       emit('success', result.data.id)
@@ -1360,6 +1540,9 @@ const resetState = () => {
   initialStorageProvider.value = ''
   tenantDefaultStorageProvider.value = 'local'
   initialIndexingStrategy.value = null
+  examSpaces.value = []
+  examDomains.value = []
+  examSubjects.value = []
   saving.value = false
   loading.value = false
   chunkingDirty.value = false
@@ -1397,6 +1580,7 @@ watch(() => props.visible, async (newVal) => {
       formData.value.storageProvider = tenantDefaultStorageProvider.value
       hasFiles.value = false
       applyDefaultModelsIfEmpty()
+      await refreshExamOptions()
     }
   } else {
     // 关闭弹窗时，延迟重置状态（等待动画结束）
@@ -1650,6 +1834,28 @@ watch(
   margin-top: 6px;
   font-size: 12px;
   color: var(--td-text-color-placeholder);
+}
+
+.exam-binding-panel {
+  margin: 18px 0;
+  padding: 14px 16px 2px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
+  background: var(--td-bg-color-container);
+}
+
+.exam-binding-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.exam-binding-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
 }
 
 .kb-id-field {
