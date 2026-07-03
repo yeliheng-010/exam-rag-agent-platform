@@ -6,7 +6,7 @@
         <p>统一查看个人空间、班级、题库和后续练习任务。</p>
       </div>
       <div class="header-actions">
-        <t-button variant="outline" @click="router.push('/platform/question-banks')">
+        <t-button v-if="canUseQuestionBanks" variant="outline" @click="router.push('/platform/question-banks')">
           <template #icon><t-icon name="folder" /></template>
           题库中心
         </t-button>
@@ -30,9 +30,9 @@
           <p>班级空间用于老师、学生之间的数据隔离和资源协作。</p>
         </div>
         <div class="metric-card">
-          <span class="metric-label">可用题库</span>
-          <strong>{{ questionBanks.length }}</strong>
-          <p>题库承载结构化试题、答案、解析和后续检索引用。</p>
+          <span class="metric-label">班级知识库</span>
+          <strong>{{ classResourceCards.length }}</strong>
+          <p>老师授权到班级空间的资料，可直接进入基础 RAG 对话。</p>
         </div>
         <div class="metric-card">
           <span class="metric-label">考试域</span>
@@ -48,7 +48,7 @@
               <h3>考试域与模块</h3>
               <p>后续文档解析、切片策略、题目结构化都会绑定到考试域。</p>
             </div>
-            <t-button variant="text" @click="router.push('/platform/exam-config')">配置</t-button>
+            <t-button v-if="authStore.hasRole('admin')" variant="text" @click="router.push('/platform/exam-config')">配置</t-button>
           </div>
           <div class="domain-list">
             <div v-for="domain in domains" :key="domain.id" class="domain-row">
@@ -80,15 +80,42 @@
         </section>
       </div>
 
+      <section class="panel resource-panel">
+        <div class="panel-title">
+          <div>
+            <h3>班级知识库</h3>
+            <p>选择老师配置到班级空间的知识库，进入基础问答时会自动带上资料范围。</p>
+          </div>
+          <t-button variant="text" :loading="resourcesLoading" @click="loadClassResources">刷新</t-button>
+        </div>
+        <div v-if="classResourceCards.length" class="resource-grid">
+          <div v-for="item in classResourceCards" :key="item.id" class="resource-card">
+            <div class="resource-card-main">
+              <div>
+                <strong>{{ item.kbName }}</strong>
+                <span>{{ item.className }} · {{ domainName(item.domain_id) }}</span>
+              </div>
+              <t-tag variant="light">{{ materialTypeLabel(item.material_type) }}</t-tag>
+            </div>
+            <div class="resource-card-footer">
+              <span>{{ reviewLabel(item.review_status) }}</span>
+              <t-button size="small" theme="primary" @click="startChat(item.resource_id)">开始对话</t-button>
+            </div>
+          </div>
+        </div>
+        <t-empty v-else-if="!resourcesLoading" size="small" description="暂无可用班级知识库" />
+      </section>
+
       <section class="panel">
         <div class="panel-title">
           <div>
             <h3>最近题库</h3>
-            <p>第一阶段先建立题库资产入口，第二阶段接知识库资料，第三阶段接试卷结构化。</p>
+            <p>题库资产由班主任或助教维护，学生侧先以班级知识库对话为主。</p>
           </div>
-          <t-button variant="text" @click="router.push('/platform/question-banks')">进入题库</t-button>
+          <t-button v-if="canUseQuestionBanks" variant="text" @click="router.push('/platform/question-banks')">进入题库</t-button>
         </div>
         <t-table
+          v-if="canUseQuestionBanks"
           row-key="id"
           :data="questionBanks.slice(0, 6)"
           :columns="questionBankColumns"
@@ -105,6 +132,7 @@
             <t-button variant="text" size="small" @click="router.push(`/platform/question-banks/${row.id}`)">详情</t-button>
           </template>
         </t-table>
+        <t-empty v-else size="small" description="题库中心由班主任或助教维护" />
       </section>
     </t-loading>
   </div>
@@ -118,14 +146,25 @@ import { listExamDomains } from '@/api/exam/domain'
 import { ensurePersonalExamSpace } from '@/api/exam/space'
 import { listExamClasses } from '@/api/exam/class'
 import { listQuestionBanks } from '@/api/exam/question-bank'
-import type { ExamClass, ExamDomain, ExamSpace, QuestionBank, ReviewStatus } from '@/types/exam'
+import { listExamResources } from '@/api/exam/resource'
+import { listKnowledgeBases } from '@/api/knowledge-base'
+import { useAuthStore } from '@/stores/auth'
+import { useSettingsStore } from '@/stores/settings'
+import type { KnowledgeBaseInfo } from '@/api/auth'
+import type { ExamClass, ExamDomain, ExamMaterialType, ExamSpace, ExamSpaceResource, QuestionBank, ReviewStatus } from '@/types/exam'
 
 const router = useRouter()
+const authStore = useAuthStore()
+const settingsStore = useSettingsStore()
 const loading = ref(false)
+const resourcesLoading = ref(false)
 const domains = ref<ExamDomain[]>([])
 const personalSpace = ref<ExamSpace | null>(null)
 const classes = ref<ExamClass[]>([])
 const questionBanks = ref<QuestionBank[]>([])
+const classResources = ref<ExamSpaceResource[]>([])
+const knowledgeBases = ref<KnowledgeBaseInfo[]>([])
+const canUseQuestionBanks = computed(() => authStore.hasRole('contributor'))
 
 const questionBankColumns = computed(() => [
   { colKey: 'name', title: '题库名称', ellipsis: true },
@@ -134,14 +173,39 @@ const questionBankColumns = computed(() => [
   { colKey: 'operation', title: '操作', width: 96 },
 ])
 
+const classResourceCards = computed(() => {
+  const classBySpace = new Map(classes.value.map(item => [item.space_id, item]))
+  return classResources.value
+    .filter(item => classBySpace.has(item.space_id))
+    .map(item => {
+      const classInfo = classBySpace.get(item.space_id)
+      const kb = knowledgeBases.value.find(kbItem => kbItem.id === item.resource_id)
+      return {
+        ...item,
+        className: classInfo?.name || '班级',
+        kbName: kb?.name || '未知知识库',
+      }
+    })
+})
+
 const domainName = (domainId?: string) => {
   if (!domainId) return '未绑定'
   return domains.value.find(item => item.id === domainId)?.name || '未知考试域'
 }
 
+const materialTypeLabel = (type: ExamMaterialType) => {
+  const map: Record<ExamMaterialType, string> = {
+    learning_material: '学习资料',
+    exam_paper: '试卷',
+    answer_key: '答案',
+    explanation: '解析',
+  }
+  return map[type] || type
+}
+
 const reviewLabel = (status: ReviewStatus) => {
   const map: Record<ReviewStatus, string> = {
-    private: '私有',
+    private: '班级可见',
     pending: '待审核',
     approved: '已公开',
     rejected: '已驳回',
@@ -156,6 +220,30 @@ const reviewTag = (status: ReviewStatus) => {
   return 'default'
 }
 
+const loadClassResources = async () => {
+  resourcesLoading.value = true
+  try {
+    const [resourceRes, kbRes] = await Promise.all([
+      listExamResources({ resource_type: 'knowledge_base' }),
+      listKnowledgeBases(),
+    ])
+    classResources.value = resourceRes.data || []
+    knowledgeBases.value = ((kbRes as any).data || []) as KnowledgeBaseInfo[]
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '班级知识库加载失败')
+  } finally {
+    resourcesLoading.value = false
+  }
+}
+
+const startChat = (kbId: string) => {
+  if (!kbId) return
+  settingsStore.selectKnowledgeBases([kbId])
+  settingsStore.clearFiles()
+  settingsStore.clearTags()
+  router.push('/platform/creatChat')
+}
+
 const loadData = async () => {
   loading.value = true
   try {
@@ -163,12 +251,13 @@ const loadData = async () => {
       listExamDomains(),
       ensurePersonalExamSpace(),
       listExamClasses(),
-      listQuestionBanks(),
+      canUseQuestionBanks.value ? listQuestionBanks() : Promise.resolve({ data: [] }),
     ])
     domains.value = domainRes.data || []
     personalSpace.value = spaceRes.data || null
     classes.value = classRes.data || []
     questionBanks.value = bankRes.data || []
+    await loadClassResources()
   } catch (error: any) {
     MessagePlugin.error(error?.message || '学习中心加载失败')
   } finally {
@@ -268,6 +357,10 @@ onMounted(loadData)
   padding: 16px;
 }
 
+.resource-panel {
+  margin-bottom: 12px;
+}
+
 .panel-title {
   display: flex;
   align-items: flex-start;
@@ -329,6 +422,63 @@ onMounted(loadData)
 
   &:hover {
     background: var(--td-bg-color-container-hover);
+  }
+}
+
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.resource-card {
+  display: flex;
+  min-height: 116px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
+  background: var(--td-bg-color-container);
+}
+
+.resource-card-main,
+.resource-card-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resource-card-main {
+  strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+    line-height: 22px;
+    font-weight: 600;
+  }
+
+  span {
+    display: block;
+    margin-top: 4px;
+    color: var(--td-text-color-secondary);
+    font-size: 12px;
+    line-height: 18px;
+  }
+}
+
+.resource-card-footer {
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--td-component-stroke);
+
+  span {
+    color: var(--td-text-color-placeholder);
+    font-size: 12px;
   }
 }
 

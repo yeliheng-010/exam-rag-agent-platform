@@ -41,7 +41,7 @@ func RegisterExamRoutes(
 		exam.POST("/question-banks", g.Contributor(), questionHandler.CreateQuestionBank)
 		exam.GET("/question-banks/:bank_id", g.Contributor(), questionHandler.GetQuestionBank)
 
-		exam.GET("/resources", g.Contributor(), resourceHandler.ListResources)
+		exam.GET("/resources", g.Viewer(), resourceHandler.ListResources)
 		exam.POST("/resources/knowledge-bases/:kb_id/bind", g.Contributor(), resourceHandler.BindKnowledgeBase)
 		exam.GET("/resources/knowledge-bases/:kb_id", g.Contributor(), resourceHandler.GetKnowledgeBaseBinding)
 	}

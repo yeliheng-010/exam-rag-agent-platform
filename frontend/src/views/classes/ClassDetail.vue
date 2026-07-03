@@ -90,6 +90,63 @@
             </t-loading>
           </div>
         </t-tab-panel>
+        <t-tab-panel value="resources" label="资料">
+          <div class="tab-panel">
+            <div class="panel-title-row">
+              <div>
+                <h3>班级知识库</h3>
+                <p>老师将知识库绑定到班级空间后，审核通过的学生可以在学习中心选择这些资料进行基础 RAG 对话。</p>
+              </div>
+              <t-space size="small">
+                <t-button variant="outline" :loading="resourcesLoading" @click="loadResources">
+                  <template #icon><t-icon name="refresh" /></template>
+                  刷新
+                </t-button>
+                <t-button v-if="canManageResources" theme="primary" @click="openBindDialog">
+                  <template #icon><t-icon name="link" /></template>
+                  绑定知识库
+                </t-button>
+              </t-space>
+            </div>
+            <t-alert
+              v-if="!canManageResources"
+              theme="info"
+              message="当前账号可使用班级资料进行对话，资料配置由班级老师或助教处理。"
+            />
+            <t-loading :loading="resourcesLoading">
+              <t-table
+                row-key="id"
+                :data="resources"
+                :columns="resourceColumns"
+                :pagination="{ pageSize: 8, total: resources.length }"
+                size="small"
+              >
+                <template #resource_id="{ row }">
+                  <div class="resource-name-cell">
+                    <strong>{{ knowledgeBaseName(row.resource_id) }}</strong>
+                    <span>{{ row.resource_id }}</span>
+                  </div>
+                </template>
+                <template #material_type="{ row }">
+                  <t-tag variant="light">{{ materialTypeLabel(row.material_type) }}</t-tag>
+                </template>
+                <template #domain_id="{ row }">
+                  {{ domainName(row.domain_id) }}
+                </template>
+                <template #review_status="{ row }">
+                  <t-tag :theme="reviewTag(row.review_status)" variant="light">{{ reviewLabel(row.review_status) }}</t-tag>
+                </template>
+                <template #updated_at="{ row }">
+                  {{ formatDate(row.updated_at) }}
+                </template>
+                <template #actions="{ row }">
+                  <t-button variant="text" size="small" @click="startChat(row.resource_id)">开始对话</t-button>
+                </template>
+              </t-table>
+              <t-empty v-if="!resources.length && !resourcesLoading" size="small" description="暂无班级资料" />
+            </t-loading>
+          </div>
+        </t-tab-panel>
         <t-tab-panel v-for="item in futureTabs" :key="item.value" :value="item.value" :label="item.label">
           <div class="tab-panel">
             <h3>{{ item.label }}</h3>
@@ -99,6 +156,57 @@
         </t-tab-panel>
       </t-tabs>
     </t-loading>
+
+    <t-dialog
+      v-model:visible="bindVisible"
+      header="绑定知识库到班级"
+      :confirm-btn="{ content: '绑定', loading: bindingResource }"
+      @confirm="submitBindResource"
+    >
+      <t-form ref="resourceFormRef" :data="bindForm" :rules="bindRules" label-align="top">
+        <t-form-item label="知识库" name="kb_id">
+          <t-select
+            v-model="bindForm.kb_id"
+            :loading="knowledgeBasesLoading"
+            placeholder="选择一个已创建的知识库"
+            clearable
+            filterable
+          >
+            <t-option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id" :label="kb.name" />
+          </t-select>
+        </t-form-item>
+        <t-form-item label="考试方向" name="domain_id">
+          <t-select
+            v-model="bindForm.domain_id"
+            :loading="domainsLoading"
+            placeholder="选择高考或雅思"
+            clearable
+            @change="handleBindDomainChange"
+          >
+            <t-option v-for="domain in domains" :key="domain.id" :value="domain.id" :label="domain.name" />
+          </t-select>
+        </t-form-item>
+        <t-form-item label="科目 / 模块" name="subject_id">
+          <t-select
+            v-model="bindForm.subject_id"
+            :disabled="!bindForm.domain_id"
+            :loading="subjectsLoading"
+            placeholder="可选"
+            clearable
+          >
+            <t-option v-for="subject in subjects" :key="subject.id" :value="subject.id" :label="subject.name" />
+          </t-select>
+        </t-form-item>
+        <t-form-item label="资料类型" name="material_type">
+          <t-select v-model="bindForm.material_type">
+            <t-option value="learning_material" label="学习资料" />
+            <t-option value="exam_paper" label="试卷" />
+            <t-option value="answer_key" label="答案" />
+            <t-option value="explanation" label="解析" />
+          </t-select>
+        </t-form-item>
+      </t-form>
+    </t-dialog>
   </div>
 </template>
 
@@ -106,23 +214,57 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
+import type { FormInstanceFunctions, FormRule } from 'tdesign-vue-next'
 import { approveExamClassMember, getExamClass, listExamClassMembers, rejectExamClassMember } from '@/api/exam/class'
+import { listExamDomains, listExamSubjects } from '@/api/exam/domain'
+import { bindKnowledgeBaseResource, listExamResources } from '@/api/exam/resource'
+import { listKnowledgeBases } from '@/api/knowledge-base'
+import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
-import type { ExamClass, ExamClassMember, ExamClassRole } from '@/types/exam'
+import type {
+  ExamClass,
+  ExamClassMember,
+  ExamClassRole,
+  ExamDomain,
+  ExamMaterialType,
+  ExamSpaceResource,
+  ExamSubject,
+  ReviewStatus,
+} from '@/types/exam'
+import type { KnowledgeBaseInfo } from '@/api/auth'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const settingsStore = useSettingsStore()
 const loading = ref(false)
 const membersLoading = ref(false)
+const resourcesLoading = ref(false)
+const domainsLoading = ref(false)
+const subjectsLoading = ref(false)
+const knowledgeBasesLoading = ref(false)
+const bindingResource = ref(false)
 const reviewingUserId = ref('')
 const activeTab = ref('overview')
 const classInfo = ref<ExamClass | null>(null)
 const members = ref<ExamClassMember[]>([])
+const resources = ref<ExamSpaceResource[]>([])
+const domains = ref<ExamDomain[]>([])
+const subjects = ref<ExamSubject[]>([])
+const knowledgeBases = ref<KnowledgeBaseInfo[]>([])
+const resourceFormRef = ref<FormInstanceFunctions>()
+const bindVisible = ref(false)
 const canReviewMembers = computed(() => authStore.hasRole('contributor'))
+const canManageResources = computed(() => authStore.hasRole('contributor'))
+
+const bindForm = ref({
+  kb_id: '',
+  domain_id: '',
+  subject_id: '',
+  material_type: 'learning_material' as ExamMaterialType,
+})
 
 const futureTabs = [
-  { value: 'resources', label: '资料', desc: '班级资料将与 WeKnora 知识库关联，按班级空间隔离可见范围。', empty: '资料入口将在知识库空间化后启用' },
   { value: 'questionSets', label: '题集', desc: '班级题集来自题库筛选、试卷结构化和老师手动组题。', empty: '题集能力将在结构化题库后启用' },
   { value: 'homework', label: '作业', desc: '老师可从题集生成作业，学生答题后进入错题与学习报告。', empty: '作业闭环将在练习阶段启用' },
   { value: 'analytics', label: '分析', desc: '班级分析聚合掌握度、错题分布、任务完成率和资料使用情况。', empty: '分析指标将在学习记录接入后生成' },
@@ -138,9 +280,59 @@ const memberColumns = [
   { colKey: 'actions', title: '操作', cell: 'actions', width: 160 },
 ]
 
+const resourceColumns = [
+  { colKey: 'resource_id', title: '知识库', cell: 'resource_id', ellipsis: true },
+  { colKey: 'material_type', title: '资料类型', cell: 'material_type', width: 120 },
+  { colKey: 'domain_id', title: '考试方向', cell: 'domain_id', width: 120 },
+  { colKey: 'review_status', title: '状态', cell: 'review_status', width: 120 },
+  { colKey: 'updated_at', title: '更新时间', cell: 'updated_at', width: 160 },
+  { colKey: 'actions', title: '操作', cell: 'actions', width: 120 },
+]
+
+const bindRules: Record<string, FormRule[]> = {
+  kb_id: [{ required: true, message: '请选择知识库', type: 'error' }],
+  domain_id: [{ required: true, message: '请选择考试方向', type: 'error' }],
+}
+
 const formatDate = (value?: string) => {
   if (!value) return ''
   return new Date(value).toLocaleString()
+}
+
+const domainName = (domainId?: string) => {
+  if (!domainId) return '未绑定'
+  return domains.value.find(item => item.id === domainId)?.name || '未知考试域'
+}
+
+const materialTypeLabel = (type: ExamMaterialType) => {
+  const map: Record<ExamMaterialType, string> = {
+    learning_material: '学习资料',
+    exam_paper: '试卷',
+    answer_key: '答案',
+    explanation: '解析',
+  }
+  return map[type] || type
+}
+
+const reviewLabel = (status: ReviewStatus) => {
+  const map: Record<ReviewStatus, string> = {
+    private: '班级可见',
+    pending: '待审核',
+    approved: '已公开',
+    rejected: '已驳回',
+  }
+  return map[status] || status
+}
+
+const reviewTag = (status: ReviewStatus) => {
+  if (status === 'approved') return 'success'
+  if (status === 'pending') return 'warning'
+  if (status === 'rejected') return 'danger'
+  return 'default'
+}
+
+const knowledgeBaseName = (kbId: string) => {
+  return knowledgeBases.value.find(item => item.id === kbId)?.name || '未知知识库'
 }
 
 const roleLabel = (role: ExamClassRole) => {
@@ -169,6 +361,44 @@ const loadData = async () => {
   }
 }
 
+const loadDomains = async () => {
+  domainsLoading.value = true
+  try {
+    const res = await listExamDomains()
+    domains.value = res.data || []
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '考试方向加载失败')
+  } finally {
+    domainsLoading.value = false
+  }
+}
+
+const loadSubjects = async (domainId: string) => {
+  subjects.value = []
+  if (!domainId) return
+  subjectsLoading.value = true
+  try {
+    const res = await listExamSubjects(domainId)
+    subjects.value = res.data || []
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '科目列表加载失败')
+  } finally {
+    subjectsLoading.value = false
+  }
+}
+
+const loadKnowledgeBases = async () => {
+  knowledgeBasesLoading.value = true
+  try {
+    const res: any = await listKnowledgeBases()
+    knowledgeBases.value = res.data || []
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '知识库列表加载失败')
+  } finally {
+    knowledgeBasesLoading.value = false
+  }
+}
+
 const loadMembers = async () => {
   if (!canReviewMembers.value) return
   const classId = String(route.params.classId || '')
@@ -181,6 +411,23 @@ const loadMembers = async () => {
     MessagePlugin.error(error?.message || '成员列表加载失败')
   } finally {
     membersLoading.value = false
+  }
+}
+
+const loadResources = async () => {
+  if (!classInfo.value?.space_id) return
+  resourcesLoading.value = true
+  try {
+    const [resourceRes] = await Promise.all([
+      listExamResources({ space_id: classInfo.value.space_id, resource_type: 'knowledge_base' }),
+      knowledgeBases.value.length ? Promise.resolve(null) : loadKnowledgeBases(),
+      domains.value.length ? Promise.resolve(null) : loadDomains(),
+    ])
+    resources.value = resourceRes.data || []
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '班级资料加载失败')
+  } finally {
+    resourcesLoading.value = false
   }
 }
 
@@ -214,16 +461,84 @@ const rejectMember = async (userId: string) => {
   }
 }
 
+const openBindDialog = async () => {
+  if (!classInfo.value?.space_id) return
+  bindForm.value = {
+    kb_id: '',
+    domain_id: classInfo.value.domain_id || domains.value[0]?.id || '',
+    subject_id: '',
+    material_type: 'learning_material',
+  }
+  bindVisible.value = true
+  await Promise.all([
+    knowledgeBases.value.length ? Promise.resolve(null) : loadKnowledgeBases(),
+    domains.value.length ? Promise.resolve(null) : loadDomains(),
+  ])
+  if (!bindForm.value.domain_id) {
+    bindForm.value.domain_id = classInfo.value?.domain_id || domains.value[0]?.id || ''
+  }
+  if (bindForm.value.domain_id) {
+    await loadSubjects(bindForm.value.domain_id)
+  }
+}
+
+const handleBindDomainChange = async (value: string | number | boolean) => {
+  const domainId = typeof value === 'string' ? value : ''
+  bindForm.value.subject_id = ''
+  await loadSubjects(domainId)
+}
+
+const submitBindResource = async () => {
+  if (!classInfo.value?.space_id) return
+  const result = await resourceFormRef.value?.validate()
+  if (result !== true) return
+
+  bindingResource.value = true
+  try {
+    await bindKnowledgeBaseResource(bindForm.value.kb_id, {
+      space_id: classInfo.value.space_id,
+      domain_id: bindForm.value.domain_id,
+      subject_id: bindForm.value.subject_id || undefined,
+      material_type: bindForm.value.material_type,
+    })
+    MessagePlugin.success('知识库已绑定到班级')
+    bindVisible.value = false
+    await loadResources()
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '绑定知识库失败')
+  } finally {
+    bindingResource.value = false
+  }
+}
+
+const startChat = (kbId: string) => {
+  if (!kbId) return
+  settingsStore.selectKnowledgeBases([kbId])
+  settingsStore.clearFiles()
+  settingsStore.clearTags()
+  router.push('/platform/creatChat')
+}
+
 watch(activeTab, (tab) => {
   if (tab === 'members') {
     loadMembers()
+  }
+  if (tab === 'resources') {
+    loadResources()
   }
 })
 
 onMounted(async () => {
   await loadData()
+  await Promise.all([
+    loadDomains(),
+    loadKnowledgeBases(),
+  ])
   if (activeTab.value === 'members') {
     await loadMembers()
+  }
+  if (activeTab.value === 'resources') {
+    await loadResources()
   }
 })
 </script>
@@ -322,6 +637,29 @@ onMounted(async () => {
 .muted-text {
   color: var(--td-text-color-placeholder);
   font-size: 12px;
+}
+
+.resource-name-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+
+  strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--td-text-color-placeholder);
+    font-size: 12px;
+  }
 }
 
 .flow-grid {

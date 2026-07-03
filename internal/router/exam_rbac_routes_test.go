@@ -33,6 +33,8 @@ func TestExamStudentRAGRoutesStayViewerAccessible(t *testing.T) {
 	router.POST("/knowledge-search", guards.Viewer(), okHandler)
 	router.POST("/knowledge-bases", guards.Contributor(), okHandler)
 	router.POST("/agent-chat/:session_id", guards.Contributor(), okHandler)
+	router.GET("/exam/resources", guards.Viewer(), okHandler)
+	router.POST("/exam/resources/knowledge-bases/:kb_id/bind", guards.Contributor(), okHandler)
 
 	tests := []struct {
 		name   string
@@ -43,8 +45,10 @@ func TestExamStudentRAGRoutesStayViewerAccessible(t *testing.T) {
 		{name: "student can list KBs for chat selection", method: http.MethodGet, path: "/knowledge-bases", want: http.StatusOK},
 		{name: "student can ask basic RAG", method: http.MethodPost, path: "/knowledge-chat/s1", want: http.StatusOK},
 		{name: "student can use knowledge search", method: http.MethodPost, path: "/knowledge-search", want: http.StatusOK},
+		{name: "student can list authorized class resources", method: http.MethodGet, path: "/exam/resources", want: http.StatusOK},
 		{name: "student cannot create KB", method: http.MethodPost, path: "/knowledge-bases", want: http.StatusForbidden},
 		{name: "student cannot use agent chat", method: http.MethodPost, path: "/agent-chat/s1", want: http.StatusForbidden},
+		{name: "student cannot bind KB resources", method: http.MethodPost, path: "/exam/resources/knowledge-bases/kb-1/bind", want: http.StatusForbidden},
 	}
 
 	for _, tt := range tests {
@@ -57,6 +61,19 @@ func TestExamStudentRAGRoutesStayViewerAccessible(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExamResourceRouteGuardSourceMatrix(t *testing.T) {
+	sourceBytes, err := os.ReadFile("exam.go")
+	if err != nil {
+		t.Fatalf("read exam.go: %v", err)
+	}
+	source := string(sourceBytes)
+
+	mustContainAll(t, source, []string{
+		`exam.GET("/resources", g.Viewer(), resourceHandler.ListResources)`,
+		`exam.POST("/resources/knowledge-bases/:kb_id/bind", g.Contributor(), resourceHandler.BindKnowledgeBase)`,
+	})
 }
 
 func TestExamRAGRouteGuardSourceMatrix(t *testing.T) {
