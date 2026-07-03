@@ -127,6 +127,60 @@ func TestOrganizationSharedSpaceRoutesStayViewerAccessible(t *testing.T) {
 	})
 }
 
+func TestBillingRouteGuards(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	enabled := true
+	guards := &rbacGuards{
+		cfg: &config.Config{Tenant: &config.TenantConfig{EnableRBAC: &enabled}},
+	}
+
+	router := gin.New()
+	router.GET("/billing/me", guards.Viewer(), okHandler)
+	router.GET("/system/admin/billing/plans", guards.SystemAdmin(), okHandler)
+
+	tests := []struct {
+		name        string
+		path        string
+		systemAdmin bool
+		want        int
+	}{
+		{name: "viewer can read own billing status", path: "/billing/me", want: http.StatusOK},
+		{name: "normal user cannot read platform billing plans", path: "/system/admin/billing/plans", want: http.StatusForbidden},
+		{name: "system admin can read platform billing plans", path: "/system/admin/billing/plans", systemAdmin: true, want: http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			ctx := context.WithValue(req.Context(), types.TenantRoleContextKey, types.TenantRoleViewer)
+			ctx = context.WithValue(ctx, types.UserIDContextKey, "user-1")
+			ctx = context.WithValue(ctx, types.SystemAdminContextKey, tt.systemAdmin)
+			req = req.WithContext(ctx)
+			router.ServeHTTP(recorder, req)
+			if recorder.Code != tt.want {
+				t.Fatalf("GET %s status = %d, want %d", tt.path, recorder.Code, tt.want)
+			}
+		})
+	}
+}
+
+func TestBillingRouteGuardSourceMatrix(t *testing.T) {
+	sourceBytes, err := os.ReadFile("billing.go")
+	if err != nil {
+		t.Fatalf("read billing.go: %v", err)
+	}
+	source := string(sourceBytes)
+
+	mustContainAll(t, source, []string{
+		`r.GET("/billing/me", g.Viewer(), billingHandler.GetMine)`,
+		`admin := r.Group("/system/admin/billing", g.SystemAdmin())`,
+		`admin.POST("/plans", billingHandler.CreatePlan)`,
+		`admin.PUT("/subscriptions/:tenant_id", billingHandler.UpsertTenantSubscription)`,
+		`admin.POST("/orders", billingHandler.CreateOrder)`,
+	})
+}
+
 func okHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

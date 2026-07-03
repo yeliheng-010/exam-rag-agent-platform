@@ -19,6 +19,11 @@
           <TeacherApplications />
         </section>
       </t-tab-panel>
+      <t-tab-panel v-if="authStore.isSystemAdmin" value="billing" label="支付与权益">
+        <section class="admin-section">
+          <BillingAdmin />
+        </section>
+      </t-tab-panel>
       <t-tab-panel value="members" :label="$t('platformAdmin.tabs.members')">
         <section class="admin-section">
           <TenantMembers />
@@ -32,6 +37,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import BillingAdmin from '@/views/admin/BillingAdmin.vue'
 import TeacherApplications from '@/views/admin/TeacherApplications.vue'
 import TenantMembers from '@/views/settings/TenantMembers.vue'
 

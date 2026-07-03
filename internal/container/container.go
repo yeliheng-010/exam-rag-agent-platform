@@ -164,6 +164,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewExamTeacherApplicationRepository))
 	must(container.Provide(repository.NewExamQuestionRepository))
 	must(container.Provide(repository.NewExamResourceRepository))
+	must(container.Provide(repository.NewBillingRepository))
 	must(container.Provide(repository.NewKBShareRepository))
 	must(container.Provide(repository.NewAgentShareRepository))
 	must(container.Provide(repository.NewEmbedChannelRepository))
@@ -200,6 +201,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewExamClassService))
 	must(container.Provide(service.NewExamQuestionService))
 	must(container.Provide(service.NewExamResourceService))
+	must(container.Provide(service.NewBillingService))
 	must(container.Provide(service.NewKBShareService)) // KBShareService must be registered before KnowledgeService and KnowledgeTagService
 	must(container.Provide(service.NewAgentShareService))
 	must(container.Provide(service.NewKnowledgeService))
@@ -362,6 +364,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewExamClassHandler))
 	must(container.Provide(handler.NewExamQuestionHandler))
 	must(container.Provide(handler.NewExamResourceHandler))
+	must(container.Provide(handler.NewBillingHandler))
 
 	// Data source handler
 	must(container.Provide(handler.NewDataSourceHandler))

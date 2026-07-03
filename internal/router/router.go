@@ -84,6 +84,7 @@ type RouterParams struct {
 	ExamClassHandler              *handler.ExamClassHandler
 	ExamQuestionHandler           *handler.ExamQuestionHandler
 	ExamResourceHandler           *handler.ExamResourceHandler
+	BillingHandler                *handler.BillingHandler
 	IMHandler                     *handler.IMHandler
 	EmbedChannelHandler           *handler.EmbedChannelHandler
 	EmbedChannelService           interfaces.EmbedChannelService
@@ -232,6 +233,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterSkillRoutes(v1, params.SkillHandler, rbacGuards)
 		RegisterOrganizationRoutes(v1, params.OrganizationHandler, rbacGuards)
 		RegisterExamRoutes(v1, params.ExamDomainHandler, params.ExamSpaceHandler, params.ExamTeacherApplicationHandler, params.ExamClassHandler, params.ExamQuestionHandler, params.ExamResourceHandler, rbacGuards)
+		RegisterBillingRoutes(v1, params.BillingHandler, rbacGuards)
 		RegisterIMChannelRoutes(v1, params.IMHandler, rbacGuards)
 		RegisterEmbedChannelRoutes(v1, params.EmbedChannelHandler, rbacGuards)
 		RegisterDataSourceRoutes(v1, params.DataSourceHandler, params.DataSourceCredentialsHandler, rbacGuards)
