@@ -133,6 +133,24 @@ func (s *examResourceService) GetKnowledgeBaseBinding(ctx context.Context, tenan
 	return resource, nil
 }
 
+func (s *examResourceService) CanReadKnowledgeBase(ctx context.Context, tenantID uint64, userID string, knowledgeBaseID string) (bool, error) {
+	resource, err := s.resourceRepo.GetByResource(ctx, tenantID, types.ExamResourceTypeKnowledgeBase, knowledgeBaseID)
+	if err != nil {
+		if errors.Is(err, repository.ErrExamResourceNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	ok, err := s.spaceService.CanReadSpace(ctx, tenantID, userID, resource.SpaceID)
+	if err != nil {
+		if errors.Is(err, ErrExamNotFound) || errors.Is(err, ErrExamPermissionDenied) {
+			return false, nil
+		}
+		return false, err
+	}
+	return ok, nil
+}
+
 func (s *examResourceService) ListResources(ctx context.Context, tenantID uint64, userID string, filter types.ListExamResourcesFilter) ([]*types.ExamSpaceResource, error) {
 	if filter.ResourceType == "" {
 		filter.ResourceType = types.ExamResourceTypeKnowledgeBase

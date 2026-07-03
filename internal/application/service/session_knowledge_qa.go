@@ -9,6 +9,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/agent/tools"
 	chatpipeline "github.com/Tencent/WeKnora/internal/application/service/chat_pipeline"
 	"github.com/Tencent/WeKnora/internal/common"
+	apperrors "github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/event"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/chat"
@@ -82,11 +83,14 @@ func (s *sessionService) KnowledgeQA(
 
 	// Resolve retrieval tenant scope using shared helper
 	retrievalTenantID := s.resolveRetrievalTenantID(ctx, req)
+	ctx = context.WithValue(ctx, types.SessionTenantIDContextKey, req.Session.TenantID)
 
 	// Build unified search targets (computed once, used throughout pipeline)
 	searchTargets, err := s.buildSearchTargets(ctx, retrievalTenantID, knowledgeBaseIDs, knowledgeIDs, req.TagScopes)
 	if err != nil {
 		logger.Warnf(ctx, "Failed to build search targets: %v", err)
+		setupSpan.Finish(nil, nil, err)
+		return err
 	}
 
 	// Create chat management object with session settings
@@ -200,8 +204,7 @@ func (s *sessionService) KnowledgeQA(
 	logger.Infof(ctx, "Assembled pipeline (%d stages), hasKB=%v, webSearch=%v, history=%v",
 		len(pipeline), hasKB, req.WebSearchEnabled, hasHistory)
 
-	// Start knowledge QA event processing (set session tenant so pipeline session/message lookups use session owner)
-	ctx = context.WithValue(ctx, types.SessionTenantIDContextKey, req.Session.TenantID)
+	// Start knowledge QA event processing (session tenant is set so pipeline session/message lookups use session owner)
 	logger.Info(ctx, "Triggering question answering event")
 	setupSpan.Finish(map[string]interface{}{
 		"stages":             len(pipeline),
@@ -443,6 +446,7 @@ func (s *sessionService) buildSearchTargets(
 
 	// First pass: batch-fetch KBs, then resolve tenant per ID (tenant scope already set by caller)
 	callerTenantRole := types.TenantRoleFromContext(ctx)
+	userID, _ := types.UserIDFromContext(ctx)
 	if len(knowledgeBaseIDs) > 0 {
 		kbs, _ := s.knowledgeBaseService.GetKnowledgeBasesByIDsOnly(ctx, knowledgeBaseIDs)
 		kbByID := make(map[string]*types.KnowledgeBase, len(kbs))
@@ -451,23 +455,17 @@ func (s *sessionService) buildSearchTargets(
 				kbByID[kb.ID] = kb
 			}
 		}
-		userID, _ := types.UserIDFromContext(ctx)
 		for _, kbID := range knowledgeBaseIDs {
 			fullKBSet[kbID] = true
 			kb := kbByID[kbID]
 			if kb == nil {
 				kbTenantMap[kbID] = tenantID
-			} else if kb.TenantID == tenantID {
-				kbTenantMap[kbID] = tenantID
-			} else if s.kbShareService != nil && userID != "" {
-				hasAccess, _ := s.kbShareService.HasTenantKBPermission(ctx, kbID, tenantID, callerTenantRole, types.OrgRoleViewer)
-				if hasAccess {
-					kbTenantMap[kbID] = kb.TenantID
-				} else {
-					kbTenantMap[kbID] = tenantID
-				}
 			} else {
-				kbTenantMap[kbID] = tenantID
+				kbTenant, err := s.resolveReadableKBTenantForRAG(ctx, tenantID, userID, callerTenantRole, kb)
+				if err != nil {
+					return nil, err
+				}
+				kbTenantMap[kbID] = kbTenant
 			}
 			targets = append(targets, &types.SearchTarget{
 				Type:            types.SearchTargetTypeKnowledgeBase,
@@ -492,22 +490,43 @@ func (s *sessionService) buildSearchTargets(
 			if k == nil || k.KnowledgeBaseID == "" {
 				continue
 			}
-			// Track KB -> TenantID mapping from knowledge items
-			if kbTenantMap[k.KnowledgeBaseID] == 0 {
-				kbTenantMap[k.KnowledgeBaseID] = k.TenantID
-			}
 			// Skip if this KB is already fully searched
 			if fullKBSet[k.KnowledgeBaseID] {
 				continue
 			}
 			kbToKnowledgeIDs[k.KnowledgeBaseID] = append(kbToKnowledgeIDs[k.KnowledgeBaseID], k.ID)
 		}
+		kbIDs := make([]string, 0, len(kbToKnowledgeIDs))
+		for kbID := range kbToKnowledgeIDs {
+			if kbTenantMap[kbID] == 0 {
+				kbIDs = append(kbIDs, kbID)
+			}
+		}
+		kbByID := make(map[string]*types.KnowledgeBase, len(kbIDs))
+		if len(kbIDs) > 0 {
+			if kbs, err := s.knowledgeBaseService.GetKnowledgeBasesByIDsOnly(ctx, kbIDs); err == nil {
+				for _, kb := range kbs {
+					if kb != nil {
+						kbByID[kb.ID] = kb
+					}
+				}
+			}
+		}
 
 		// Create SearchTargetTypeKnowledge targets for each KB with specific files
 		for kbID, kidList := range kbToKnowledgeIDs {
 			kbTenant := kbTenantMap[kbID]
 			if kbTenant == 0 {
-				kbTenant = tenantID // fallback
+				if kb := kbByID[kbID]; kb != nil {
+					resolvedTenant, err := s.resolveReadableKBTenantForRAG(ctx, tenantID, userID, callerTenantRole, kb)
+					if err != nil {
+						return nil, err
+					}
+					kbTenant = resolvedTenant
+				} else {
+					kbTenant = tenantID
+				}
+				kbTenantMap[kbID] = kbTenant
 			}
 			targets = append(targets, &types.SearchTarget{
 				Type:            types.SearchTargetTypeKnowledge,
@@ -535,7 +554,6 @@ func (s *sessionService) buildSearchTargets(
 				}
 			}
 		}
-		userID, _ := types.UserIDFromContext(ctx)
 		for _, scope := range tagScopes {
 			if scope.KnowledgeBaseID == "" || len(scope.TagIDs) == 0 || fullKBSet[scope.KnowledgeBaseID] {
 				continue
@@ -543,17 +561,14 @@ func (s *sessionService) buildSearchTargets(
 			kbTenant := kbTenantMap[scope.KnowledgeBaseID]
 			if kbTenant == 0 {
 				kb := kbByID[scope.KnowledgeBaseID]
-				if kb == nil || kb.TenantID == tenantID {
+				if kb == nil {
 					kbTenant = tenantID
-				} else if s.kbShareService != nil && userID != "" {
-					hasAccess, _ := s.kbShareService.HasTenantKBPermission(ctx, scope.KnowledgeBaseID, tenantID, callerTenantRole, types.OrgRoleViewer)
-					if hasAccess {
-						kbTenant = kb.TenantID
-					} else {
-						kbTenant = tenantID
-					}
 				} else {
-					kbTenant = tenantID
+					resolvedTenant, err := s.resolveReadableKBTenantForRAG(ctx, tenantID, userID, callerTenantRole, kb)
+					if err != nil {
+						return nil, err
+					}
+					kbTenant = resolvedTenant
 				}
 				kbTenantMap[scope.KnowledgeBaseID] = kbTenant
 			}
@@ -570,6 +585,50 @@ func (s *sessionService) buildSearchTargets(
 		len(targets), len(knowledgeBaseIDs), len(targets)-len(knowledgeBaseIDs), kbTenantMap)
 
 	return targets, nil
+}
+
+func (s *sessionService) resolveReadableKBTenantForRAG(
+	ctx context.Context,
+	retrievalTenantID uint64,
+	userID string,
+	callerTenantRole types.TenantRole,
+	kb *types.KnowledgeBase,
+) (uint64, error) {
+	if kb == nil {
+		return retrievalTenantID, nil
+	}
+	if kb.TenantID != retrievalTenantID {
+		if s.kbShareService != nil && userID != "" {
+			hasAccess, _ := s.kbShareService.HasTenantKBPermission(
+				ctx, kb.ID, retrievalTenantID, callerTenantRole, types.OrgRoleViewer,
+			)
+			if hasAccess {
+				return kb.TenantID, nil
+			}
+		}
+		return retrievalTenantID, nil
+	}
+	if callerTenantRole.HasPermission(types.TenantRoleContributor) {
+		return retrievalTenantID, nil
+	}
+	if userID != "" && kb.CreatorID == userID {
+		return retrievalTenantID, nil
+	}
+	sessionTenantID, _ := types.SessionTenantIDFromContext(ctx)
+	isSharedAgentScope := sessionTenantID != 0 && sessionTenantID != retrievalTenantID
+	if isSharedAgentScope {
+		return retrievalTenantID, nil
+	}
+	if s.examResourceService != nil && userID != "" {
+		canRead, err := s.examResourceService.CanReadKnowledgeBase(ctx, retrievalTenantID, userID, kb.ID)
+		if err != nil {
+			return 0, err
+		}
+		if canRead {
+			return retrievalTenantID, nil
+		}
+	}
+	return 0, apperrors.NewForbiddenError("permission denied to access this knowledge base")
 }
 
 // KnowledgeQAByEvent processes knowledge QA through a series of events in the pipeline
@@ -726,6 +785,7 @@ func (s *sessionService) SearchKnowledge(ctx context.Context,
 	searchTargets, err := s.buildSearchTargets(ctx, tenantID, knowledgeBaseIDs, knowledgeIDs, nil)
 	if err != nil {
 		logger.Warnf(ctx, "Failed to build search targets: %v", err)
+		return nil, err
 	}
 
 	if len(searchTargets) == 0 {

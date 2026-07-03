@@ -9,6 +9,7 @@ import (
 type ExamResourceService interface {
 	BindKnowledgeBase(ctx context.Context, tenantID uint64, userID string, knowledgeBaseID string, req *types.BindKnowledgeBaseResourceRequest) (*types.ExamSpaceResource, error)
 	GetKnowledgeBaseBinding(ctx context.Context, tenantID uint64, userID string, knowledgeBaseID string) (*types.ExamSpaceResource, error)
+	CanReadKnowledgeBase(ctx context.Context, tenantID uint64, userID string, knowledgeBaseID string) (bool, error)
 	ListResources(ctx context.Context, tenantID uint64, userID string, filter types.ListExamResourcesFilter) ([]*types.ExamSpaceResource, error)
 }
 

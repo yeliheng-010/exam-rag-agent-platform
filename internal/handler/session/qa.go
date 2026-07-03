@@ -537,6 +537,10 @@ func (h *Handler) SearchKnowledge(c *gin.Context) {
 	searchResults, err := h.sessionService.SearchKnowledge(ctx, knowledgeBaseIDs, request.KnowledgeIDs, request.Query)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
+		if _, ok := errors.IsAppError(err); ok {
+			c.Error(err)
+			return
+		}
 		c.Error(errors.NewInternalServerError(err.Error()))
 		return
 	}
