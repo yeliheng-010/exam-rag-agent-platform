@@ -1037,71 +1037,70 @@ func RegisterOrganizationRoutes(r *gin.RouterGroup, orgHandler *handler.Organiza
 	// Organization routes
 	orgs := r.Group("/organizations")
 	{
-		// Create organization (Admin+ in caller's tenant only)
-		orgs.POST("", g.Admin(), orgHandler.CreateOrganization)
+		// Create organization — Viewer+.
+		//
+		// In the exam-platform product model, shared spaces are a first-class
+		// collaboration surface: ordinary accounts may create or join spaces,
+		// while space-level admin actions below remain guarded separately.
+		orgs.POST("", g.Viewer(), orgHandler.CreateOrganization)
 		// List my organizations — Viewer+ floor so revoked/non-member
 		// accounts whose JWT still validates can't enumerate org membership.
 		orgs.GET("", g.Viewer(), orgHandler.ListMyOrganizations)
 		// Preview organization by invite code (without joining) — Viewer+
 		orgs.GET("/preview/:code", g.Viewer(), orgHandler.PreviewByInviteCode)
-		// Join organization by invite code (Admin+ in caller's tenant only)
-		orgs.POST("/join", g.Admin(), orgHandler.JoinByInviteCode)
-		// Submit join request (for organizations that require approval) (Admin+)
-		orgs.POST("/join-request", g.Admin(), orgHandler.SubmitJoinRequest)
+		// Join organization by invite code — Viewer+.
+		orgs.POST("/join", g.Viewer(), orgHandler.JoinByInviteCode)
+		// Submit join request (for organizations that require approval) — Viewer+.
+		orgs.POST("/join-request", g.Viewer(), orgHandler.SubmitJoinRequest)
 		// Search searchable (discoverable) organizations — Viewer+
 		orgs.GET("/search", g.Viewer(), orgHandler.SearchOrganizations)
-		// Join searchable organization by ID (no invite code) (Admin+)
-		orgs.POST("/join-by-id", g.Admin(), orgHandler.JoinByOrganizationID)
+		// Join searchable organization by ID (no invite code) — Viewer+.
+		orgs.POST("/join-by-id", g.Viewer(), orgHandler.JoinByOrganizationID)
 		// Get organization by ID — Viewer+
 		orgs.GET("/:id", g.Viewer(), orgHandler.GetOrganization)
-		// Update organization — Admin+ in caller's tenant.
-		// Service still gates on "caller's tenant is the org owner";
-		// the route guard adds a defence-in-depth layer that stops a
-		// tenant Viewer/Contributor from ever reaching the service.
-		orgs.PUT("/:id", g.Admin(), orgHandler.UpdateOrganization)
-		// Delete organization — Admin+ in caller's tenant. Same
-		// rationale as PUT above; deletion is irreversible so the
-		// route-layer floor is at least as strict.
-		orgs.DELETE("/:id", g.Admin(), orgHandler.DeleteOrganization)
-		// Leave organization (Admin+ in caller's tenant only)
-		orgs.POST("/:id/leave", g.Admin(), orgHandler.LeaveOrganization)
-		// Request role upgrade (Admin+ in caller's tenant only).
-		// An upgrade approval changes the whole tenant's org role, so it
-		// must not be initiated by a tenant Viewer/Contributor.
-		orgs.POST("/:id/request-upgrade", g.Admin(), orgHandler.RequestRoleUpgrade)
-		// Generate invite code — Admin+ in caller's tenant. Issuing an
-		// invite code is an admin action; the service layer additionally
-		// requires the caller's tenant to be admin in the org.
-		orgs.POST("/:id/invite-code", g.Admin(), orgHandler.GenerateInviteCode)
-		// Search tenants for invite (admin only). Plan 3 changed the
+		// Update organization — Viewer+ at tenant layer; service requires
+		// the caller's tenant to be admin in this specific space.
+		orgs.PUT("/:id", g.Viewer(), orgHandler.UpdateOrganization)
+		// Delete organization — Viewer+ at tenant layer; service requires
+		// the caller's tenant to be the owning tenant.
+		orgs.DELETE("/:id", g.Viewer(), orgHandler.DeleteOrganization)
+		// Leave organization — Viewer+; service removes only the caller's
+		// own tenant and still blocks owner-tenant leave.
+		orgs.POST("/:id/leave", g.Viewer(), orgHandler.LeaveOrganization)
+		// Request role upgrade — Viewer+; service requires existing space
+		// membership and records a pending request for admins to review.
+		orgs.POST("/:id/request-upgrade", g.Viewer(), orgHandler.RequestRoleUpgrade)
+		// Generate invite code — Viewer+ at tenant layer; service requires
+		// the caller's tenant to be admin in this specific space.
+		orgs.POST("/:id/invite-code", g.Viewer(), orgHandler.GenerateInviteCode)
+		// Search tenants for invite — Viewer+ at tenant layer; handler
+		// requires the caller's tenant to be org admin. Plan 3 changed the
 		// unit of membership to "tenant"; this endpoint returns
 		// candidate tenants (with one representative user attached)
 		// instead of one row per user.
-		orgs.GET("/:id/search-tenants", g.Admin(), orgHandler.SearchTenantsForInvite)
+		orgs.GET("/:id/search-tenants", g.Viewer(), orgHandler.SearchTenantsForInvite)
 		// Deprecated alias for /:id/search-tenants. Old frontends that
 		// still hit search-users will receive the tenant-grouped shape;
 		// the deprecation is documented in the handler.
-		orgs.GET("/:id/search-users", g.Admin(), orgHandler.SearchUsersForInvite)
-		// Invite member directly (admin only)
-		orgs.POST("/:id/invite", g.Admin(), orgHandler.InviteMember)
+		orgs.GET("/:id/search-users", g.Viewer(), orgHandler.SearchUsersForInvite)
+		// Invite member directly — Viewer+ at tenant layer; handler
+		// requires the caller's tenant to be org admin.
+		orgs.POST("/:id/invite", g.Viewer(), orgHandler.InviteMember)
 		// List members — Viewer+
 		orgs.GET("/:id/members", g.Viewer(), orgHandler.ListMembers)
 		// Update member role (path parameter is the member tenant_id) —
-		// Admin+ in caller's tenant. Changing another tenant's org role
-		// is the symmetric counterpart of removing them; both must be
-		// gated the same way.
-		orgs.PUT("/:id/members/:tenant_id", g.Admin(), orgHandler.UpdateMemberRole)
+		// Viewer+ at tenant layer; service requires org admin.
+		orgs.PUT("/:id/members/:tenant_id", g.Viewer(), orgHandler.UpdateMemberRole)
 		// Remove member (path parameter is the member tenant_id).
-		// Both self-removal (caller's own tenant) and admin-removal-of-other
-		// take a whole tenant out of the org, so the route must be Admin+
-		// in the caller's tenant — symmetric with POST /:id/leave above.
-		orgs.DELETE("/:id/members/:tenant_id", g.Admin(), orgHandler.RemoveMember)
-		// List join requests (admin only) — caller's tenant must be at
-		// least Admin to even see the queue (a tenant Viewer has no
-		// authority to act on it).
-		orgs.GET("/:id/join-requests", g.Admin(), orgHandler.ListJoinRequests)
-		// Review join request (admin only)
-		orgs.PUT("/:id/join-requests/:request_id/review", g.Admin(), orgHandler.ReviewJoinRequest)
+		// Viewer+ at tenant layer; service allows self-removal and requires
+		// org admin when removing another tenant.
+		orgs.DELETE("/:id/members/:tenant_id", g.Viewer(), orgHandler.RemoveMember)
+		// List join requests — Viewer+ at tenant layer; handler requires
+		// the caller's tenant to be org admin.
+		orgs.GET("/:id/join-requests", g.Viewer(), orgHandler.ListJoinRequests)
+		// Review join request — Viewer+ at tenant layer; handler requires
+		// the caller's tenant to be org admin.
+		orgs.PUT("/:id/join-requests/:request_id/review", g.Viewer(), orgHandler.ReviewJoinRequest)
 		// List knowledge bases shared to this organization — Viewer+
 		orgs.GET("/:id/shares", g.Viewer(), orgHandler.ListOrgShares)
 		// List agents shared to this organization — Viewer+

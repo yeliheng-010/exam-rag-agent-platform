@@ -4600,11 +4600,11 @@ export default {
     inviteCodeRefreshed: "邀请码已刷新",
     inviteCodeRefreshFailed: "刷新邀请码失败",
     rbac: {
-      needTenantAdmin: "需要空间管理员权限",
-      needTenantAdminTip: "此操作需要当前空间的 admin 或更高角色，请联系空间 Owner 调整权限。",
-      cannotCreate: "当前空间角色不足，无法创建共享空间",
-      cannotJoin: "当前空间角色不足，无法加入或申请加入共享空间",
-      cannotManage: "当前空间角色不足，无法管理共享空间",
+      needTenantAdmin: "需要共享空间管理员权限",
+      needTenantAdminTip: "此操作需要共享空间 admin 或 Owner 权限，请联系空间 Owner 调整权限。",
+      cannotCreate: "当前账号无法创建共享空间",
+      cannotJoin: "当前账号无法加入或申请加入共享空间",
+      cannotManage: "当前账号无权管理此共享空间",
     },
     join: {
       title: "加入空间",

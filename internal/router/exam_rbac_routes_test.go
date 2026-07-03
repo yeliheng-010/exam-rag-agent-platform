@@ -92,6 +92,24 @@ func TestExamAdminMemberRouteGuardSourceMatrix(t *testing.T) {
 	})
 }
 
+func TestOrganizationSharedSpaceRoutesStayViewerAccessible(t *testing.T) {
+	sourceBytes, err := os.ReadFile("router.go")
+	if err != nil {
+		t.Fatalf("read router.go: %v", err)
+	}
+	source := string(sourceBytes)
+
+	mustContainAll(t, source, []string{
+		`orgs.POST("", g.Viewer(), orgHandler.CreateOrganization)`,
+		`orgs.POST("/join", g.Viewer(), orgHandler.JoinByInviteCode)`,
+		`orgs.POST("/join-request", g.Viewer(), orgHandler.SubmitJoinRequest)`,
+		`orgs.POST("/join-by-id", g.Viewer(), orgHandler.JoinByOrganizationID)`,
+		`orgs.POST("/:id/invite-code", g.Viewer(), orgHandler.GenerateInviteCode)`,
+		`orgs.GET("/:id/join-requests", g.Viewer(), orgHandler.ListJoinRequests)`,
+		`orgs.PUT("/:id/join-requests/:request_id/review", g.Viewer(), orgHandler.ReviewJoinRequest)`,
+	})
+}
+
 func okHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

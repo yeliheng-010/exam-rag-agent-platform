@@ -8,15 +8,15 @@
           <div class="title-row" style="--wails-draggable: drag">
             <h2 style="--wails-draggable: drag">{{ $t('organization.title') }}</h2>
             <div class="header-actions" style="--wails-draggable: no-drag">
-              <t-tooltip :content="canManageOrg ? $t('organization.joinOrg') : noPermissionTip" placement="bottom">
+              <t-tooltip :content="canUseSharedSpaces ? $t('organization.joinOrg') : noPermissionTip" placement="bottom">
                 <t-button variant="text" theme="default" size="small" class="header-action-btn"
-                  style="--wails-draggable: no-drag" :disabled="!canManageOrg" @click="handleJoinOrganization">
+                  style="--wails-draggable: no-drag" :disabled="!canUseSharedSpaces" @click="handleJoinOrganization">
                   <template #icon><t-icon name="enter" size="16px" /></template>
                 </t-button>
               </t-tooltip>
-              <t-tooltip :content="canManageOrg ? $t('organization.createOrg') : noPermissionTip" placement="bottom">
+              <t-tooltip :content="canUseSharedSpaces ? $t('organization.createOrg') : noPermissionTip" placement="bottom">
                 <t-button variant="text" theme="default" size="small" class="header-action-btn"
-                  style="--wails-draggable: no-drag" :disabled="!canManageOrg" @click="handleCreateOrganization">
+                  style="--wails-draggable: no-drag" :disabled="!canUseSharedSpaces" @click="handleCreateOrganization">
                   <template #icon><img src="@/assets/img/organization-green.svg" class="org-create-icon" alt=""
                       aria-hidden="true" /></template>
                 </t-button>
@@ -115,7 +115,7 @@
                       <t-icon class="menu-icon" name="logout" />
                       <span>{{ $t('organization.leave') }}</span>
                     </div>
-                    <div v-if="org.is_owner && canManageOrg" class="popup-menu-item delete"
+                    <div v-if="canDeleteOrg(org)" class="popup-menu-item delete"
                       @click.stop="handleDelete(org)">
                       <t-icon class="menu-icon" name="delete" />
                       <span>{{ $t('common.delete') }}</span>
@@ -180,15 +180,15 @@
           <span class="empty-txt">{{ emptyStateTitle }}</span>
           <span class="empty-desc">{{ emptyStateDesc }}</span>
           <div class="empty-state-actions">
-            <t-tooltip :content="noPermissionTip" placement="top" :disabled="canManageOrg">
-              <t-button theme="default" variant="outline" class="org-join-btn" :disabled="!canManageOrg"
+            <t-tooltip :content="noPermissionTip" placement="top" :disabled="canUseSharedSpaces">
+              <t-button theme="default" variant="outline" class="org-join-btn" :disabled="!canUseSharedSpaces"
                 @click="handleJoinOrganization">
                 <template #icon><t-icon name="enter" /></template>
                 {{ $t('organization.joinOrg') }}
               </t-button>
             </t-tooltip>
-            <t-tooltip :content="noPermissionTip" placement="top" :disabled="canManageOrg">
-              <t-button class="org-create-btn" :disabled="!canManageOrg" @click="handleCreateOrganization">
+            <t-tooltip :content="noPermissionTip" placement="top" :disabled="canUseSharedSpaces">
+              <t-button class="org-create-btn" :disabled="!canUseSharedSpaces" @click="handleCreateOrganization">
                 <template #icon><img src="@/assets/img/organization-green.svg" class="org-create-icon" alt=""
                     aria-hidden="true" /></template>
                 {{ $t('organization.createOrg') }}
@@ -569,11 +569,12 @@ const router = useRouter()
 const orgStore = useOrganizationStore()
 const authStore = useAuthStore()
 
-// 后端 /api/v1/organizations 下的写操作（创建、加入、申请加入、邀请、审批、改设置等）
-// 在路由层都要求当前租户角色 ≥ admin。前端只用于 UI 渲染，安全边界仍在服务端。
-const canManageOrg = computed(
-  () => authStore.hasRole('admin') || authStore.canAccessAllTenants
+// 共享空间是平台基础协作入口：普通账号可以创建、搜索和申请加入。
+// 成员管理、审核、删除和资源分享等高权限动作仍由空间内角色与后端服务层兜底。
+const canUseSharedSpaces = computed(
+  () => authStore.hasRole('viewer') || authStore.canAccessAllTenants
 )
+const canDeleteOrg = (org: { is_owner?: boolean }) => !!org.is_owner && canUseSharedSpaces.value
 const noPermissionTip = computed(() => t('organization.rbac.needTenantAdminTip'))
 
 // 申请加入时可选角色（仅需审核时使用）
@@ -743,7 +744,7 @@ watch([searchableList, searchLoading], () => {
 
 // 监听菜单快捷操作事件
 const handleOrganizationDialogEvent = ((event: CustomEvent<{ type: 'create' | 'join' }>) => {
-  if (!canManageOrg.value) {
+  if (!canUseSharedSpaces.value) {
     MessagePlugin.warning(
       event.detail?.type === 'create'
         ? t('organization.rbac.cannotCreate')
@@ -856,7 +857,7 @@ const onVisibleChange = (visible: boolean, org: OrgWithUI) => {
 
 // 创建组织
 function handleCreateOrganization() {
-  if (!canManageOrg.value) {
+  if (!canUseSharedSpaces.value) {
     MessagePlugin.warning(t('organization.rbac.cannotCreate'))
     return
   }
@@ -867,7 +868,7 @@ function handleCreateOrganization() {
 
 // 加入组织
 function handleJoinOrganization() {
-  if (!canManageOrg.value) {
+  if (!canUseSharedSpaces.value) {
     MessagePlugin.warning(t('organization.rbac.cannotJoin'))
     return
   }
@@ -930,7 +931,7 @@ function handleDelete(org: OrgWithUI) {
 
 async function confirmDelete() {
   if (!deletingOrg.value) return
-  if (!canManageOrg.value) {
+  if (!canDeleteOrg(deletingOrg.value)) {
     MessagePlugin.warning(t('organization.rbac.cannotManage'))
     return
   }
@@ -973,7 +974,7 @@ async function handleInvitePreview(code: string) {
 // 确认加入组织（区分直接加入 vs 需要审核，支持邀请码和搜索两种方式）
 async function confirmJoinOrganization() {
   if (!invitePreviewData.value || invitePreviewData.value.is_already_member) return
-  if (!canManageOrg.value) {
+  if (!canUseSharedSpaces.value) {
     MessagePlugin.warning(t('organization.rbac.cannotJoin'))
     return
   }
@@ -1204,7 +1205,7 @@ function fallbackCopyText(text: string) {
 // 从搜索列表加入空间（通过空间 ID，无需邀请码）- 在预览确认后调用
 async function joinBySearchOrg() {
   if (!invitePreviewData.value || invitePreviewData.value.is_already_member) return
-  if (!canManageOrg.value) {
+  if (!canUseSharedSpaces.value) {
     MessagePlugin.warning(t('organization.rbac.cannotJoin'))
     return
   }
