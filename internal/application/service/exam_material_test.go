@@ -83,6 +83,19 @@ func (r *fakeExamMaterialRepo) CreateStructuringTask(_ context.Context, task *ty
 	return nil
 }
 
+func (r *fakeExamMaterialRepo) GetStructuringTaskByIDAndTenant(_ context.Context, id string, tenantID uint64) (*types.ExamStructuringTask, error) {
+	task := r.tasks[id]
+	if task == nil || task.TenantID != tenantID {
+		return nil, repository.ErrExamStructuringTaskNotFound
+	}
+	return cloneExamStructuringTask(task), nil
+}
+
+func (r *fakeExamMaterialRepo) UpdateStructuringTask(_ context.Context, task *types.ExamStructuringTask) error {
+	r.tasks[task.ID] = cloneExamStructuringTask(task)
+	return nil
+}
+
 func (r *fakeExamMaterialRepo) ListStructuringTasks(_ context.Context, tenantID uint64, filter types.ListExamStructuringTasksFilter, spaceIDs []string) ([]*types.ExamStructuringTask, error) {
 	allowedSpaces := map[string]bool{}
 	for _, id := range spaceIDs {

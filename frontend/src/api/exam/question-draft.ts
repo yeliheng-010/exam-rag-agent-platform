@@ -14,8 +14,12 @@ export interface ListDraftsResult {
   stats: ExamQuestionDraftStats
 }
 
+const QUESTION_DRAFT_EXTRACTION_TIMEOUT_MS = 10 * 60 * 1000
+
 export function extractQuestionDrafts(taskId: string, force = false) {
-  return post(`/api/v1/exam/structuring-tasks/${taskId}/extract`, { force }) as unknown as Promise<ApiResponse<ListDraftsResult>>
+  return post(`/api/v1/exam/structuring-tasks/${taskId}/extract`, { force }, {
+    timeout: QUESTION_DRAFT_EXTRACTION_TIMEOUT_MS,
+  }) as unknown as Promise<ApiResponse<ListDraftsResult>>
 }
 
 export function listQuestionDrafts(taskId: string) {

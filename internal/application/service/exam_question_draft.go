@@ -49,31 +49,31 @@ func (s *examQuestionDraftService) ExtractDrafts(ctx context.Context, tenantID u
 			return nil, err
 		}
 	}
-	if err := s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusExtracting, -1, ""); err != nil {
+	if _, err := s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusExtracting, -1, ""); err != nil {
 		return nil, err
 	}
 	chunks, err := s.chunkReader.ListChunksByKnowledgeID(ctx, material.KnowledgeID)
 	if err != nil {
-		_ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, -1, err.Error())
+		_, _ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, -1, err.Error())
 		return nil, err
 	}
 	if len(chunks) == 0 {
 		err = errors.New("exam material has no available chunks")
-		_ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
+		_, _ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
 		return nil, err
 	}
 	candidates, rawOutput, err := s.extractor.Extract(context.WithValue(ctx, types.TenantIDContextKey, tenantID), material, task, chunks)
 	if err != nil {
-		_ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
+		_, _ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
 		return nil, err
 	}
 	drafts, err := s.buildDrafts(task, material, candidates, rawOutput)
 	if err != nil {
-		_ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
+		_, _ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
 		return nil, err
 	}
 	if err := s.draftRepo.CreateDrafts(ctx, drafts); err != nil {
-		_ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
+		_, _ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
 		return nil, err
 	}
 	task, err = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusReviewing, len(drafts), "")

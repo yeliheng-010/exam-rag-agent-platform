@@ -127,6 +127,8 @@ func (p *PluginSearch) OnEvent(ctx context.Context,
 		}
 	}
 
+	chatManage.SearchResult = p.enrichExamQuestionContext(ctx, chatManage, chatManage.SearchResult)
+
 	logSearchScoreSample(ctx, "final_score", chatManage.SearchResult)
 
 	// Return if we have results

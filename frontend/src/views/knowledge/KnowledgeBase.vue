@@ -44,6 +44,7 @@ import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import KbUploadSourceDropdown from './components/KbUploadSourceDropdown.vue';
 import TagEditDialog from './components/TagEditDialog.vue';
 import KbTagManageDrawer from './components/KbTagManageDrawer.vue';
+import ExamPaperImportDialog from './components/ExamPaperImportDialog.vue';
 import { useTagChipsOverflow } from '@/composables/useTagChipsOverflow';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
 import { useUploadConfirmStore, type UploadConfirmResult } from '@/stores/uploadConfirm';
@@ -630,6 +631,8 @@ const isTagFilterActive = (tagId: string) => selectedTagIds.value.includes(tagId
 // 标签编辑弹窗
 const tagEditDialogVisible = ref(false);
 const tagEditTarget = ref<KnowledgeCard | null>(null);
+const examImportVisible = ref(false);
+const examImportKnowledge = ref<KnowledgeCard | null>(null);
 
 const {
   setupTagChipsObserver,
@@ -1382,6 +1385,19 @@ const onReparseMenuClick = (index: number, item: KnowledgeCard) => {
   }
 };
 
+const canImportExamPaper = (item: KnowledgeCard) => item.parse_status === 'completed' && !isFAQ.value;
+
+const openExamPaperImport = (item: KnowledgeCard) => {
+  if (!canImportExamPaper(item)) {
+    MessagePlugin.warning('文档解析完成后才能导入试卷');
+    return;
+  }
+  cardList.value.forEach((card: KnowledgeCard) => { card.isMore = false; });
+  moreIndex.value = -1;
+  examImportKnowledge.value = item;
+  examImportVisible.value = true;
+};
+
 const handleMoveKnowledge = async (item: KnowledgeCard) => {
   moveKnowledgeId.value = item.id;
   moveMenuMode.value = 'targets';
@@ -2042,7 +2058,7 @@ const confirmCancelParseKnowledge = async (item: KnowledgeCard) => {
 
 // Bridge list-view actions back to existing per-card handlers.
 const handleListAction = (
-  action: 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'delete',
+  action: 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'delete' | 'exam-paper',
   item: KnowledgeCard,
 ) => {
   const idx = (cardList.value || []).findIndex((i: KnowledgeCard) => i.id === item.id);
@@ -2050,6 +2066,7 @@ const handleListAction = (
   if (action === 'reparse') return confirmRebuildKnowledge(idx, item);
   if (action === 'cancel-parse') return confirmCancelParseKnowledge(item);
   if (action === 'move') return handleMoveKnowledge(item);
+  if (action === 'exam-paper') return openExamPaperImport(item);
   if (action === 'delete') return confirmDeleteKnowledge(idx, item);
 };
 
@@ -2456,6 +2473,11 @@ async function createNewSession(value: string): Promise<void> {
                                   <t-icon class="icon" name="swap" />
                                   <span>{{ t('knowledgeBase.moveDocument') }}</span>
                                 </div>
+                                <div v-if="canImportExamPaper(item)" class="card-menu-item"
+                                  @click.stop="openExamPaperImport(item)">
+                                  <t-icon class="icon" name="file" />
+                                  <span>导入为试卷</span>
+                                </div>
                                 <div v-if="canMutateKnowledge" class="card-menu-item"
                                   @click.stop="handleEnterBatchFromCard(item)">
                                   <t-icon class="icon" name="queue" />
@@ -2753,6 +2775,13 @@ async function createNewSession(value: string): Promise<void> {
     :kb-id="kbId"
     :is-faq="isFAQ"
     @changed="onTagManageChanged"
+  />
+
+  <ExamPaperImportDialog
+    v-model:visible="examImportVisible"
+    :kb-id="kbId"
+    :knowledge="examImportKnowledge"
+    @imported="() => loadKnowledgeFiles(kbId)"
   />
 </template>
 <style>

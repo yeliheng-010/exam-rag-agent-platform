@@ -38,7 +38,7 @@ const emit = defineEmits<{
   (e: 'open', item: KnowledgeItem): void;
   (e: 'toggle-row', id: string, checked: boolean, shiftKey: boolean): void;
   (e: 'toggle-all', checked: boolean): void;
-  (e: 'action', action: 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'delete', item: KnowledgeItem): void;
+  (e: 'action', action: 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'delete' | 'exam-paper', item: KnowledgeItem): void;
   (e: 'tag-edit', item: KnowledgeItem): void;
 }>();
 
@@ -188,8 +188,9 @@ const canCancelParse = (item: KnowledgeItem) =>
   CANCELABLE_PARSE_STATUSES.has(String(item.parse_status ?? ''));
 
 const isParseInFlight = (item: KnowledgeItem) => canCancelParse(item);
+const canImportExamPaper = (item: KnowledgeItem) => item.parse_status === 'completed';
 
-const handleAction = (action: 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'delete', item: KnowledgeItem) => {
+const handleAction = (action: 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'delete' | 'exam-paper', item: KnowledgeItem) => {
   moreOpen.value = null;
   item.isMore = false;
   emit('action', action, item);
@@ -327,6 +328,10 @@ const handleAction = (action: 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'de
                 <div class="row-menu-item" @click.stop="handleAction('move', item)">
                   <t-icon class="icon" name="swap" />
                   <span>{{ t('knowledgeBase.moveDocument') }}</span>
+                </div>
+                <div v-if="canImportExamPaper(item)" class="row-menu-item" @click.stop="handleAction('exam-paper', item)">
+                  <t-icon class="icon" name="file" />
+                  <span>导入为试卷</span>
                 </div>
                 <t-popconfirm theme="warning"
                   :content="t('knowledgeBase.confirmDeleteDocument', { fileName: item.file_name || '' })"

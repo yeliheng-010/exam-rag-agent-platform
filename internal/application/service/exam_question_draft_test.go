@@ -83,6 +83,28 @@ func TestExamQuestionDraftService_ExtractInvalidModelOutputFailsTask(t *testing.
 	}
 }
 
+func TestExamQuestionDraftService_ExtractCanceledRequestStillFailsTask(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	repo := newReadyDraftRepo()
+	repo.failUpdateWhenCanceled = true
+	space := &stubExamQuestionDraftSpace{canRead: true, canWrite: true}
+	chunks := &stubExamQuestionDraftChunkReader{chunks: []*types.Chunk{{ID: "chunk-1", KnowledgeID: "knowledge-1", Content: "bad"}}}
+	extractor := &stubExamQuestionExtractor{
+		err:       context.Canceled,
+		onExtract: cancel,
+	}
+	svc := newTestExamQuestionDraftService(repo, space, chunks, extractor)
+
+	_, err := svc.ExtractDrafts(ctx, 10000, "teacher-1", "task-1", &types.ExtractExamQuestionDraftsRequest{})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ExtractDrafts error = %v, want context.Canceled", err)
+	}
+	if repo.updatedStatus != types.ExamStructuringTaskStatusFailed {
+		t.Fatalf("task status = %s, want failed", repo.updatedStatus)
+	}
+}
+
 func TestExamQuestionDraftService_ApproveCreatesOfficialQuestion(t *testing.T) {
 	ctx := context.Background()
 	repo := newReadyDraftRepo()

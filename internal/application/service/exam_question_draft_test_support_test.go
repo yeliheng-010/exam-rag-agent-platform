@@ -11,11 +11,12 @@ import (
 )
 
 type stubExamQuestionDraftRepo struct {
-	task          *types.ExamStructuringTask
-	material      *types.ExamMaterial
-	drafts        []*types.ExamQuestionDraft
-	createdDrafts []*types.ExamQuestionDraft
-	updatedStatus types.ExamStructuringTaskStatus
+	task                   *types.ExamStructuringTask
+	material               *types.ExamMaterial
+	drafts                 []*types.ExamQuestionDraft
+	createdDrafts          []*types.ExamQuestionDraft
+	updatedStatus          types.ExamStructuringTaskStatus
+	failUpdateWhenCanceled bool
 }
 
 type stubExamQuestionDraftSpace struct {
@@ -32,6 +33,7 @@ type stubExamQuestionExtractor struct {
 	candidates []*types.ExamQuestionDraftCandidate
 	rawOutput  string
 	err        error
+	onExtract  func()
 }
 
 type stubExamQuestionWriter struct {
@@ -166,7 +168,10 @@ func (r *stubExamQuestionDraftRepo) GetStructuringTaskByIDAndTenant(_ context.Co
 	return cloneExamStructuringTask(r.task), nil
 }
 
-func (r *stubExamQuestionDraftRepo) UpdateStructuringTask(_ context.Context, task *types.ExamStructuringTask) error {
+func (r *stubExamQuestionDraftRepo) UpdateStructuringTask(ctx context.Context, task *types.ExamStructuringTask) error {
+	if r.failUpdateWhenCanceled && ctx.Err() != nil {
+		return ctx.Err()
+	}
 	r.task = cloneExamStructuringTask(task)
 	r.updatedStatus = task.Status
 	return nil
@@ -271,5 +276,8 @@ func (r *stubExamQuestionDraftChunkReader) ListChunksByKnowledgeID(context.Conte
 }
 
 func (e *stubExamQuestionExtractor) Extract(context.Context, *types.ExamMaterial, *types.ExamStructuringTask, []*types.Chunk) ([]*types.ExamQuestionDraftCandidate, string, error) {
+	if e.onExtract != nil {
+		e.onExtract()
+	}
 	return e.candidates, e.rawOutput, e.err
 }

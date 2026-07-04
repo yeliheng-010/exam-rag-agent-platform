@@ -103,7 +103,7 @@ func (s *examQuestionDraftService) updateTaskStatus(ctx context.Context, task *t
 	if count >= 0 {
 		task.StructuredQuestionCount = count
 	}
-	if err := s.materialRepo.UpdateStructuringTask(ctx, task); err != nil {
+	if err := s.materialRepo.UpdateStructuringTask(context.WithoutCancel(ctx), task); err != nil {
 		return nil, err
 	}
 	return task, nil

@@ -274,6 +274,7 @@ func (t *KnowledgeSearchTool) Execute(ctx context.Context, args json.RawMessage)
 
 	allResults := t.concurrentSearchByTargets(ctx, queries, searchTargets,
 		topK, vectorThreshold, keywordThreshold, kbTypeMap)
+	allResults = t.appendExamContextBundles(ctx, queries, allResults)
 	logger.Infof(ctx, "[Tool][KnowledgeSearch] Concurrent search completed: %d raw results", len(allResults))
 
 	// Note: HybridSearch now uses RRF (Reciprocal Rank Fusion) which produces normalized scores
