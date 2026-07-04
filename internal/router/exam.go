@@ -13,6 +13,7 @@ func RegisterExamRoutes(
 	classHandler *handler.ExamClassHandler,
 	questionHandler *handler.ExamQuestionHandler,
 	resourceHandler *handler.ExamResourceHandler,
+	materialHandler *handler.ExamMaterialHandler,
 	g *rbacGuards,
 ) {
 	exam := r.Group("/exam")
@@ -44,5 +45,10 @@ func RegisterExamRoutes(
 		exam.GET("/resources", g.Viewer(), resourceHandler.ListResources)
 		exam.POST("/resources/knowledge-bases/:kb_id/bind", g.Contributor(), resourceHandler.BindKnowledgeBase)
 		exam.GET("/resources/knowledge-bases/:kb_id", g.Contributor(), resourceHandler.GetKnowledgeBaseBinding)
+
+		exam.GET("/materials", g.Viewer(), materialHandler.ListMaterials)
+		exam.POST("/materials", g.Contributor(), materialHandler.RegisterMaterial)
+		exam.GET("/structuring-tasks", g.Viewer(), materialHandler.ListStructuringTasks)
+		exam.POST("/materials/:material_id/structuring-tasks", g.Contributor(), materialHandler.CreateStructuringTask)
 	}
 }

@@ -164,6 +164,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewExamTeacherApplicationRepository))
 	must(container.Provide(repository.NewExamQuestionRepository))
 	must(container.Provide(repository.NewExamResourceRepository))
+	must(container.Provide(repository.NewExamMaterialRepository))
 	must(container.Provide(repository.NewBillingRepository))
 	must(container.Provide(repository.NewKBShareRepository))
 	must(container.Provide(repository.NewAgentShareRepository))
@@ -201,6 +202,16 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewExamClassService))
 	must(container.Provide(service.NewExamQuestionService))
 	must(container.Provide(service.NewExamResourceService))
+	must(container.Provide(func(s interfaces.KnowledgeBaseService) interfaces.ExamMaterialKnowledgeBaseReader {
+		return s
+	}))
+	must(container.Provide(func(s interfaces.KnowledgeService) interfaces.ExamMaterialKnowledgeReader {
+		return s
+	}))
+	must(container.Provide(func(s interfaces.ChunkService) interfaces.ExamMaterialChunkReader {
+		return s
+	}))
+	must(container.Provide(service.NewExamMaterialService))
 	must(container.Provide(service.NewBillingService))
 	must(container.Provide(service.NewKBShareService)) // KBShareService must be registered before KnowledgeService and KnowledgeTagService
 	must(container.Provide(service.NewAgentShareService))
@@ -364,6 +375,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewExamClassHandler))
 	must(container.Provide(handler.NewExamQuestionHandler))
 	must(container.Provide(handler.NewExamResourceHandler))
+	must(container.Provide(handler.NewExamMaterialHandler))
 	must(container.Provide(handler.NewBillingHandler))
 
 	// Data source handler

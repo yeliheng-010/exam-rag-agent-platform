@@ -4,6 +4,9 @@ export type ExamClassMemberStatus = 'pending' | 'active' | 'removed'
 export type ReviewStatus = 'private' | 'pending' | 'approved' | 'rejected'
 export type ExamResourceType = 'knowledge_base'
 export type ExamMaterialType = 'learning_material' | 'exam_paper' | 'answer_key' | 'explanation'
+export type ExamMaterialIngestStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'unknown'
+export type ExamStructuringTaskStatus = 'pending' | 'ready_for_review' | 'blocked' | 'completed' | 'failed'
+export type ExamStructuringStrategy = 'manual_review'
 export type ExamTeacherApplicationStatus = 'pending' | 'approved' | 'rejected'
 
 export interface ExamDomain {
@@ -113,6 +116,50 @@ export interface ExamSpaceResource {
   created_by_user_id: string
   created_at: string
   updated_at: string
+}
+
+export interface ExamMaterial {
+  id: string
+  tenant_id: number
+  space_id: string
+  knowledge_base_id: string
+  knowledge_id: string
+  domain_id: string
+  subject_id?: string
+  material_type: ExamMaterialType
+  title: string
+  description: string
+  source_year?: number
+  source_region: string
+  paper_type: string
+  ingest_status: ExamMaterialIngestStatus
+  review_status: ReviewStatus
+  status: string
+  created_by_user_id: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ExamStructuringTask {
+  id: string
+  tenant_id: number
+  material_id: string
+  space_id: string
+  question_bank_id: string
+  status: ExamStructuringTaskStatus
+  strategy: ExamStructuringStrategy
+  source_chunk_count: number
+  structured_question_count: number
+  review_required: boolean
+  error_message: string
+  created_by_user_id: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ExamMaterialRegistrationResult {
+  material: ExamMaterial
+  structuring_task?: ExamStructuringTask
 }
 
 export interface ApiResponse<T> {

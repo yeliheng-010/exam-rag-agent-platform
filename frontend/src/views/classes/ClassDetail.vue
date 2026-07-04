@@ -98,13 +98,17 @@
                 <p>老师将知识库绑定到班级空间后，审核通过的学生可以在学习中心选择这些资料进行基础 RAG 对话。</p>
               </div>
               <t-space size="small">
-                <t-button variant="outline" :loading="resourcesLoading" @click="loadResources">
+                <t-button variant="outline" :loading="resourcesLoading || materialsLoading" @click="loadResourceTab">
                   <template #icon><t-icon name="refresh" /></template>
                   刷新
                 </t-button>
                 <t-button v-if="canManageResources" theme="primary" @click="openBindDialog">
                   <template #icon><t-icon name="link" /></template>
                   绑定知识库
+                </t-button>
+                <t-button v-if="canManageResources" theme="primary" variant="outline" @click="openMaterialDialog">
+                  <template #icon><t-icon name="file-add" /></template>
+                  登记资料
                 </t-button>
               </t-space>
             </div>
@@ -145,6 +149,86 @@
               </t-table>
               <t-empty v-if="!resources.length && !resourcesLoading" size="small" description="暂无班级资料" />
             </t-loading>
+
+            <t-divider />
+
+            <div class="resource-section">
+              <div class="section-title-row">
+                <div>
+                  <h3>考试资料</h3>
+                  <p>具体到某份试卷、答案或学习资料的登记记录，用于后续结构化、题库生成和学习分析。</p>
+                </div>
+              </div>
+              <t-loading :loading="materialsLoading">
+                <t-table
+                  row-key="id"
+                  :data="materials"
+                  :columns="materialColumns"
+                  :pagination="{ pageSize: 8, total: materials.length }"
+                  size="small"
+                >
+                  <template #title="{ row }">
+                    <div class="resource-name-cell">
+                      <strong>{{ row.title }}</strong>
+                      <span>{{ knowledgeBaseName(row.knowledge_base_id) }} / {{ row.knowledge_id }}</span>
+                    </div>
+                  </template>
+                  <template #material_type="{ row }">
+                    <t-tag variant="light">{{ materialTypeLabel(row.material_type) }}</t-tag>
+                  </template>
+                  <template #ingest_status="{ row }">
+                    <t-tag :theme="ingestStatusTheme(row.ingest_status)" variant="light">
+                      {{ ingestStatusLabel(row.ingest_status) }}
+                    </t-tag>
+                  </template>
+                  <template #domain_id="{ row }">
+                    {{ domainName(row.domain_id) }}
+                  </template>
+                  <template #source_year="{ row }">
+                    {{ row.source_year || '-' }}
+                  </template>
+                  <template #updated_at="{ row }">
+                    {{ formatDate(row.updated_at) }}
+                  </template>
+                </t-table>
+                <t-empty v-if="!materials.length && !materialsLoading" size="small" description="暂无考试资料" />
+              </t-loading>
+            </div>
+
+            <div class="resource-section">
+              <div class="section-title-row">
+                <div>
+                  <h3>结构化任务</h3>
+                  <p>当前阶段先记录任务和可校对状态，后续再接入 LLM 抽题、答案匹配和人工审核工作台。</p>
+                </div>
+              </div>
+              <t-loading :loading="materialsLoading">
+                <t-table
+                  row-key="id"
+                  :data="structuringTasks"
+                  :columns="taskColumns"
+                  :pagination="{ pageSize: 8, total: structuringTasks.length }"
+                  size="small"
+                >
+                  <template #material_id="{ row }">
+                    <div class="resource-name-cell">
+                      <strong>{{ taskMaterialTitle(row.material_id) }}</strong>
+                      <span>{{ row.question_bank_id }}</span>
+                    </div>
+                  </template>
+                  <template #status="{ row }">
+                    <t-tag :theme="taskStatusTheme(row.status)" variant="light">
+                      {{ taskStatusLabel(row.status) }}
+                    </t-tag>
+                    <div v-if="row.error_message" class="task-error">{{ row.error_message }}</div>
+                  </template>
+                  <template #created_at="{ row }">
+                    {{ formatDate(row.created_at) }}
+                  </template>
+                </t-table>
+                <t-empty v-if="!structuringTasks.length && !materialsLoading" size="small" description="暂无结构化任务" />
+              </t-loading>
+            </div>
           </div>
         </t-tab-panel>
         <t-tab-panel v-for="item in futureTabs" :key="item.value" :value="item.value" :label="item.label">
@@ -207,6 +291,118 @@
         </t-form-item>
       </t-form>
     </t-dialog>
+
+    <t-dialog
+      v-model:visible="materialVisible"
+      header="登记考试资料"
+      width="720px"
+      :confirm-btn="{ content: '登记', loading: registeringMaterial }"
+      @confirm="submitRegisterMaterial"
+    >
+      <t-form ref="materialFormRef" :data="materialForm" :rules="materialRules" label-align="top">
+        <div class="dialog-grid">
+          <t-form-item label="知识库" name="knowledge_base_id">
+            <t-select
+              v-model="materialForm.knowledge_base_id"
+              :loading="knowledgeBasesLoading"
+              placeholder="选择资料所在知识库"
+              clearable
+              filterable
+              @change="handleMaterialKBChange"
+            >
+              <t-option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id" :label="kb.name" />
+            </t-select>
+          </t-form-item>
+          <t-form-item label="文档" name="knowledge_id">
+            <t-select
+              v-model="materialForm.knowledge_id"
+              :disabled="!materialForm.knowledge_base_id"
+              :loading="knowledgeFilesLoading"
+              placeholder="选择具体试卷或学习资料"
+              clearable
+              filterable
+            >
+              <t-option
+                v-for="file in knowledgeFiles"
+                :key="file.id"
+                :value="file.id"
+                :label="knowledgeFileLabel(file)"
+              />
+            </t-select>
+          </t-form-item>
+        </div>
+        <div class="dialog-grid">
+          <t-form-item label="考试方向" name="domain_id">
+            <t-select
+              v-model="materialForm.domain_id"
+              :loading="domainsLoading"
+              placeholder="选择高考或雅思"
+              clearable
+              @change="handleMaterialDomainChange"
+            >
+              <t-option v-for="domain in domains" :key="domain.id" :value="domain.id" :label="domain.name" />
+            </t-select>
+          </t-form-item>
+          <t-form-item label="科目 / 模块" name="subject_id">
+            <t-select
+              v-model="materialForm.subject_id"
+              :disabled="!materialForm.domain_id"
+              :loading="subjectsLoading"
+              placeholder="可选"
+              clearable
+            >
+              <t-option v-for="subject in subjects" :key="subject.id" :value="subject.id" :label="subject.name" />
+            </t-select>
+          </t-form-item>
+        </div>
+        <div class="dialog-grid">
+          <t-form-item label="资料类型" name="material_type">
+            <t-select v-model="materialForm.material_type">
+              <t-option value="learning_material" label="学习资料" />
+              <t-option value="exam_paper" label="试卷" />
+              <t-option value="answer_key" label="答案" />
+              <t-option value="explanation" label="解析" />
+            </t-select>
+          </t-form-item>
+          <t-form-item label="关联题库" name="question_bank_id">
+            <t-select
+              v-model="materialForm.question_bank_id"
+              :loading="questionBanksLoading"
+              placeholder="留空则自动创建"
+              clearable
+              filterable
+            >
+              <t-option v-for="bank in questionBanks" :key="bank.id" :value="bank.id" :label="bank.name" />
+            </t-select>
+          </t-form-item>
+        </div>
+        <div class="dialog-grid">
+          <t-form-item label="年份" name="source_year">
+            <t-input-number v-model="materialForm.source_year" :min="1900" :max="2100" placeholder="可选" />
+          </t-form-item>
+          <t-form-item label="地区 / 套卷" name="source_region">
+            <t-input v-model="materialForm.source_region" placeholder="如 全国甲卷 / Cambridge" />
+          </t-form-item>
+        </div>
+        <t-form-item label="卷别 / 模块" name="paper_type">
+          <t-input v-model="materialForm.paper_type" placeholder="如 英语阅读 / IELTS Reading" />
+        </t-form-item>
+        <t-form-item label="显示标题" name="title">
+          <t-input v-model="materialForm.title" placeholder="留空则使用文档标题" />
+        </t-form-item>
+        <t-form-item label="说明" name="description">
+          <t-textarea v-model="materialForm.description" placeholder="可选" :autosize="{ minRows: 2, maxRows: 4 }" />
+        </t-form-item>
+        <t-form-item>
+          <t-checkbox
+            v-model="materialForm.create_task"
+            :disabled="materialForm.material_type !== 'exam_paper'"
+          >
+            登记后创建结构化任务
+          </t-checkbox>
+        </t-form-item>
+      </t-form>
+    </t-dialog>
   </div>
 </template>
 
@@ -217,8 +413,10 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormInstanceFunctions, FormRule } from 'tdesign-vue-next'
 import { approveExamClassMember, getExamClass, listExamClassMembers, rejectExamClassMember } from '@/api/exam/class'
 import { listExamDomains, listExamSubjects } from '@/api/exam/domain'
+import { listExamMaterials, listExamStructuringTasks, registerExamMaterial } from '@/api/exam/material'
+import { listQuestionBanks } from '@/api/exam/question-bank'
 import { bindKnowledgeBaseResource, listExamResources } from '@/api/exam/resource'
-import { listKnowledgeBases } from '@/api/knowledge-base'
+import { listKnowledgeBases, listKnowledgeFiles } from '@/api/knowledge-base'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
 import type {
@@ -226,12 +424,25 @@ import type {
   ExamClassMember,
   ExamClassRole,
   ExamDomain,
+  ExamMaterial,
+  ExamMaterialIngestStatus,
   ExamMaterialType,
+  ExamStructuringTask,
+  ExamStructuringTaskStatus,
   ExamSpaceResource,
   ExamSubject,
+  QuestionBank,
   ReviewStatus,
 } from '@/types/exam'
 import type { KnowledgeBaseInfo } from '@/api/auth'
+
+interface KnowledgeFileItem {
+  id: string
+  title?: string
+  file_name?: string
+  source?: string
+  parse_status?: string
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -240,20 +451,30 @@ const settingsStore = useSettingsStore()
 const loading = ref(false)
 const membersLoading = ref(false)
 const resourcesLoading = ref(false)
+const materialsLoading = ref(false)
 const domainsLoading = ref(false)
 const subjectsLoading = ref(false)
 const knowledgeBasesLoading = ref(false)
+const knowledgeFilesLoading = ref(false)
+const questionBanksLoading = ref(false)
 const bindingResource = ref(false)
+const registeringMaterial = ref(false)
 const reviewingUserId = ref('')
 const activeTab = ref('overview')
 const classInfo = ref<ExamClass | null>(null)
 const members = ref<ExamClassMember[]>([])
 const resources = ref<ExamSpaceResource[]>([])
+const materials = ref<ExamMaterial[]>([])
+const structuringTasks = ref<ExamStructuringTask[]>([])
 const domains = ref<ExamDomain[]>([])
 const subjects = ref<ExamSubject[]>([])
 const knowledgeBases = ref<KnowledgeBaseInfo[]>([])
+const knowledgeFiles = ref<KnowledgeFileItem[]>([])
+const questionBanks = ref<QuestionBank[]>([])
 const resourceFormRef = ref<FormInstanceFunctions>()
+const materialFormRef = ref<FormInstanceFunctions>()
 const bindVisible = ref(false)
+const materialVisible = ref(false)
 const canReviewMembers = computed(() => authStore.hasRole('contributor'))
 const canManageResources = computed(() => authStore.hasRole('contributor'))
 
@@ -262,6 +483,33 @@ const bindForm = ref({
   domain_id: '',
   subject_id: '',
   material_type: 'learning_material' as ExamMaterialType,
+})
+
+const materialForm = ref<{
+  knowledge_base_id: string
+  knowledge_id: string
+  domain_id: string
+  subject_id: string
+  material_type: ExamMaterialType
+  title: string
+  description: string
+  source_year?: number
+  source_region: string
+  paper_type: string
+  question_bank_id: string
+  create_task: boolean
+}>({
+  knowledge_base_id: '',
+  knowledge_id: '',
+  domain_id: '',
+  subject_id: '',
+  material_type: 'exam_paper',
+  title: '',
+  description: '',
+  source_region: '',
+  paper_type: '',
+  question_bank_id: '',
+  create_task: true,
 })
 
 const futureTabs = [
@@ -289,8 +537,31 @@ const resourceColumns = [
   { colKey: 'actions', title: '操作', cell: 'actions', width: 120 },
 ]
 
+const materialColumns = [
+  { colKey: 'title', title: '资料', cell: 'title', ellipsis: true },
+  { colKey: 'material_type', title: '类型', cell: 'material_type', width: 100 },
+  { colKey: 'ingest_status', title: '入库状态', cell: 'ingest_status', width: 120 },
+  { colKey: 'domain_id', title: '考试方向', cell: 'domain_id', width: 120 },
+  { colKey: 'source_year', title: '年份', cell: 'source_year', width: 90 },
+  { colKey: 'updated_at', title: '更新时间', cell: 'updated_at', width: 160 },
+]
+
+const taskColumns = [
+  { colKey: 'material_id', title: '来源资料', cell: 'material_id', ellipsis: true },
+  { colKey: 'status', title: '任务状态', cell: 'status', width: 130 },
+  { colKey: 'source_chunk_count', title: 'chunk', width: 90 },
+  { colKey: 'structured_question_count', title: '已入题', width: 90 },
+  { colKey: 'created_at', title: '创建时间', cell: 'created_at', width: 160 },
+]
+
 const bindRules: Record<string, FormRule[]> = {
   kb_id: [{ required: true, message: '请选择知识库', type: 'error' }],
+  domain_id: [{ required: true, message: '请选择考试方向', type: 'error' }],
+}
+
+const materialRules: Record<string, FormRule[]> = {
+  knowledge_base_id: [{ required: true, message: '请选择知识库', type: 'error' }],
+  knowledge_id: [{ required: true, message: '请选择文档', type: 'error' }],
   domain_id: [{ required: true, message: '请选择考试方向', type: 'error' }],
 }
 
@@ -331,8 +602,54 @@ const reviewTag = (status: ReviewStatus) => {
   return 'default'
 }
 
+const ingestStatusLabel = (status: ExamMaterialIngestStatus) => {
+  const map: Record<ExamMaterialIngestStatus, string> = {
+    pending: '待解析',
+    processing: '解析中',
+    completed: '已完成',
+    failed: '失败',
+    cancelled: '已取消',
+    unknown: '未知',
+  }
+  return map[status] || status
+}
+
+const ingestStatusTheme = (status: ExamMaterialIngestStatus) => {
+  if (status === 'completed') return 'success'
+  if (status === 'processing' || status === 'pending') return 'warning'
+  if (status === 'failed' || status === 'cancelled') return 'danger'
+  return 'default'
+}
+
+const taskStatusLabel = (status: ExamStructuringTaskStatus) => {
+  const map: Record<ExamStructuringTaskStatus, string> = {
+    pending: '待处理',
+    ready_for_review: '待校对',
+    blocked: '已阻塞',
+    completed: '已完成',
+    failed: '失败',
+  }
+  return map[status] || status
+}
+
+const taskStatusTheme = (status: ExamStructuringTaskStatus) => {
+  if (status === 'ready_for_review' || status === 'completed') return 'success'
+  if (status === 'pending') return 'warning'
+  if (status === 'blocked' || status === 'failed') return 'danger'
+  return 'default'
+}
+
 const knowledgeBaseName = (kbId: string) => {
   return knowledgeBases.value.find(item => item.id === kbId)?.name || '未知知识库'
+}
+
+const knowledgeFileLabel = (file: KnowledgeFileItem) => {
+  const title = file.file_name || file.title || file.source || file.id
+  return file.parse_status ? `${title}（${file.parse_status}）` : title
+}
+
+const taskMaterialTitle = (materialId: string) => {
+  return materials.value.find(item => item.id === materialId)?.title || materialId
 }
 
 const roleLabel = (role: ExamClassRole) => {
@@ -399,6 +716,33 @@ const loadKnowledgeBases = async () => {
   }
 }
 
+const loadKnowledgeFiles = async (kbId: string) => {
+  knowledgeFiles.value = []
+  if (!kbId) return
+  knowledgeFilesLoading.value = true
+  try {
+    const res: any = await listKnowledgeFiles(kbId, { page: 1, page_size: 100 })
+    knowledgeFiles.value = res.data || []
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '文档列表加载失败')
+  } finally {
+    knowledgeFilesLoading.value = false
+  }
+}
+
+const loadQuestionBanks = async () => {
+  if (!classInfo.value?.space_id) return
+  questionBanksLoading.value = true
+  try {
+    const res = await listQuestionBanks({ space_id: classInfo.value.space_id })
+    questionBanks.value = res.data || []
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '题库列表加载失败')
+  } finally {
+    questionBanksLoading.value = false
+  }
+}
+
 const loadMembers = async () => {
   if (!canReviewMembers.value) return
   const classId = String(route.params.classId || '')
@@ -429,6 +773,30 @@ const loadResources = async () => {
   } finally {
     resourcesLoading.value = false
   }
+}
+
+const loadMaterials = async () => {
+  if (!classInfo.value?.space_id) return
+  materialsLoading.value = true
+  try {
+    const [materialsRes, tasksRes] = await Promise.all([
+      listExamMaterials({ space_id: classInfo.value.space_id }),
+      listExamStructuringTasks({ space_id: classInfo.value.space_id }),
+    ])
+    materials.value = materialsRes.data || []
+    structuringTasks.value = tasksRes.data || []
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '考试资料加载失败')
+  } finally {
+    materialsLoading.value = false
+  }
+}
+
+const loadResourceTab = async () => {
+  await Promise.all([
+    loadResources(),
+    loadMaterials(),
+  ])
 }
 
 const approveMember = async (userId: string) => {
@@ -488,6 +856,52 @@ const handleBindDomainChange = async (value: string | number | boolean) => {
   await loadSubjects(domainId)
 }
 
+const openMaterialDialog = async () => {
+  if (!classInfo.value?.space_id) return
+  materialForm.value = {
+    knowledge_base_id: resources.value[0]?.resource_id || '',
+    knowledge_id: '',
+    domain_id: classInfo.value.domain_id || domains.value[0]?.id || '',
+    subject_id: '',
+    material_type: 'exam_paper',
+    title: '',
+    description: '',
+    source_region: '',
+    paper_type: '',
+    question_bank_id: '',
+    create_task: true,
+  }
+  materialVisible.value = true
+  await Promise.all([
+    knowledgeBases.value.length ? Promise.resolve(null) : loadKnowledgeBases(),
+    domains.value.length ? Promise.resolve(null) : loadDomains(),
+    resources.value.length ? Promise.resolve(null) : loadResources(),
+    loadQuestionBanks(),
+  ])
+  if (!materialForm.value.knowledge_base_id) {
+    materialForm.value.knowledge_base_id = resources.value[0]?.resource_id || knowledgeBases.value[0]?.id || ''
+  }
+  if (!materialForm.value.domain_id) {
+    materialForm.value.domain_id = classInfo.value?.domain_id || domains.value[0]?.id || ''
+  }
+  await Promise.all([
+    materialForm.value.knowledge_base_id ? loadKnowledgeFiles(materialForm.value.knowledge_base_id) : Promise.resolve(null),
+    materialForm.value.domain_id ? loadSubjects(materialForm.value.domain_id) : Promise.resolve(null),
+  ])
+}
+
+const handleMaterialKBChange = async (value: string | number | boolean) => {
+  const kbId = typeof value === 'string' ? value : ''
+  materialForm.value.knowledge_id = ''
+  await loadKnowledgeFiles(kbId)
+}
+
+const handleMaterialDomainChange = async (value: string | number | boolean) => {
+  const domainId = typeof value === 'string' ? value : ''
+  materialForm.value.subject_id = ''
+  await loadSubjects(domainId)
+}
+
 const submitBindResource = async () => {
   if (!classInfo.value?.space_id) return
   const result = await resourceFormRef.value?.validate()
@@ -503,11 +917,46 @@ const submitBindResource = async () => {
     })
     MessagePlugin.success('知识库已绑定到班级')
     bindVisible.value = false
-    await loadResources()
+    await loadResourceTab()
   } catch (error: any) {
     MessagePlugin.error(error?.message || '绑定知识库失败')
   } finally {
     bindingResource.value = false
+  }
+}
+
+const submitRegisterMaterial = async () => {
+  if (!classInfo.value?.space_id) return
+  const result = await materialFormRef.value?.validate()
+  if (result !== true) return
+
+  registeringMaterial.value = true
+  try {
+    await registerExamMaterial({
+      space_id: classInfo.value.space_id,
+      knowledge_base_id: materialForm.value.knowledge_base_id,
+      knowledge_id: materialForm.value.knowledge_id,
+      domain_id: materialForm.value.domain_id,
+      subject_id: materialForm.value.subject_id || undefined,
+      material_type: materialForm.value.material_type,
+      title: materialForm.value.title || undefined,
+      description: materialForm.value.description || undefined,
+      source_year: materialForm.value.source_year || undefined,
+      source_region: materialForm.value.source_region || undefined,
+      paper_type: materialForm.value.paper_type || undefined,
+      question_bank_id: materialForm.value.question_bank_id || undefined,
+      create_task: materialForm.value.material_type === 'exam_paper' && materialForm.value.create_task,
+    })
+    MessagePlugin.success('考试资料已登记')
+    materialVisible.value = false
+    await Promise.all([
+      loadResourceTab(),
+      loadQuestionBanks(),
+    ])
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '登记考试资料失败')
+  } finally {
+    registeringMaterial.value = false
   }
 }
 
@@ -524,7 +973,7 @@ watch(activeTab, (tab) => {
     loadMembers()
   }
   if (tab === 'resources') {
-    loadResources()
+    loadResourceTab()
   }
 })
 
@@ -538,7 +987,7 @@ onMounted(async () => {
     await loadMembers()
   }
   if (activeTab.value === 'resources') {
-    await loadResources()
+    await loadResourceTab()
   }
 })
 </script>
@@ -634,6 +1083,18 @@ onMounted(async () => {
   margin-bottom: 14px;
 }
 
+.section-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.resource-section {
+  margin-top: 18px;
+}
+
 .muted-text {
   color: var(--td-text-color-placeholder);
   font-size: 12px;
@@ -662,6 +1123,19 @@ onMounted(async () => {
   }
 }
 
+.task-error {
+  margin-top: 4px;
+  color: var(--td-error-color);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dialog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px;
+}
+
 .flow-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -674,6 +1148,23 @@ onMounted(async () => {
     color: var(--td-text-color-primary);
     font-weight: 600;
     text-align: center;
+  }
+}
+
+@media (max-width: 768px) {
+  .exam-page {
+    padding: 20px 16px;
+  }
+
+  .summary-grid,
+  .flow-grid,
+  .dialog-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-title-row,
+  .section-title-row {
+    flex-direction: column;
   }
 }
 </style>
