@@ -1,5 +1,5 @@
 import { get, post } from '@/utils/request'
-import type { ApiResponse, QuestionBank } from '@/types/exam'
+import type { ApiResponse, QuestionBank, QuestionDetail } from '@/types/exam'
 
 export interface CreateQuestionBankPayload {
   space_id: string
@@ -24,4 +24,8 @@ export function createQuestionBank(data: CreateQuestionBankPayload) {
 
 export function getQuestionBank(bankId: string) {
   return get(`/api/v1/exam/question-banks/${bankId}`) as unknown as Promise<ApiResponse<QuestionBank>>
+}
+
+export function listQuestionDetails(bankId: string) {
+  return get(`/api/v1/exam/question-banks/${bankId}/questions`) as unknown as Promise<ApiResponse<QuestionDetail[]>>
 }

@@ -19,6 +19,8 @@ type ExamMaterialRepository interface {
 	GetMaterialByKnowledge(ctx context.Context, tenantID uint64, knowledgeID string) (*types.ExamMaterial, error)
 	ListMaterials(ctx context.Context, tenantID uint64, filter types.ListExamMaterialsFilter, spaceIDs []string) ([]*types.ExamMaterial, error)
 	CreateStructuringTask(ctx context.Context, task *types.ExamStructuringTask) error
+	GetStructuringTaskByIDAndTenant(ctx context.Context, id string, tenantID uint64) (*types.ExamStructuringTask, error)
+	UpdateStructuringTask(ctx context.Context, task *types.ExamStructuringTask) error
 	ListStructuringTasks(ctx context.Context, tenantID uint64, filter types.ListExamStructuringTasksFilter, spaceIDs []string) ([]*types.ExamStructuringTask, error)
 }
 

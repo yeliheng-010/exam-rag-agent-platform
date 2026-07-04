@@ -101,6 +101,24 @@ func (r *examMaterialRepository) CreateStructuringTask(ctx context.Context, task
 	return r.db.WithContext(ctx).Create(task).Error
 }
 
+func (r *examMaterialRepository) GetStructuringTaskByIDAndTenant(ctx context.Context, id string, tenantID uint64) (*types.ExamStructuringTask, error) {
+	var task types.ExamStructuringTask
+	err := r.db.WithContext(ctx).
+		Where("id = ? AND tenant_id = ?", id, tenantID).
+		First(&task).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrExamStructuringTaskNotFound
+		}
+		return nil, err
+	}
+	return &task, nil
+}
+
+func (r *examMaterialRepository) UpdateStructuringTask(ctx context.Context, task *types.ExamStructuringTask) error {
+	return r.db.WithContext(ctx).Save(task).Error
+}
+
 func (r *examMaterialRepository) ListStructuringTasks(ctx context.Context, tenantID uint64, filter types.ListExamStructuringTasksFilter, spaceIDs []string) ([]*types.ExamStructuringTask, error) {
 	if len(spaceIDs) == 0 {
 		return []*types.ExamStructuringTask{}, nil

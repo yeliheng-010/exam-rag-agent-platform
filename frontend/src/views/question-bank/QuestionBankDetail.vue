@@ -32,15 +32,24 @@
         <section class="panel">
           <div class="panel-title">
             <h3>题目列表</h3>
-            <p>第三阶段接入试卷解析后，题目会按题型、难度、年份、知识点进入这里。</p>
+            <p>已确认的结构化题目会在这里沉淀为正式题库资产。</p>
           </div>
-          <t-empty description="暂无结构化题目">
-            <template #action>
-              <t-button variant="outline" @click="router.push('/platform/knowledge-bases')">
-                先上传学习资料
-              </t-button>
+          <t-table
+            v-if="questions.length"
+            row-key="question.id"
+            :data="questions"
+            :columns="questionColumns"
+            :pagination="{ pageSize: 10, total: questions.length }"
+            size="small"
+          >
+            <template #stem="{ row }">
+              <div class="question-stem-cell">{{ row.question.stem }}</div>
             </template>
-          </t-empty>
+            <template #answer="{ row }">
+              {{ row.answers?.map(item => item.answer_text).join('，') || '-' }}
+            </template>
+          </t-table>
+          <t-empty v-else description="暂无结构化题目" />
         </section>
 
         <section class="panel">
@@ -64,13 +73,21 @@
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { getQuestionBank } from '@/api/exam/question-bank'
-import type { QuestionBank, ReviewStatus } from '@/types/exam'
+import { getQuestionBank, listQuestionDetails } from '@/api/exam/question-bank'
+import type { QuestionBank, QuestionDetail, ReviewStatus } from '@/types/exam'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const bank = ref<QuestionBank | null>(null)
+const questions = ref<QuestionDetail[]>([])
+
+const questionColumns = [
+  { colKey: 'stem', title: '题干', cell: 'stem', minWidth: 320 },
+  { colKey: 'answer', title: '答案', cell: 'answer', width: 160 },
+  { colKey: 'question.difficulty', title: '难度', width: 100 },
+  { colKey: 'question.status', title: '状态', width: 100 },
+]
 
 const reviewLabel = (status: ReviewStatus) => {
   const map: Record<ReviewStatus, string> = {
@@ -96,6 +113,8 @@ const loadData = async () => {
   try {
     const res = await getQuestionBank(bankId)
     bank.value = res.data
+    const questionRes = await listQuestionDetails(bankId)
+    questions.value = questionRes.data || []
   } catch (error: any) {
     MessagePlugin.error(error?.message || '题库详情加载失败')
   } finally {
@@ -228,5 +247,13 @@ onMounted(loadData)
     color: var(--td-brand-color);
     font-size: 12px;
   }
+}
+
+.question-stem-cell {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  line-height: 20px;
 }
 </style>

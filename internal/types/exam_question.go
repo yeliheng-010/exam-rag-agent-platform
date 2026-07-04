@@ -89,6 +89,62 @@ func (Question) TableName() string {
 	return "questions"
 }
 
+type QuestionOption struct {
+	ID         string `json:"id" gorm:"type:varchar(36);primaryKey"`
+	QuestionID string `json:"question_id" gorm:"type:varchar(36);not null;index"`
+	OptionKey  string `json:"option_key" gorm:"type:varchar(16);not null"`
+	Content    string `json:"content" gorm:"type:text;not null"`
+	SortOrder  int    `json:"sort_order" gorm:"not null;default:0"`
+}
+
+func (QuestionOption) TableName() string {
+	return "question_options"
+}
+
+type QuestionAnswer struct {
+	ID         string    `json:"id" gorm:"type:varchar(36);primaryKey"`
+	QuestionID string    `json:"question_id" gorm:"type:varchar(36);not null;index"`
+	AnswerText string    `json:"answer_text" gorm:"type:text;not null"`
+	IsCorrect  bool      `json:"is_correct" gorm:"not null;default:true"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+func (QuestionAnswer) TableName() string {
+	return "question_answers"
+}
+
+type QuestionExplanation struct {
+	ID              string    `json:"id" gorm:"type:varchar(36);primaryKey"`
+	QuestionID      string    `json:"question_id" gorm:"type:varchar(36);not null;index"`
+	ExplanationText string    `json:"explanation_text" gorm:"type:text;not null"`
+	SourceType      string    `json:"source_type" gorm:"type:varchar(64);not null;default:'manual'"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+func (QuestionExplanation) TableName() string {
+	return "question_explanations"
+}
+
+type QuestionChunkRef struct {
+	QuestionID string    `json:"question_id" gorm:"type:varchar(36);primaryKey"`
+	ChunkID    string    `json:"chunk_id" gorm:"type:varchar(36);primaryKey"`
+	RefType    string    `json:"ref_type" gorm:"type:varchar(64);primaryKey"`
+	Confidence float64   `json:"confidence" gorm:"type:numeric(5,4);not null;default:1"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+func (QuestionChunkRef) TableName() string {
+	return "question_chunk_refs"
+}
+
+type QuestionDetail struct {
+	Question     *Question              `json:"question"`
+	Options      []*QuestionOption      `json:"options"`
+	Answers      []*QuestionAnswer      `json:"answers"`
+	Explanations []*QuestionExplanation `json:"explanations"`
+	ChunkRefs    []*QuestionChunkRef    `json:"chunk_refs"`
+}
+
 type CreateQuestionBankRequest struct {
 	SpaceID     string  `json:"space_id" binding:"required"`
 	DomainID    string  `json:"domain_id" binding:"required"`

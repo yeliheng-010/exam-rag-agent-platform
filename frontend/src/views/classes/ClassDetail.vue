@@ -225,6 +225,27 @@
                   <template #created_at="{ row }">
                     {{ formatDate(row.created_at) }}
                   </template>
+                  <template #actions="{ row }">
+                    <t-space size="small">
+                      <t-button
+                        v-if="canManageResources && ['ready_for_review', 'failed'].includes(row.status)"
+                        size="small"
+                        theme="primary"
+                        :loading="extractingTaskId === row.id"
+                        @click="extractTask(row)"
+                      >
+                        {{ row.status === 'failed' ? '重新抽题' : '开始抽题' }}
+                      </t-button>
+                      <t-button
+                        v-if="canManageResources && ['reviewing', 'completed'].includes(row.status)"
+                        size="small"
+                        variant="outline"
+                        @click="router.push(`/platform/structuring-tasks/${row.id}/review`)"
+                      >
+                        查看校对
+                      </t-button>
+                    </t-space>
+                  </template>
                 </t-table>
                 <t-empty v-if="!structuringTasks.length && !materialsLoading" size="small" description="暂无结构化任务" />
               </t-loading>
@@ -414,6 +435,7 @@ import type { FormInstanceFunctions, FormRule } from 'tdesign-vue-next'
 import { approveExamClassMember, getExamClass, listExamClassMembers, rejectExamClassMember } from '@/api/exam/class'
 import { listExamDomains, listExamSubjects } from '@/api/exam/domain'
 import { listExamMaterials, listExamStructuringTasks, registerExamMaterial } from '@/api/exam/material'
+import { extractQuestionDrafts } from '@/api/exam/question-draft'
 import { listQuestionBanks } from '@/api/exam/question-bank'
 import { bindKnowledgeBaseResource, listExamResources } from '@/api/exam/resource'
 import { listKnowledgeBases, listKnowledgeFiles } from '@/api/knowledge-base'
@@ -460,6 +482,7 @@ const questionBanksLoading = ref(false)
 const bindingResource = ref(false)
 const registeringMaterial = ref(false)
 const reviewingUserId = ref('')
+const extractingTaskId = ref('')
 const activeTab = ref('overview')
 const classInfo = ref<ExamClass | null>(null)
 const members = ref<ExamClassMember[]>([])
@@ -552,6 +575,7 @@ const taskColumns = [
   { colKey: 'source_chunk_count', title: 'chunk', width: 90 },
   { colKey: 'structured_question_count', title: '已入题', width: 90 },
   { colKey: 'created_at', title: '创建时间', cell: 'created_at', width: 160 },
+  { colKey: 'actions', title: '操作', cell: 'actions', width: 180 },
 ]
 
 const bindRules: Record<string, FormRule[]> = {
@@ -626,6 +650,8 @@ const taskStatusLabel = (status: ExamStructuringTaskStatus) => {
     pending: '待处理',
     ready_for_review: '待校对',
     blocked: '已阻塞',
+    extracting: '抽题中',
+    reviewing: '校对中',
     completed: '已完成',
     failed: '失败',
   }
@@ -634,7 +660,7 @@ const taskStatusLabel = (status: ExamStructuringTaskStatus) => {
 
 const taskStatusTheme = (status: ExamStructuringTaskStatus) => {
   if (status === 'ready_for_review' || status === 'completed') return 'success'
-  if (status === 'pending') return 'warning'
+  if (status === 'pending' || status === 'extracting' || status === 'reviewing') return 'warning'
   if (status === 'blocked' || status === 'failed') return 'danger'
   return 'default'
 }
@@ -797,6 +823,21 @@ const loadResourceTab = async () => {
     loadResources(),
     loadMaterials(),
   ])
+}
+
+const extractTask = async (task: ExamStructuringTask) => {
+  if (!task?.id) return
+  extractingTaskId.value = task.id
+  try {
+    await extractQuestionDrafts(task.id, task.status === 'failed')
+    MessagePlugin.success('抽题完成，已生成待校对草稿')
+    await loadResourceTab()
+    router.push(`/platform/structuring-tasks/${task.id}/review`)
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '抽题失败')
+  } finally {
+    extractingTaskId.value = ''
+  }
 }
 
 const approveMember = async (userId: string) => {

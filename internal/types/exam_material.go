@@ -19,6 +19,8 @@ const (
 	ExamStructuringTaskStatusPending        ExamStructuringTaskStatus = "pending"
 	ExamStructuringTaskStatusReadyForReview ExamStructuringTaskStatus = "ready_for_review"
 	ExamStructuringTaskStatusBlocked        ExamStructuringTaskStatus = "blocked"
+	ExamStructuringTaskStatusExtracting     ExamStructuringTaskStatus = "extracting"
+	ExamStructuringTaskStatusReviewing      ExamStructuringTaskStatus = "reviewing"
 	ExamStructuringTaskStatusCompleted      ExamStructuringTaskStatus = "completed"
 	ExamStructuringTaskStatusFailed         ExamStructuringTaskStatus = "failed"
 )
@@ -56,20 +58,20 @@ func (ExamMaterial) TableName() string {
 }
 
 type ExamStructuringTask struct {
-	ID                       string                    `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID                 uint64                    `json:"tenant_id" gorm:"not null;index"`
-	MaterialID               string                    `json:"material_id" gorm:"type:varchar(36);not null;index"`
-	SpaceID                  string                    `json:"space_id" gorm:"type:varchar(36);not null;index"`
-	QuestionBankID           string                    `json:"question_bank_id" gorm:"type:varchar(36);not null;index"`
-	Status                   ExamStructuringTaskStatus `json:"status" gorm:"type:varchar(32);not null;default:'pending'"`
-	Strategy                 ExamStructuringStrategy   `json:"strategy" gorm:"type:varchar(64);not null;default:'manual_review'"`
-	SourceChunkCount         int                       `json:"source_chunk_count" gorm:"not null;default:0"`
-	StructuredQuestionCount  int                       `json:"structured_question_count" gorm:"not null;default:0"`
-	ReviewRequired           bool                      `json:"review_required" gorm:"not null;default:true"`
-	ErrorMessage             string                    `json:"error_message" gorm:"type:text;not null;default:''"`
-	CreatedByUserID          string                    `json:"created_by_user_id" gorm:"type:varchar(36);not null;index"`
-	CreatedAt                time.Time                 `json:"created_at"`
-	UpdatedAt                time.Time                 `json:"updated_at"`
+	ID                      string                    `json:"id" gorm:"type:varchar(36);primaryKey"`
+	TenantID                uint64                    `json:"tenant_id" gorm:"not null;index"`
+	MaterialID              string                    `json:"material_id" gorm:"type:varchar(36);not null;index"`
+	SpaceID                 string                    `json:"space_id" gorm:"type:varchar(36);not null;index"`
+	QuestionBankID          string                    `json:"question_bank_id" gorm:"type:varchar(36);not null;index"`
+	Status                  ExamStructuringTaskStatus `json:"status" gorm:"type:varchar(32);not null;default:'pending'"`
+	Strategy                ExamStructuringStrategy   `json:"strategy" gorm:"type:varchar(64);not null;default:'manual_review'"`
+	SourceChunkCount        int                       `json:"source_chunk_count" gorm:"not null;default:0"`
+	StructuredQuestionCount int                       `json:"structured_question_count" gorm:"not null;default:0"`
+	ReviewRequired          bool                      `json:"review_required" gorm:"not null;default:true"`
+	ErrorMessage            string                    `json:"error_message" gorm:"type:text;not null;default:''"`
+	CreatedByUserID         string                    `json:"created_by_user_id" gorm:"type:varchar(36);not null;index"`
+	CreatedAt               time.Time                 `json:"created_at"`
+	UpdatedAt               time.Time                 `json:"updated_at"`
 }
 
 func (ExamStructuringTask) TableName() string {

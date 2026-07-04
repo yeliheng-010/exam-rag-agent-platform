@@ -130,3 +130,28 @@ func (s *examQuestionService) GetQuestionBank(ctx context.Context, tenantID uint
 	}
 	return bank, nil
 }
+
+func (s *examQuestionService) ListQuestionDetails(ctx context.Context, tenantID uint64, userID string, bankID string) ([]*types.QuestionDetail, error) {
+	bank, err := s.GetQuestionBank(ctx, tenantID, userID, bankID)
+	if err != nil {
+		return nil, err
+	}
+	return s.questionRepo.ListQuestionDetailsByBank(ctx, tenantID, bank.ID)
+}
+
+func (s *examQuestionService) GetQuestionDetail(ctx context.Context, tenantID uint64, userID string, questionID string) (*types.QuestionDetail, error) {
+	detail, err := s.questionRepo.GetQuestionDetailByIDAndTenant(ctx, tenantID, questionID)
+	if err != nil {
+		if errors.Is(err, repository.ErrQuestionNotFound) {
+			return nil, ErrExamNotFound
+		}
+		return nil, err
+	}
+	if detail == nil || detail.Question == nil {
+		return nil, ErrExamNotFound
+	}
+	if _, err := s.GetQuestionBank(ctx, tenantID, userID, detail.Question.QuestionBankID); err != nil {
+		return nil, err
+	}
+	return detail, nil
+}

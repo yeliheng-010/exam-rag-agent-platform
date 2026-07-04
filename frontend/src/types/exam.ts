@@ -5,9 +5,10 @@ export type ReviewStatus = 'private' | 'pending' | 'approved' | 'rejected'
 export type ExamResourceType = 'knowledge_base'
 export type ExamMaterialType = 'learning_material' | 'exam_paper' | 'answer_key' | 'explanation'
 export type ExamMaterialIngestStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'unknown'
-export type ExamStructuringTaskStatus = 'pending' | 'ready_for_review' | 'blocked' | 'completed' | 'failed'
+export type ExamStructuringTaskStatus = 'pending' | 'ready_for_review' | 'blocked' | 'extracting' | 'reviewing' | 'completed' | 'failed'
 export type ExamStructuringStrategy = 'manual_review'
 export type ExamTeacherApplicationStatus = 'pending' | 'approved' | 'rejected'
+export type ExamQuestionDraftStatus = 'pending_review' | 'approved' | 'rejected'
 
 export interface ExamDomain {
   id: string
@@ -155,6 +156,64 @@ export interface ExamStructuringTask {
   created_by_user_id: string
   created_at: string
   updated_at: string
+}
+
+export interface ExamQuestionDraftOption {
+  key: string
+  content: string
+}
+
+export interface ExamQuestionDraft {
+  id: string
+  tenant_id: number
+  space_id: string
+  task_id: string
+  material_id: string
+  question_bank_id: string
+  domain_id: string
+  subject_id?: string
+  source_chunk_ids: string[]
+  question_no: string
+  question_type_code: string
+  stem: string
+  options_json: ExamQuestionDraftOption[]
+  answer_json: Record<string, any>
+  explanation: string
+  difficulty: string
+  confidence: number
+  status: ExamQuestionDraftStatus
+  raw_model_output?: string
+  error_message: string
+  approved_question_id: string
+  reviewed_by_user_id?: string
+  reviewed_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ExamQuestionDraftStats {
+  total: number
+  pending_review: number
+  approved: number
+  rejected: number
+}
+
+export interface QuestionDetail {
+  question: {
+    id: string
+    question_bank_id: string
+    domain_id: string
+    subject_id?: string
+    stem: string
+    difficulty: string
+    review_status: ReviewStatus
+    status: string
+    created_at?: string
+  }
+  options: Array<{ id: string; option_key: string; content: string; sort_order: number }>
+  answers: Array<{ id: string; answer_text: string; is_correct: boolean }>
+  explanations: Array<{ id: string; explanation_text: string; source_type: string }>
+  chunk_refs: Array<{ question_id: string; chunk_id: string; ref_type: string; confidence: number }>
 }
 
 export interface ExamMaterialRegistrationResult {

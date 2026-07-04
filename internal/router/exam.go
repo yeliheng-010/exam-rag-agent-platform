@@ -12,6 +12,7 @@ func RegisterExamRoutes(
 	teacherApplicationHandler *handler.ExamTeacherApplicationHandler,
 	classHandler *handler.ExamClassHandler,
 	questionHandler *handler.ExamQuestionHandler,
+	questionDraftHandler *handler.ExamQuestionDraftHandler,
 	resourceHandler *handler.ExamResourceHandler,
 	materialHandler *handler.ExamMaterialHandler,
 	g *rbacGuards,
@@ -41,6 +42,7 @@ func RegisterExamRoutes(
 		exam.GET("/question-banks", g.Contributor(), questionHandler.ListQuestionBanks)
 		exam.POST("/question-banks", g.Contributor(), questionHandler.CreateQuestionBank)
 		exam.GET("/question-banks/:bank_id", g.Contributor(), questionHandler.GetQuestionBank)
+		exam.GET("/question-banks/:bank_id/questions", g.Viewer(), questionHandler.ListQuestionDetails)
 
 		exam.GET("/resources", g.Viewer(), resourceHandler.ListResources)
 		exam.POST("/resources/knowledge-bases/:kb_id/bind", g.Contributor(), resourceHandler.BindKnowledgeBase)
@@ -50,5 +52,10 @@ func RegisterExamRoutes(
 		exam.POST("/materials", g.Contributor(), materialHandler.RegisterMaterial)
 		exam.GET("/structuring-tasks", g.Viewer(), materialHandler.ListStructuringTasks)
 		exam.POST("/materials/:material_id/structuring-tasks", g.Contributor(), materialHandler.CreateStructuringTask)
+		exam.POST("/structuring-tasks/:task_id/extract", g.Contributor(), questionDraftHandler.ExtractDrafts)
+		exam.GET("/structuring-tasks/:task_id/drafts", g.Contributor(), questionDraftHandler.ListDrafts)
+		exam.PATCH("/question-drafts/:draft_id", g.Contributor(), questionDraftHandler.UpdateDraft)
+		exam.POST("/question-drafts/:draft_id/approve", g.Contributor(), questionDraftHandler.ApproveDraft)
+		exam.POST("/question-drafts/:draft_id/reject", g.Contributor(), questionDraftHandler.RejectDraft)
 	}
 }

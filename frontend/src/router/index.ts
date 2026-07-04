@@ -123,6 +123,12 @@ const router = createRouter({
           meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
         },
         {
+          path: "structuring-tasks/:taskId/review",
+          name: "questionDraftReview",
+          component: () => import("../views/question-draft/QuestionDraftReview.vue"),
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
+        },
+        {
           path: "billing",
           name: "billingHome",
           component: () => import("../views/billing/BillingHome.vue"),

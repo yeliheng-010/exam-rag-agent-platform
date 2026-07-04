@@ -66,3 +66,18 @@ func (h *ExamQuestionHandler) GetQuestionBank(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": bank})
 }
+
+func (h *ExamQuestionHandler) ListQuestionDetails(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(types.UserIDContextKey.String())
+	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+	bankID := c.Param("bank_id")
+
+	items, err := h.questionService.ListQuestionDetails(ctx, tenantID, userID, bankID)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to list questions: %v", err)
+		writeExamError(c, err, "Failed to list questions")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
+}

@@ -243,6 +243,14 @@ func (s *fakeExamMaterialQuestionService) GetQuestionBank(_ context.Context, ten
 	return &cp, nil
 }
 
+func (s *fakeExamMaterialQuestionService) ListQuestionDetails(context.Context, uint64, string, string) ([]*types.QuestionDetail, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *fakeExamMaterialQuestionService) GetQuestionDetail(context.Context, uint64, string, string) (*types.QuestionDetail, error) {
+	return nil, errors.New("not implemented")
+}
+
 type fakeExamMaterialResourceService struct {
 	bindCalls []types.BindKnowledgeBaseResourceRequest
 }
