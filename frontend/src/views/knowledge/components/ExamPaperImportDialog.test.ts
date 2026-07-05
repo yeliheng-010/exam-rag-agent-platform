@@ -24,3 +24,12 @@ test('registers material, extracts drafts, then opens review page', () => {
   assert.match(questionDraftApi, /QUESTION_DRAFT_EXTRACTION_TIMEOUT_MS/)
   assert.match(questionDraftApi, /timeout:\s*QUESTION_DRAFT_EXTRACTION_TIMEOUT_MS/)
 })
+
+test('makes the target question bank explicit and reselects it from paper title', () => {
+  assert.match(dialog, /selectedBankNotice/)
+  assert.match(dialog, /将写入题库/)
+  assert.match(dialog, /自动创建新题库/)
+  assert.match(dialog, /reselectQuestionBank/)
+  assert.match(dialog, /questionBankMatchScore/)
+  assert.doesNotMatch(dialog, /const pickQuestionBank = \(items: QuestionBank\[\]\) => items\[0\]/)
+})

@@ -39,10 +39,17 @@
           </div>
 
           <t-form-item label="目标题库" name="question_bank_id">
-            <t-select v-model="form.question_bank_id" clearable placeholder="不选择则自动创建题库">
+            <t-select
+              v-model="form.question_bank_id"
+              clearable
+              placeholder="不选择则自动创建题库"
+              @change="markQuestionBankChoiceManual"
+            >
               <t-option v-for="bank in matchingBanks" :key="bank.id" :value="bank.id" :label="bank.name" />
             </t-select>
           </t-form-item>
+
+          <t-alert theme="info" :message="selectedBankNotice" />
 
           <t-form-item label="试卷标题" name="title">
             <t-input v-model="form.title" :maxlength="255" />
@@ -101,6 +108,7 @@ const router = useRouter()
 const formRef = ref<FormInstanceFunctions>()
 const loading = ref(false)
 const importing = ref(false)
+const questionBankChoiceManual = ref(false)
 const spaces = ref<ExamSpace[]>([])
 const domains = ref<ExamDomain[]>([])
 const subjectsByDomain = ref<Record<string, ExamSubject[]>>({})
@@ -136,6 +144,15 @@ const matchingBanks = computed(() => questionBanks.value.filter((bank) => {
   if (form.value.subject_id && bank.subject_id && bank.subject_id !== form.value.subject_id) return false
   return true
 }))
+const selectedQuestionBank = computed(() => matchingBanks.value.find(bank => bank.id === form.value.question_bank_id))
+const selectedSpace = computed(() => spaces.value.find(space => space.id === form.value.space_id))
+const selectedBankNotice = computed(() => {
+  const spaceName = selectedSpace.value?.name || '当前空间'
+  if (selectedQuestionBank.value) {
+    return `将写入题库「${selectedQuestionBank.value.name}」｜空间：${spaceName}`
+  }
+  return `未选择题库，将在「${spaceName}」自动创建新题库`
+})
 
 const spaceLabel = (space: ExamSpace) => {
   const typeMap: Record<string, string> = { personal: '个人', class: '班级', public: '公共' }
@@ -174,7 +191,7 @@ const resetFormDefaults = async () => {
     paper_type: title.includes('高考') ? '高考英语真题' : '',
   }
   if (form.value.space_id) await loadBanks(form.value.space_id)
-  form.value.question_bank_id = pickQuestionBank(matchingBanks.value)?.id
+  reselectQuestionBank(true)
 }
 
 const loadData = async () => {
@@ -243,7 +260,39 @@ const pickSubject = (items: ExamSubject[], title: string) => {
   if (normalized.includes('reading')) return items.find(item => item.code === 'reading') || items[0]
   return items[0]
 }
-const pickQuestionBank = (items: QuestionBank[]) => items[0]
+const normalizeMatchText = (value: string) => value.toLowerCase().replace(/\s+/g, '')
+const questionBankMatchScore = (bank: QuestionBank, title: string) => {
+  const normalizedTitle = normalizeMatchText(title)
+  const normalizedName = normalizeMatchText(bank.name)
+  let score = 0
+  if (form.value.subject_id && bank.subject_id === form.value.subject_id) score += 40
+  if (normalizedName && normalizedTitle.includes(normalizedName)) score += 30
+  if (normalizedTitle && normalizedName.includes(normalizedTitle)) score += 30
+  for (const keyword of ['高考', '英语', '雅思', '真题', '全国', '阅读']) {
+    if (normalizedTitle.includes(keyword) && normalizedName.includes(keyword)) score += 8
+  }
+  const year = inferYear(title)
+  if (year && normalizedName.includes(String(year))) score += 12
+  return score
+}
+const pickQuestionBank = (items: QuestionBank[], title: string) => {
+  if (!items.length) return undefined
+  return [...items].sort((a, b) => {
+    const scoreDiff = questionBankMatchScore(b, title) - questionBankMatchScore(a, title)
+    if (scoreDiff !== 0) return scoreDiff
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })[0]
+}
+const markQuestionBankChoiceManual = () => {
+  questionBankChoiceManual.value = true
+}
+const reselectQuestionBank = (force = false) => {
+  if (!force && questionBankChoiceManual.value && (!form.value.question_bank_id || selectedQuestionBank.value)) {
+    return
+  }
+  form.value.question_bank_id = pickQuestionBank(matchingBanks.value, form.value.title)?.id
+  questionBankChoiceManual.value = false
+}
 const inferYear = (title: string) => {
   const match = title.match(/20\d{2}/)
   return match ? Number(match[0]) : undefined
@@ -255,10 +304,24 @@ watch(() => props.visible, (visible) => {
 
 watch(() => form.value.domain_id, (domainId) => {
   if (domainId) void loadSubjects(domainId)
+  questionBankChoiceManual.value = false
+  reselectQuestionBank()
 })
 
-watch(() => form.value.space_id, (spaceId) => {
-  if (props.visible) void loadBanks(spaceId)
+watch(() => form.value.subject_id, () => {
+  questionBankChoiceManual.value = false
+  reselectQuestionBank()
+})
+
+watch(() => form.value.title, () => {
+  reselectQuestionBank()
+})
+
+watch(() => form.value.space_id, async (spaceId) => {
+  if (!props.visible) return
+  questionBankChoiceManual.value = false
+  await loadBanks(spaceId)
+  reselectQuestionBank()
 })
 </script>
 
