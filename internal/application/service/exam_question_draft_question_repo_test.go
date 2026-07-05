@@ -36,3 +36,15 @@ func (w *stubExamQuestionWriter) GetQuestionDetailByIDAndTenant(_ context.Contex
 	}
 	return nil, repository.ErrQuestionNotFound
 }
+
+func (w *stubExamQuestionWriter) CreateQuestionGroupDetail(context.Context, *types.QuestionGroupDetail) error {
+	return nil
+}
+
+func (w *stubExamQuestionWriter) ListQuestionGroupDetailsByBank(context.Context, uint64, string) ([]*types.QuestionGroupDetail, error) {
+	return nil, nil
+}
+
+func (w *stubExamQuestionWriter) GetQuestionGroupDetailByIDAndTenant(context.Context, uint64, string) (*types.QuestionGroupDetail, error) {
+	return nil, repository.ErrQuestionNotFound
+}

@@ -12,6 +12,8 @@ type ExamQuestionService interface {
 	GetQuestionBank(ctx context.Context, tenantID uint64, userID string, bankID string) (*types.QuestionBank, error)
 	ListQuestionDetails(ctx context.Context, tenantID uint64, userID string, bankID string) ([]*types.QuestionDetail, error)
 	GetQuestionDetail(ctx context.Context, tenantID uint64, userID string, questionID string) (*types.QuestionDetail, error)
+	ListQuestionGroupDetails(ctx context.Context, tenantID uint64, userID string, bankID string) ([]*types.QuestionGroupDetail, error)
+	GetQuestionGroupDetail(ctx context.Context, tenantID uint64, userID string, groupID string) (*types.QuestionGroupDetail, error)
 }
 
 type ExamQuestionRepository interface {
@@ -21,4 +23,7 @@ type ExamQuestionRepository interface {
 	CreateQuestionDetail(ctx context.Context, detail *types.QuestionDetail) error
 	ListQuestionDetailsByBank(ctx context.Context, tenantID uint64, bankID string) ([]*types.QuestionDetail, error)
 	GetQuestionDetailByIDAndTenant(ctx context.Context, tenantID uint64, questionID string) (*types.QuestionDetail, error)
+	CreateQuestionGroupDetail(ctx context.Context, detail *types.QuestionGroupDetail) error
+	ListQuestionGroupDetailsByBank(ctx context.Context, tenantID uint64, bankID string) ([]*types.QuestionGroupDetail, error)
+	GetQuestionGroupDetailByIDAndTenant(ctx context.Context, tenantID uint64, groupID string) (*types.QuestionGroupDetail, error)
 }

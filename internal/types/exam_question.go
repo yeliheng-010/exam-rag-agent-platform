@@ -78,7 +78,7 @@ type Question struct {
 	QuestionNo       string           `json:"question_no" gorm:"type:varchar(64);not null;default:''"`
 	OrderInGroup     int              `json:"order_in_group" gorm:"not null;default:0"`
 	Stem             string           `json:"stem" gorm:"type:text;not null"`
-	QuestionMetadata JSONMap          `json:"question_metadata" gorm:"type:jsonb;not null"`
+	QuestionMetadata JSONMap          `json:"question_metadata" gorm:"type:jsonb;not null;default:'{}'"`
 	Difficulty       string           `json:"difficulty" gorm:"type:varchar(32);not null;default:'unknown'"`
 	SourceYear       *int             `json:"source_year,omitempty"`
 	SourceRegion     string           `json:"source_region" gorm:"type:varchar(128);not null;default:''"`
