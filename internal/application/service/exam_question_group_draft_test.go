@@ -47,6 +47,51 @@ func TestExamQuestionGroupDraftService_ExtractWritesGroupDrafts(t *testing.T) {
 	}
 }
 
+func TestExamQuestionGroupDraftService_ExtractAllowsCompletedLegacyTaskWithoutGroupDrafts(t *testing.T) {
+	ctx := context.Background()
+	repo := newReadyQuestionGroupDraftRepo()
+	repo.task.Status = types.ExamStructuringTaskStatusCompleted
+	extractor := &stubQuestionGroupExtractor{candidates: []*types.ExamQuestionGroupDraftCandidate{newReadingGroupCandidate()}}
+	svc := newTestExamQuestionGroupDraftService(repo, &stubExamQuestionDraftSpace{canRead: true, canWrite: true}, &stubExamQuestionDraftChunkReader{
+		chunks: []*types.Chunk{{ID: "chunk-1", KnowledgeID: "knowledge-1", Content: "Passage"}},
+	}, extractor, nil)
+
+	result, err := svc.ExtractDrafts(ctx, 10000, "teacher-1", "task-1", &types.ExtractExamQuestionGroupDraftsRequest{})
+
+	if err != nil {
+		t.Fatalf("ExtractDrafts returned error: %v", err)
+	}
+	if len(result.Drafts) != 1 {
+		t.Fatalf("draft count = %d, want 1", len(result.Drafts))
+	}
+	if repo.updatedStatus != types.ExamStructuringTaskStatusReviewing {
+		t.Fatalf("task status = %s, want reviewing", repo.updatedStatus)
+	}
+}
+
+func TestExamQuestionGroupDraftService_ExtractRejectsCompletedTaskWithStoredGroup(t *testing.T) {
+	ctx := context.Background()
+	repo := newReadyQuestionGroupDraftRepo()
+	repo.task.Status = types.ExamStructuringTaskStatusCompleted
+	questionRepo := &stubQuestionGroupWriter{
+		created: []*types.QuestionGroupDetail{{
+			Group: &types.QuestionGroup{ID: "group-1", QuestionBankID: "bank-1"},
+		}},
+	}
+	svc := newTestExamQuestionGroupDraftService(repo, &stubExamQuestionDraftSpace{canRead: true, canWrite: true}, &stubExamQuestionDraftChunkReader{
+		chunks: []*types.Chunk{{ID: "chunk-1", KnowledgeID: "knowledge-1", Content: "Passage"}},
+	}, &stubQuestionGroupExtractor{candidates: []*types.ExamQuestionGroupDraftCandidate{newReadingGroupCandidate()}}, questionRepo)
+
+	_, err := svc.ExtractDrafts(ctx, 10000, "teacher-1", "task-1", &types.ExtractExamQuestionGroupDraftsRequest{})
+
+	if !errors.Is(err, ErrExamInvalidRequest) {
+		t.Fatalf("ExtractDrafts error = %v, want ErrExamInvalidRequest", err)
+	}
+	if len(repo.createdDrafts) != 0 {
+		t.Fatalf("created draft count = %d, want 0", len(repo.createdDrafts))
+	}
+}
+
 func TestExamQuestionGroupDraftService_ApproveCreatesOfficialGroup(t *testing.T) {
 	ctx := context.Background()
 	repo := newReadyQuestionGroupDraftRepo()

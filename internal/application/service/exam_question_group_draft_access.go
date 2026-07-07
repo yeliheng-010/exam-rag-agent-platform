@@ -15,7 +15,11 @@ func (s *examQuestionGroupDraftService) prepareExtraction(ctx context.Context, t
 	if err != nil {
 		return nil, nil, err
 	}
-	if task.Status != types.ExamStructuringTaskStatusReadyForReview && task.Status != types.ExamStructuringTaskStatusFailed {
+	canExtract, err := s.canExtractQuestionGroups(ctx, tenantID, task)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !canExtract {
 		return nil, nil, ErrExamInvalidRequest
 	}
 	material, err := s.materialRepo.GetMaterialByIDAndTenant(ctx, task.MaterialID, tenantID)
@@ -29,6 +33,48 @@ func (s *examQuestionGroupDraftService) prepareExtraction(ctx context.Context, t
 		return nil, nil, ErrExamInvalidRequest
 	}
 	return task, material, nil
+}
+
+func (s *examQuestionGroupDraftService) canExtractQuestionGroups(ctx context.Context, tenantID uint64, task *types.ExamStructuringTask) (bool, error) {
+	switch task.Status {
+	case types.ExamStructuringTaskStatusReadyForReview, types.ExamStructuringTaskStatusFailed:
+		return true, nil
+	case types.ExamStructuringTaskStatusCompleted:
+		return s.canExtractCompletedLegacyTask(ctx, tenantID, task)
+	default:
+		return false, nil
+	}
+}
+
+func (s *examQuestionGroupDraftService) canExtractCompletedLegacyTask(ctx context.Context, tenantID uint64, task *types.ExamStructuringTask) (bool, error) {
+	stats, err := s.draftRepo.CountDraftsByTask(ctx, tenantID, task.ID)
+	if err != nil {
+		return false, err
+	}
+	if stats.Total > 0 {
+		return false, nil
+	}
+	hasStored, err := s.hasStoredQuestionGroups(ctx, tenantID, task.QuestionBankID)
+	if err != nil {
+		return false, err
+	}
+	return !hasStored, nil
+}
+
+func (s *examQuestionGroupDraftService) hasStoredQuestionGroups(ctx context.Context, tenantID uint64, bankID string) (bool, error) {
+	details, err := s.questionRepo.ListQuestionGroupDetailsByBank(ctx, tenantID, bankID)
+	if err != nil {
+		return false, err
+	}
+	for _, detail := range details {
+		if detail == nil || detail.Group == nil {
+			continue
+		}
+		if !strings.HasPrefix(detail.Group.ID, "legacy-") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *examQuestionGroupDraftService) getTaskForRead(ctx context.Context, tenantID uint64, userID string, taskID string) (*types.ExamStructuringTask, error) {
