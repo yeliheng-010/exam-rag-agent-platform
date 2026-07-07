@@ -15,7 +15,15 @@ test('question bank detail consumes official question group API', () => {
 
 test('question bank detail renders group cards with nested questions', () => {
   assert.match(questionBankDetail, /question-group-card/)
-  assert.match(questionBankDetail, /group\.group\.material_text/)
+  assert.match(questionBankDetail, /question-group-material/)
+  assert.match(questionBankDetail, /toggleMaterial/)
   assert.match(questionBankDetail, /group\.assets/)
   assert.match(questionBankDetail, /group\.questions/)
+})
+
+test('question bank detail renders full question review content', () => {
+  assert.match(questionBankDetail, /item\.options/)
+  assert.match(questionBankDetail, /question-option/)
+  assert.match(questionBankDetail, /isCorrectOption/)
+  assert.match(questionBankDetail, /explanationSummary/)
 })

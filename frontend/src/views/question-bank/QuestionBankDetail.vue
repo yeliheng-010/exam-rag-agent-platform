@@ -47,9 +47,31 @@
                 </t-tag>
               </header>
 
-              <p v-if="group.group.material_text" class="question-group-card__material">
-                {{ group.group.material_text }}
-              </p>
+              <section v-if="group.group.material_text" class="question-group-material">
+                <div class="question-group-material__head">
+                  <div>
+                    <h5>{{ materialTitle(group) }}</h5>
+                    <span>{{ materialMeta(group) }}</span>
+                  </div>
+                  <t-button
+                    v-if="canToggleMaterial(group)"
+                    variant="text"
+                    size="small"
+                    @click="toggleMaterial(group)"
+                  >
+                    <template #icon>
+                      <t-icon :name="isMaterialExpanded(group) ? 'chevron-up' : 'chevron-down'" />
+                    </template>
+                    {{ isMaterialExpanded(group) ? '收起原文' : '展开全文' }}
+                  </t-button>
+                </div>
+                <div
+                  class="question-group-material__body"
+                  :class="{ 'is-expanded': isMaterialExpanded(group), 'is-collapsible': canToggleMaterial(group) }"
+                >
+                  {{ group.group.material_text }}
+                </div>
+              </section>
 
               <div v-if="group.assets?.length" class="question-group-assets">
                 <div v-for="asset in group.assets" :key="asset.id" class="question-group-asset">
@@ -58,11 +80,30 @@
               </div>
 
               <div class="question-items">
-                <div v-for="item in group.questions" :key="item.question.id" class="question-item">
-                  <strong>{{ questionNo(item) }}</strong>
-                  <span>{{ item.question.stem }}</span>
-                  <small>答案：{{ answerSummary(item) }}</small>
-                </div>
+                <article v-for="item in group.questions" :key="item.question.id" class="question-item">
+                  <div class="question-item__no">{{ questionNo(item) }}</div>
+                  <div class="question-item__content">
+                    <p class="question-stem">{{ item.question.stem }}</p>
+                    <div v-if="item.options?.length" class="question-options">
+                      <div
+                        v-for="option in item.options"
+                        :key="option.id || `${item.question.id}-${option.option_key}`"
+                        class="question-option"
+                        :class="{ 'is-correct': isCorrectOption(item, option.option_key) }"
+                      >
+                        <span class="question-option__key">{{ option.option_key }}</span>
+                        <span class="question-option__content">{{ option.content }}</span>
+                        <t-tag v-if="isCorrectOption(item, option.option_key)" size="small" theme="success" variant="light">
+                          正确答案
+                        </t-tag>
+                      </div>
+                    </div>
+                    <div class="question-answer">
+                      <span>答案：{{ answerSummary(item) }}</span>
+                      <span v-if="explanationSummary(item)">解析：{{ explanationSummary(item) }}</span>
+                    </div>
+                  </div>
+                </article>
               </div>
             </article>
           </div>
@@ -98,6 +139,10 @@ const router = useRouter()
 const loading = ref(false)
 const bank = ref<QuestionBank | null>(null)
 const questionGroups = ref<QuestionGroupDetail[]>([])
+const expandedMaterials = ref<Record<string, boolean>>({})
+
+const materialToggleLength = 420
+const materialToggleLines = 8
 
 const reviewLabel = (status: ReviewStatus) => {
   const map: Record<ReviewStatus, string> = {
@@ -124,8 +169,53 @@ const questionNo = (item: QuestionDetail) => {
   return item.question.question_no || String(item.question.order_in_group || '-')
 }
 
+const answerValues = (item: QuestionDetail) => {
+  return item.answers?.map(answer => answer.answer_text).filter(Boolean) || []
+}
+
 const answerSummary = (item: QuestionDetail) => {
-  return item.answers?.map(answer => answer.answer_text).filter(Boolean).join('，') || '-'
+  return answerValues(item).join('，') || '-'
+}
+
+const answerKeys = (item: QuestionDetail) => {
+  return answerValues(item)
+    .flatMap(value => value.toUpperCase().split(/[\s,，、;；/]+/))
+    .map(value => value.trim())
+    .filter(Boolean)
+}
+
+const isCorrectOption = (item: QuestionDetail, optionKey: string) => {
+  return answerKeys(item).includes(optionKey.toUpperCase())
+}
+
+const explanationSummary = (item: QuestionDetail) => {
+  return item.explanations?.map(explanation => explanation.explanation_text).filter(Boolean).join('；') || ''
+}
+
+const canToggleMaterial = (group: QuestionGroupDetail) => {
+  const text = group.group.material_text || ''
+  return text.length > materialToggleLength || text.split(/\r?\n/).length > materialToggleLines
+}
+
+const isMaterialExpanded = (group: QuestionGroupDetail) => {
+  return Boolean(expandedMaterials.value[group.group.id])
+}
+
+const toggleMaterial = (group: QuestionGroupDetail) => {
+  expandedMaterials.value = {
+    ...expandedMaterials.value,
+    [group.group.id]: !expandedMaterials.value[group.group.id],
+  }
+}
+
+const materialTitle = (group: QuestionGroupDetail) => {
+  if (group.group.group_type === 'reading_passage') return '阅读原文'
+  if (group.group.group_type === 'math_problem') return '题干材料'
+  return '共享材料'
+}
+
+const materialMeta = (group: QuestionGroupDetail) => {
+  return group.group.source_chunk_ids?.length ? `引用 ${group.group.source_chunk_ids.length} 个 chunk` : '已沉淀为题组材料'
 }
 
 const loadData = async () => {
