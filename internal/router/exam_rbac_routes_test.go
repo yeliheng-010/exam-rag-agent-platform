@@ -93,6 +93,23 @@ func TestExamQuestionDraftRouteGuardSourceMatrix(t *testing.T) {
 	})
 }
 
+func TestExamQuestionGroupDraftRouteGuardSourceMatrix(t *testing.T) {
+	sourceBytes, err := os.ReadFile("exam.go")
+	if err != nil {
+		t.Fatalf("read exam.go: %v", err)
+	}
+	source := string(sourceBytes)
+
+	mustContainAll(t, source, []string{
+		`exam.GET("/question-banks/:bank_id/question-groups", g.Viewer(), questionHandler.ListQuestionGroupDetails)`,
+		`exam.POST("/structuring-tasks/:task_id/group-extract", g.Contributor(), questionGroupDraftHandler.ExtractDrafts)`,
+		`exam.GET("/structuring-tasks/:task_id/group-drafts", g.Contributor(), questionGroupDraftHandler.ListDrafts)`,
+		`exam.PATCH("/question-group-drafts/:draft_id", g.Contributor(), questionGroupDraftHandler.UpdateDraft)`,
+		`exam.POST("/question-group-drafts/:draft_id/approve", g.Contributor(), questionGroupDraftHandler.ApproveDraft)`,
+		`exam.POST("/question-group-drafts/:draft_id/reject", g.Contributor(), questionGroupDraftHandler.RejectDraft)`,
+	})
+}
+
 func TestExamRAGRouteGuardSourceMatrix(t *testing.T) {
 	sourceBytes, err := os.ReadFile("router.go")
 	if err != nil {

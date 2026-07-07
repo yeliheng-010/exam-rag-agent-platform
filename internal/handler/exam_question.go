@@ -81,3 +81,18 @@ func (h *ExamQuestionHandler) ListQuestionDetails(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
 }
+
+func (h *ExamQuestionHandler) ListQuestionGroupDetails(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(types.UserIDContextKey.String())
+	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+	bankID := c.Param("bank_id")
+
+	groups, err := h.questionService.ListQuestionGroupDetails(ctx, tenantID, userID, bankID)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to list question groups: %v", err)
+		writeExamError(c, err, "Failed to list question groups")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": groups})
+}

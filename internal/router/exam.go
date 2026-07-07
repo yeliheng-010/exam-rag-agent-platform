@@ -13,6 +13,7 @@ func RegisterExamRoutes(
 	classHandler *handler.ExamClassHandler,
 	questionHandler *handler.ExamQuestionHandler,
 	questionDraftHandler *handler.ExamQuestionDraftHandler,
+	questionGroupDraftHandler *handler.ExamQuestionGroupDraftHandler,
 	resourceHandler *handler.ExamResourceHandler,
 	materialHandler *handler.ExamMaterialHandler,
 	g *rbacGuards,
@@ -43,6 +44,7 @@ func RegisterExamRoutes(
 		exam.POST("/question-banks", g.Contributor(), questionHandler.CreateQuestionBank)
 		exam.GET("/question-banks/:bank_id", g.Contributor(), questionHandler.GetQuestionBank)
 		exam.GET("/question-banks/:bank_id/questions", g.Viewer(), questionHandler.ListQuestionDetails)
+		exam.GET("/question-banks/:bank_id/question-groups", g.Viewer(), questionHandler.ListQuestionGroupDetails)
 
 		exam.GET("/resources", g.Viewer(), resourceHandler.ListResources)
 		exam.POST("/resources/knowledge-bases/:kb_id/bind", g.Contributor(), resourceHandler.BindKnowledgeBase)
@@ -54,8 +56,13 @@ func RegisterExamRoutes(
 		exam.POST("/materials/:material_id/structuring-tasks", g.Contributor(), materialHandler.CreateStructuringTask)
 		exam.POST("/structuring-tasks/:task_id/extract", g.Contributor(), questionDraftHandler.ExtractDrafts)
 		exam.GET("/structuring-tasks/:task_id/drafts", g.Contributor(), questionDraftHandler.ListDrafts)
+		exam.POST("/structuring-tasks/:task_id/group-extract", g.Contributor(), questionGroupDraftHandler.ExtractDrafts)
+		exam.GET("/structuring-tasks/:task_id/group-drafts", g.Contributor(), questionGroupDraftHandler.ListDrafts)
 		exam.PATCH("/question-drafts/:draft_id", g.Contributor(), questionDraftHandler.UpdateDraft)
 		exam.POST("/question-drafts/:draft_id/approve", g.Contributor(), questionDraftHandler.ApproveDraft)
 		exam.POST("/question-drafts/:draft_id/reject", g.Contributor(), questionDraftHandler.RejectDraft)
+		exam.PATCH("/question-group-drafts/:draft_id", g.Contributor(), questionGroupDraftHandler.UpdateDraft)
+		exam.POST("/question-group-drafts/:draft_id/approve", g.Contributor(), questionGroupDraftHandler.ApproveDraft)
+		exam.POST("/question-group-drafts/:draft_id/reject", g.Contributor(), questionGroupDraftHandler.RejectDraft)
 	}
 }
