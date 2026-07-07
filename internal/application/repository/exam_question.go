@@ -209,6 +209,78 @@ func (r *examQuestionRepository) GetQuestionGroupDetailByIDAndTenant(ctx context
 	return detail, nil
 }
 
+func (r *examQuestionRepository) ListQuestionGroupPracticeSummaries(
+	ctx context.Context,
+	tenantID uint64,
+	spaceIDs []string,
+	filter types.ListPracticeQuestionGroupsFilter,
+) ([]*types.QuestionGroupPracticeSummary, error) {
+	if len(spaceIDs) == 0 {
+		return []*types.QuestionGroupPracticeSummary{}, nil
+	}
+	limit := filter.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 24
+	}
+
+	query := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND space_id IN ? AND status = ?", tenantID, spaceIDs, "active")
+	if filter.DomainID != "" {
+		query = query.Where("domain_id = ?", filter.DomainID)
+	}
+	if filter.SubjectID != "" {
+		query = query.Where("subject_id = ?", filter.SubjectID)
+	}
+	if filter.SpaceID != "" {
+		query = query.Where("space_id = ?", filter.SpaceID)
+	}
+
+	var groups []*types.QuestionGroup
+	if err := query.Order("created_at DESC").Limit(limit).Find(&groups).Error; err != nil {
+		return nil, err
+	}
+	if len(groups) == 0 {
+		return []*types.QuestionGroupPracticeSummary{}, nil
+	}
+
+	bankIDs := make([]string, 0, len(groups))
+	groupIDs := make([]string, 0, len(groups))
+	for _, group := range groups {
+		if group == nil {
+			continue
+		}
+		bankIDs = append(bankIDs, group.QuestionBankID)
+		groupIDs = append(groupIDs, group.ID)
+	}
+
+	bankNames, err := r.questionBankNames(ctx, tenantID, bankIDs)
+	if err != nil {
+		return nil, err
+	}
+	counts, err := r.questionCountsByGroup(ctx, tenantID, groupIDs)
+	if err != nil {
+		return nil, err
+	}
+	assetsByGroup, err := r.questionGroupAssetsByGroup(ctx, tenantID, groupIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*types.QuestionGroupPracticeSummary, 0, len(groups))
+	for _, group := range groups {
+		if group == nil {
+			continue
+		}
+		out = append(out, &types.QuestionGroupPracticeSummary{
+			Group:         group,
+			BankName:      bankNames[group.QuestionBankID],
+			QuestionCount: counts[group.ID],
+			Assets:        assetsByGroup[group.ID],
+		})
+	}
+	return out, nil
+}
+
 func (r *examQuestionRepository) listStoredQuestionGroups(ctx context.Context, tenantID uint64, bankID string) ([]*types.QuestionGroup, error) {
 	var groups []*types.QuestionGroup
 	err := r.db.WithContext(ctx).
@@ -269,6 +341,68 @@ func (r *examQuestionRepository) listQuestionsByGroupState(ctx context.Context, 
 	}
 	err := query.Order("created_at DESC").Find(&questions).Error
 	return questions, err
+}
+
+func (r *examQuestionRepository) questionBankNames(ctx context.Context, tenantID uint64, bankIDs []string) (map[string]string, error) {
+	names := make(map[string]string, len(bankIDs))
+	if len(bankIDs) == 0 {
+		return names, nil
+	}
+	var banks []*types.QuestionBank
+	if err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND id IN ?", tenantID, bankIDs).
+		Find(&banks).Error; err != nil {
+		return nil, err
+	}
+	for _, bank := range banks {
+		if bank != nil {
+			names[bank.ID] = bank.Name
+		}
+	}
+	return names, nil
+}
+
+func (r *examQuestionRepository) questionCountsByGroup(ctx context.Context, tenantID uint64, groupIDs []string) (map[string]int, error) {
+	counts := make(map[string]int, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return counts, nil
+	}
+	var rows []struct {
+		GroupID string
+		Count   int
+	}
+	if err := r.db.WithContext(ctx).
+		Model(&types.Question{}).
+		Select("group_id, COUNT(*) AS count").
+		Where("tenant_id = ? AND group_id IN ? AND status <> ?", tenantID, groupIDs, "deleted").
+		Group("group_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		counts[row.GroupID] = row.Count
+	}
+	return counts, nil
+}
+
+func (r *examQuestionRepository) questionGroupAssetsByGroup(ctx context.Context, tenantID uint64, groupIDs []string) (map[string][]*types.QuestionGroupAsset, error) {
+	assetsByGroup := make(map[string][]*types.QuestionGroupAsset, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return assetsByGroup, nil
+	}
+	var assets []*types.QuestionGroupAsset
+	if err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND group_id IN ?", tenantID, groupIDs).
+		Order("sort_order ASC").
+		Find(&assets).Error; err != nil {
+		return nil, err
+	}
+	for _, asset := range assets {
+		if asset != nil {
+			assetsByGroup[asset.GroupID] = append(assetsByGroup[asset.GroupID], asset)
+		}
+	}
+	return assetsByGroup, nil
 }
 
 func (r *examQuestionRepository) loadQuestionGroupsChildren(ctx context.Context, details []*types.QuestionGroupDetail) error {

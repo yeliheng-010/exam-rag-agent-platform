@@ -297,3 +297,17 @@ func (w *stubQuestionGroupWriter) GetQuestionGroupDetailByIDAndTenant(_ context.
 	}
 	return nil, repository.ErrQuestionNotFound
 }
+
+func (w *stubQuestionGroupWriter) ListQuestionGroupPracticeSummaries(context.Context, uint64, []string, types.ListPracticeQuestionGroupsFilter) ([]*types.QuestionGroupPracticeSummary, error) {
+	out := make([]*types.QuestionGroupPracticeSummary, 0, len(w.created))
+	for _, detail := range w.created {
+		if detail == nil || detail.Group == nil {
+			continue
+		}
+		out = append(out, &types.QuestionGroupPracticeSummary{
+			Group:         detail.Group,
+			QuestionCount: len(detail.Questions),
+		})
+	}
+	return out, nil
+}

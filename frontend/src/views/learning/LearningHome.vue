@@ -106,6 +106,35 @@
         <t-empty v-else-if="!resourcesLoading" size="small" description="暂无可用班级知识库" />
       </section>
 
+      <section class="panel practice-panel">
+        <div class="panel-title">
+          <div>
+            <h3>题组练习</h3>
+            <p>按老师确认后的正式题组进行练习，提交后查看答案、解析和证据。</p>
+          </div>
+          <t-button variant="text" :loading="practiceLoading" @click="loadPracticeGroups">刷新</t-button>
+        </div>
+        <div v-if="practiceGroups.length" class="practice-grid">
+          <div v-for="item in practiceGroups" :key="item.group.id" class="practice-card">
+            <div class="practice-card__main">
+              <div>
+                <strong>{{ practiceTitle(item) }}</strong>
+                <span>{{ item.bank_name || '题库' }} · {{ groupTypeLabel(item.group.group_type) }} · {{ item.question_count }} 题</span>
+              </div>
+              <t-tag variant="light">{{ practiceProgress(item) }}</t-tag>
+            </div>
+            <div class="practice-card__material">
+              {{ item.group.material_text || item.group.title || '已确认题组' }}
+            </div>
+            <div class="practice-card__footer">
+              <span>{{ domainName(item.group.domain_id) }}</span>
+              <t-button size="small" theme="primary" @click="goPractice(item.group.id)">开始练习</t-button>
+            </div>
+          </div>
+        </div>
+        <t-empty v-else-if="!practiceLoading" size="small" description="暂无可练题组" />
+      </section>
+
       <section class="panel">
         <div class="panel-title">
           <div>
@@ -147,23 +176,26 @@ import { ensurePersonalExamSpace } from '@/api/exam/space'
 import { listExamClasses } from '@/api/exam/class'
 import { listQuestionBanks } from '@/api/exam/question-bank'
 import { listExamResources } from '@/api/exam/resource'
+import { listPracticeQuestionGroups } from '@/api/exam/practice'
 import { listKnowledgeBases } from '@/api/knowledge-base'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import type { KnowledgeBaseInfo } from '@/api/auth'
-import type { ExamClass, ExamDomain, ExamMaterialType, ExamSpace, ExamSpaceResource, QuestionBank, ReviewStatus } from '@/types/exam'
+import type { ExamClass, ExamDomain, ExamMaterialType, ExamSpace, ExamSpaceResource, QuestionBank, QuestionGroupPracticeSummary, QuestionGroupType, ReviewStatus } from '@/types/exam'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const loading = ref(false)
 const resourcesLoading = ref(false)
+const practiceLoading = ref(false)
 const domains = ref<ExamDomain[]>([])
 const personalSpace = ref<ExamSpace | null>(null)
 const classes = ref<ExamClass[]>([])
 const questionBanks = ref<QuestionBank[]>([])
 const classResources = ref<ExamSpaceResource[]>([])
 const knowledgeBases = ref<KnowledgeBaseInfo[]>([])
+const practiceGroups = ref<QuestionGroupPracticeSummary[]>([])
 const canUseQuestionBanks = computed(() => authStore.hasRole('contributor'))
 
 const questionBankColumns = computed(() => [
@@ -220,6 +252,32 @@ const reviewTag = (status: ReviewStatus) => {
   return 'default'
 }
 
+const groupTypeLabel = (type: QuestionGroupType) => {
+  const map: Record<string, string> = {
+    reading_passage: '阅读',
+    math_problem: '数学题',
+    single_question: '单题',
+    cloze: '完型',
+    essay: '作文',
+  }
+  return map[type] || type || '题组'
+}
+
+const practiceTitle = (item: QuestionGroupPracticeSummary) => {
+  return item.group.title || groupTypeLabel(item.group.group_type)
+}
+
+const practiceProgress = (item: QuestionGroupPracticeSummary) => {
+  const attempt = item.last_attempt
+  if (!attempt) return '未练习'
+  if (attempt.status === 'completed') return `${attempt.correct_count}/${attempt.question_count}`
+  return `${attempt.answered_count}/${attempt.question_count}`
+}
+
+const goPractice = (groupId: string) => {
+  router.push(`/platform/practice/question-groups/${groupId}`)
+}
+
 const loadClassResources = async () => {
   resourcesLoading.value = true
   try {
@@ -233,6 +291,18 @@ const loadClassResources = async () => {
     MessagePlugin.error(error?.message || '班级知识库加载失败')
   } finally {
     resourcesLoading.value = false
+  }
+}
+
+const loadPracticeGroups = async () => {
+  practiceLoading.value = true
+  try {
+    const res = await listPracticeQuestionGroups({ limit: 6 })
+    practiceGroups.value = res.data || []
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '题组练习加载失败')
+  } finally {
+    practiceLoading.value = false
   }
 }
 
@@ -257,7 +327,7 @@ const loadData = async () => {
     personalSpace.value = spaceRes.data || null
     classes.value = classRes.data || []
     questionBanks.value = bankRes.data || []
-    await loadClassResources()
+    await Promise.all([loadClassResources(), loadPracticeGroups()])
   } catch (error: any) {
     MessagePlugin.error(error?.message || '学习中心加载失败')
   } finally {
@@ -361,6 +431,10 @@ onMounted(loadData)
   margin-bottom: 12px;
 }
 
+.practice-panel {
+  margin-bottom: 12px;
+}
+
 .panel-title {
   display: flex;
   align-items: flex-start;
@@ -431,7 +505,14 @@ onMounted(loadData)
   gap: 10px;
 }
 
-.resource-card {
+.practice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.resource-card,
+.practice-card {
   display: flex;
   min-height: 116px;
   flex-direction: column;
@@ -444,14 +525,17 @@ onMounted(loadData)
 }
 
 .resource-card-main,
-.resource-card-footer {
+.resource-card-footer,
+.practice-card__main,
+.practice-card__footer {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.resource-card-main {
+.resource-card-main,
+.practice-card__main {
   strong {
     display: block;
     overflow: hidden;
@@ -471,7 +555,18 @@ onMounted(loadData)
   }
 }
 
-.resource-card-footer {
+.practice-card__material {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--td-text-color-secondary);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.resource-card-footer,
+.practice-card__footer {
   align-items: center;
   padding-top: 12px;
   border-top: 1px solid var(--td-component-stroke);

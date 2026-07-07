@@ -110,6 +110,22 @@ func TestExamQuestionGroupDraftRouteGuardSourceMatrix(t *testing.T) {
 	})
 }
 
+func TestExamPracticeRouteGuardSourceMatrix(t *testing.T) {
+	sourceBytes, err := os.ReadFile("exam.go")
+	if err != nil {
+		t.Fatalf("read exam.go: %v", err)
+	}
+	source := string(sourceBytes)
+
+	mustContainAll(t, source, []string{
+		`exam.GET("/practice/question-groups", g.Viewer(), practiceHandler.ListQuestionGroups)`,
+		`exam.GET("/practice/question-groups/:group_id", g.Viewer(), practiceHandler.GetQuestionGroup)`,
+		`exam.POST("/practice/question-groups/:group_id/attempts", g.Viewer(), practiceHandler.CreateAttempt)`,
+		`exam.POST("/practice/attempts/:attempt_id/answers", g.Viewer(), practiceHandler.SubmitAnswer)`,
+		`exam.POST("/practice/attempts/:attempt_id/complete", g.Viewer(), practiceHandler.CompleteAttempt)`,
+	})
+}
+
 func TestExamRAGRouteGuardSourceMatrix(t *testing.T) {
 	sourceBytes, err := os.ReadFile("router.go")
 	if err != nil {

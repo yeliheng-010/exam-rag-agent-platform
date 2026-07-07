@@ -12,6 +12,7 @@ func RegisterExamRoutes(
 	teacherApplicationHandler *handler.ExamTeacherApplicationHandler,
 	classHandler *handler.ExamClassHandler,
 	questionHandler *handler.ExamQuestionHandler,
+	practiceHandler *handler.ExamPracticeHandler,
 	questionDraftHandler *handler.ExamQuestionDraftHandler,
 	questionGroupDraftHandler *handler.ExamQuestionGroupDraftHandler,
 	resourceHandler *handler.ExamResourceHandler,
@@ -45,6 +46,12 @@ func RegisterExamRoutes(
 		exam.GET("/question-banks/:bank_id", g.Contributor(), questionHandler.GetQuestionBank)
 		exam.GET("/question-banks/:bank_id/questions", g.Viewer(), questionHandler.ListQuestionDetails)
 		exam.GET("/question-banks/:bank_id/question-groups", g.Viewer(), questionHandler.ListQuestionGroupDetails)
+
+		exam.GET("/practice/question-groups", g.Viewer(), practiceHandler.ListQuestionGroups)
+		exam.GET("/practice/question-groups/:group_id", g.Viewer(), practiceHandler.GetQuestionGroup)
+		exam.POST("/practice/question-groups/:group_id/attempts", g.Viewer(), practiceHandler.CreateAttempt)
+		exam.POST("/practice/attempts/:attempt_id/answers", g.Viewer(), practiceHandler.SubmitAnswer)
+		exam.POST("/practice/attempts/:attempt_id/complete", g.Viewer(), practiceHandler.CompleteAttempt)
 
 		exam.GET("/resources", g.Viewer(), resourceHandler.ListResources)
 		exam.POST("/resources/knowledge-bases/:kb_id/bind", g.Contributor(), resourceHandler.BindKnowledgeBase)

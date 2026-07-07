@@ -11,6 +11,7 @@ export type ExamTeacherApplicationStatus = 'pending' | 'approved' | 'rejected'
 export type ExamQuestionDraftStatus = 'pending_review' | 'approved' | 'rejected'
 export type ExamQuestionGroupDraftStatus = 'pending_review' | 'approved' | 'rejected'
 export type QuestionGroupType = 'reading_passage' | 'math_problem' | 'single_question' | string
+export type ExamPracticeAttemptStatus = 'in_progress' | 'completed'
 
 export interface ExamDomain {
   id: string
@@ -324,6 +325,61 @@ export interface QuestionGroupDetail {
   group: QuestionGroup
   assets: QuestionGroupAsset[]
   questions: QuestionDetail[]
+}
+
+export interface ExamPracticeAttempt {
+  id: string
+  tenant_id: number
+  user_id: string
+  space_id: string
+  question_bank_id: string
+  group_id: string
+  status: ExamPracticeAttemptStatus
+  question_count: number
+  answered_count: number
+  correct_count: number
+  started_at: string
+  completed_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ExamPracticeAnswer {
+  id: string
+  tenant_id: number
+  attempt_id: string
+  question_id: string
+  question_no: string
+  answer_text: string
+  is_correct: boolean
+  correct_answer: string
+  question_snapshot: Record<string, any>
+  answer_snapshot: Array<Record<string, any>>
+  explanation_snapshot: Array<Record<string, any>>
+  answered_at: string
+  created_at: string
+  updated_at: string
+}
+
+export interface QuestionGroupPracticeSummary {
+  group: QuestionGroup
+  bank_name: string
+  question_count: number
+  last_attempt?: ExamPracticeAttempt
+  assets?: QuestionGroupAsset[]
+}
+
+export interface CreatePracticeAttemptResult {
+  attempt: ExamPracticeAttempt
+  group: QuestionGroupDetail
+}
+
+export interface PracticeAnswerResult {
+  attempt: ExamPracticeAttempt
+  answer: ExamPracticeAnswer
+  correct_answers: string[]
+  explanations: Array<{ id: string; explanation_text: string; source_type: string }>
+  chunk_refs: Array<{ question_id: string; chunk_id: string; ref_type: string; confidence: number }>
 }
 
 export interface ExamMaterialRegistrationResult {

@@ -99,6 +99,12 @@ const router = createRouter({
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
+          path: "practice/question-groups/:groupId",
+          name: "questionGroupPractice",
+          component: () => import("../views/practice/QuestionGroupPractice.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
           path: "classes",
           name: "classList",
           component: () => import("../views/classes/ClassList.vue"),

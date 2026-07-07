@@ -48,3 +48,7 @@ func (w *stubExamQuestionWriter) ListQuestionGroupDetailsByBank(context.Context,
 func (w *stubExamQuestionWriter) GetQuestionGroupDetailByIDAndTenant(context.Context, uint64, string) (*types.QuestionGroupDetail, error) {
 	return nil, repository.ErrQuestionNotFound
 }
+
+func (w *stubExamQuestionWriter) ListQuestionGroupPracticeSummaries(context.Context, uint64, []string, types.ListPracticeQuestionGroupsFilter) ([]*types.QuestionGroupPracticeSummary, error) {
+	return nil, nil
+}
