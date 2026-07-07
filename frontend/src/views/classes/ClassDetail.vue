@@ -234,15 +234,15 @@
                         :loading="extractingTaskId === row.id"
                         @click="extractTask(row)"
                       >
-                        {{ row.status === 'failed' ? '重新抽题' : '开始抽题' }}
+                        {{ row.status === 'failed' ? '重新抽取题组' : '开始题组抽取' }}
                       </t-button>
                       <t-button
                         v-if="canManageResources && ['reviewing', 'completed'].includes(row.status)"
                         size="small"
                         variant="outline"
-                        @click="router.push(`/platform/structuring-tasks/${row.id}/review`)"
+                        @click="router.push(`/platform/question-group-drafts/${row.id}`)"
                       >
-                        查看校对
+                        题组校对
                       </t-button>
                     </t-space>
                   </template>
@@ -435,7 +435,7 @@ import type { FormInstanceFunctions, FormRule } from 'tdesign-vue-next'
 import { approveExamClassMember, getExamClass, listExamClassMembers, rejectExamClassMember } from '@/api/exam/class'
 import { listExamDomains, listExamSubjects } from '@/api/exam/domain'
 import { listExamMaterials, listExamStructuringTasks, registerExamMaterial } from '@/api/exam/material'
-import { extractQuestionDrafts } from '@/api/exam/question-draft'
+import { extractQuestionGroupDrafts } from '@/api/exam/question-group-draft'
 import { listQuestionBanks } from '@/api/exam/question-bank'
 import { bindKnowledgeBaseResource, listExamResources } from '@/api/exam/resource'
 import { listKnowledgeBases, listKnowledgeFiles } from '@/api/knowledge-base'
@@ -829,12 +829,12 @@ const extractTask = async (task: ExamStructuringTask) => {
   if (!task?.id) return
   extractingTaskId.value = task.id
   try {
-    await extractQuestionDrafts(task.id, task.status === 'failed')
-    MessagePlugin.success('抽题完成，已生成待校对草稿')
+    await extractQuestionGroupDrafts(task.id, task.status === 'failed')
+    MessagePlugin.success('题组抽取完成，已生成待校对草稿')
     await loadResourceTab()
-    router.push(`/platform/structuring-tasks/${task.id}/review`)
+    router.push(`/platform/question-group-drafts/${task.id}`)
   } catch (error: any) {
-    MessagePlugin.error(error?.message || '抽题失败')
+    MessagePlugin.error(error?.message || '题组抽取失败')
   } finally {
     extractingTaskId.value = ''
   }
