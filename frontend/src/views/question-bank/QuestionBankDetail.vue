@@ -29,27 +29,44 @@
       </div>
 
       <div class="content-grid">
-        <section class="panel">
+        <section class="panel question-section">
           <div class="panel-title">
-            <h3>题目列表</h3>
-            <p>已确认的结构化题目会在这里沉淀为正式题库资产。</p>
+            <h3>题组</h3>
+            <p>已确认的阅读篇章、数学题干和小题会以题组形态沉淀为正式题库资产。</p>
+            <span>{{ questionGroups.length }} 组</span>
           </div>
-          <t-table
-            v-if="questions.length"
-            row-key="question.id"
-            :data="questions"
-            :columns="questionColumns"
-            :pagination="{ pageSize: 10, total: questions.length }"
-            size="small"
-          >
-            <template #stem="{ row }">
-              <div class="question-stem-cell">{{ row.question.stem }}</div>
-            </template>
-            <template #answer="{ row }">
-              {{ row.answers?.map(item => item.answer_text).join('，') || '-' }}
-            </template>
-          </t-table>
-          <t-empty v-else description="暂无结构化题目" />
+          <div v-if="questionGroups.length" class="question-group-list">
+            <article v-for="group in questionGroups" :key="group.group.id" class="question-group-card">
+              <header class="question-group-card__head">
+                <div>
+                  <h4>{{ group.group.title || group.group.group_type }}</h4>
+                  <p>{{ group.group.group_type }} · {{ group.questions.length }} 题</p>
+                </div>
+                <t-tag :theme="reviewTag(group.group.review_status)" variant="light">
+                  {{ reviewLabel(group.group.review_status) }}
+                </t-tag>
+              </header>
+
+              <p v-if="group.group.material_text" class="question-group-card__material">
+                {{ group.group.material_text }}
+              </p>
+
+              <div v-if="group.assets?.length" class="question-group-assets">
+                <div v-for="asset in group.assets" :key="asset.id" class="question-group-asset">
+                  {{ assetLabel(asset) }}
+                </div>
+              </div>
+
+              <div class="question-items">
+                <div v-for="item in group.questions" :key="item.question.id" class="question-item">
+                  <strong>{{ questionNo(item) }}</strong>
+                  <span>{{ item.question.stem }}</span>
+                  <small>答案：{{ answerSummary(item) }}</small>
+                </div>
+              </div>
+            </article>
+          </div>
+          <t-empty v-else description="暂无结构化题组" />
         </section>
 
         <section class="panel">
@@ -73,21 +90,14 @@
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { getQuestionBank, listQuestionDetails } from '@/api/exam/question-bank'
-import type { QuestionBank, QuestionDetail, ReviewStatus } from '@/types/exam'
+import { getQuestionBank, listQuestionGroupDetails } from '@/api/exam/question-bank'
+import type { QuestionBank, QuestionDetail, QuestionGroupAsset, QuestionGroupDetail, ReviewStatus } from '@/types/exam'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const bank = ref<QuestionBank | null>(null)
-const questions = ref<QuestionDetail[]>([])
-
-const questionColumns = [
-  { colKey: 'stem', title: '题干', cell: 'stem', minWidth: 320 },
-  { colKey: 'answer', title: '答案', cell: 'answer', width: 160 },
-  { colKey: 'question.difficulty', title: '难度', width: 100 },
-  { colKey: 'question.status', title: '状态', width: 100 },
-]
+const questionGroups = ref<QuestionGroupDetail[]>([])
 
 const reviewLabel = (status: ReviewStatus) => {
   const map: Record<ReviewStatus, string> = {
@@ -106,6 +116,18 @@ const reviewTag = (status: ReviewStatus) => {
   return 'default'
 }
 
+const assetLabel = (asset: QuestionGroupAsset) => {
+  return [asset.asset_type, asset.alt_text || asset.storage_uri].filter(Boolean).join(' · ') || '资源'
+}
+
+const questionNo = (item: QuestionDetail) => {
+  return item.question.question_no || String(item.question.order_in_group || '-')
+}
+
+const answerSummary = (item: QuestionDetail) => {
+  return item.answers?.map(answer => answer.answer_text).filter(Boolean).join('，') || '-'
+}
+
 const loadData = async () => {
   const bankId = String(route.params.bankId || '')
   if (!bankId) return
@@ -113,8 +135,8 @@ const loadData = async () => {
   try {
     const res = await getQuestionBank(bankId)
     bank.value = res.data
-    const questionRes = await listQuestionDetails(bankId)
-    questions.value = questionRes.data || []
+    const groupRes = await listQuestionGroupDetails(bankId)
+    questionGroups.value = groupRes.data || []
   } catch (error: any) {
     MessagePlugin.error(error?.message || '题库详情加载失败')
   } finally {
@@ -125,135 +147,4 @@ const loadData = async () => {
 onMounted(loadData)
 </script>
 
-<style lang="less" scoped>
-.exam-page {
-  flex: 1;
-  overflow-y: auto;
-  padding: 28px 32px;
-  background: var(--td-bg-color-container);
-}
-
-.exam-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 18px;
-
-  h2 {
-    margin: 8px 0 0;
-    font-size: 22px;
-    line-height: 30px;
-    font-weight: 600;
-  }
-
-  p {
-    margin: 6px 0 0;
-    color: var(--td-text-color-secondary);
-    font-size: 14px;
-    line-height: 22px;
-  }
-}
-
-.summary-grid,
-.content-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.summary-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-bottom: 12px;
-}
-
-.content-grid {
-  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.6fr);
-}
-
-.summary-item,
-.panel {
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 8px;
-  background: var(--td-bg-color-container);
-}
-
-.summary-item {
-  min-width: 0;
-  padding: 14px 16px;
-
-  span {
-    display: block;
-    margin-bottom: 8px;
-    color: var(--td-text-color-secondary);
-    font-size: 12px;
-  }
-
-  strong {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 14px;
-    font-weight: 600;
-  }
-}
-
-.panel {
-  min-height: 360px;
-  padding: 16px;
-}
-
-.panel-title {
-  margin-bottom: 14px;
-
-  h3 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-  }
-
-  p {
-    margin: 6px 0 0;
-    color: var(--td-text-color-secondary);
-    font-size: 13px;
-    line-height: 20px;
-  }
-}
-
-.pipeline {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-
-  div {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px;
-    border-radius: 8px;
-    background: var(--td-bg-color-secondarycontainer);
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  span {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: var(--td-brand-color-light);
-    color: var(--td-brand-color);
-    font-size: 12px;
-  }
-}
-
-.question-stem-cell {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  line-height: 20px;
-}
-</style>
+<style lang="less" scoped src="./QuestionBankDetail.less"></style>

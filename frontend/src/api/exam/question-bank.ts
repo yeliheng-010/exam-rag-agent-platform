@@ -29,3 +29,5 @@ export function getQuestionBank(bankId: string) {
 export function listQuestionDetails(bankId: string) {
   return get(`/api/v1/exam/question-banks/${bankId}/questions`) as unknown as Promise<ApiResponse<QuestionDetail[]>>
 }
+
+export { listQuestionGroupDetails } from './question-group'
