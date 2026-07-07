@@ -369,6 +369,25 @@ export interface QuestionGroupPracticeSummary {
   assets?: QuestionGroupAsset[]
 }
 
+export interface PracticeAttemptSummary {
+  attempt: ExamPracticeAttempt
+  group?: QuestionGroup
+  bank_name: string
+}
+
+export interface PracticeAttemptDetail {
+  attempt: ExamPracticeAttempt
+  group: QuestionGroupDetail
+  answers: ExamPracticeAnswer[]
+}
+
+export interface WrongQuestionItem {
+  attempt: ExamPracticeAttempt
+  answer: ExamPracticeAnswer
+  group?: QuestionGroup
+  bank_name: string
+}
+
 export interface CreatePracticeAttemptResult {
   attempt: ExamPracticeAttempt
   group: QuestionGroupDetail

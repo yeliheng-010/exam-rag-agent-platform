@@ -4,8 +4,11 @@ import type {
   CreatePracticeAttemptResult,
   ExamPracticeAttempt,
   PracticeAnswerResult,
+  PracticeAttemptDetail,
+  PracticeAttemptSummary,
   QuestionGroupDetail,
   QuestionGroupPracticeSummary,
+  WrongQuestionItem,
 } from '@/types/exam'
 
 export interface ListPracticeQuestionGroupsParams {
@@ -20,6 +23,27 @@ export interface SubmitPracticeAnswerPayload {
   answer_text: string
 }
 
+export interface ListPracticeAttemptsParams {
+  space_id?: string
+  group_id?: string
+  limit?: number
+}
+
+export interface ListWrongQuestionsParams {
+  space_id?: string
+  group_id?: string
+  limit?: number
+}
+
+function buildPracticeQuery(params?: ListPracticeAttemptsParams | ListWrongQuestionsParams) {
+  const query = new URLSearchParams()
+  if (params?.space_id) query.set('space_id', params.space_id)
+  if (params?.group_id) query.set('group_id', params.group_id)
+  if (params?.limit) query.set('limit', String(params.limit))
+  const qs = query.toString()
+  return qs ? `?${qs}` : ''
+}
+
 export function listPracticeQuestionGroups(params?: ListPracticeQuestionGroupsParams) {
   const query = new URLSearchParams()
   if (params?.space_id) query.set('space_id', params.space_id)
@@ -28,6 +52,18 @@ export function listPracticeQuestionGroups(params?: ListPracticeQuestionGroupsPa
   if (params?.limit) query.set('limit', String(params.limit))
   const qs = query.toString()
   return get(`/api/v1/exam/practice/question-groups${qs ? `?${qs}` : ''}`) as unknown as Promise<ApiResponse<QuestionGroupPracticeSummary[]>>
+}
+
+export function listPracticeAttempts(params?: ListPracticeAttemptsParams) {
+  return get(`/api/v1/exam/practice/attempts${buildPracticeQuery(params)}`) as unknown as Promise<ApiResponse<PracticeAttemptSummary[]>>
+}
+
+export function getPracticeAttempt(attemptId: string) {
+  return get(`/api/v1/exam/practice/attempts/${attemptId}`) as unknown as Promise<ApiResponse<PracticeAttemptDetail>>
+}
+
+export function listWrongQuestions(params?: ListWrongQuestionsParams) {
+  return get(`/api/v1/exam/practice/wrong-questions${buildPracticeQuery(params)}`) as unknown as Promise<ApiResponse<WrongQuestionItem[]>>
 }
 
 export function getPracticeQuestionGroup(groupId: string) {

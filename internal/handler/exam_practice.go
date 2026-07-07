@@ -40,6 +40,60 @@ func (h *ExamPracticeHandler) ListQuestionGroups(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": groups})
 }
 
+func (h *ExamPracticeHandler) ListAttempts(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(types.UserIDContextKey.String())
+	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	filter := types.ListPracticeAttemptsFilter{
+		SpaceID: c.Query("space_id"),
+		GroupID: c.Query("group_id"),
+		Limit:   limit,
+	}
+
+	attempts, err := h.practiceService.ListAttempts(ctx, tenantID, userID, filter)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to list practice attempts: %v", err)
+		writeExamError(c, err, "Failed to list practice attempts")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": attempts})
+}
+
+func (h *ExamPracticeHandler) GetAttempt(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(types.UserIDContextKey.String())
+	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+
+	attempt, err := h.practiceService.GetAttemptDetail(ctx, tenantID, userID, c.Param("attempt_id"))
+	if err != nil {
+		logger.Errorf(ctx, "Failed to get practice attempt: %v", err)
+		writeExamError(c, err, "Failed to get practice attempt")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": attempt})
+}
+
+func (h *ExamPracticeHandler) ListWrongQuestions(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(types.UserIDContextKey.String())
+	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	filter := types.ListWrongQuestionsFilter{
+		SpaceID: c.Query("space_id"),
+		GroupID: c.Query("group_id"),
+		Limit:   limit,
+	}
+
+	items, err := h.practiceService.ListWrongQuestions(ctx, tenantID, userID, filter)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to list wrong questions: %v", err)
+		writeExamError(c, err, "Failed to list wrong questions")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
+}
+
 func (h *ExamPracticeHandler) GetQuestionGroup(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.GetString(types.UserIDContextKey.String())

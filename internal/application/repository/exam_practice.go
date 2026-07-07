@@ -62,6 +62,30 @@ func (r *examPracticeRepository) UpsertAnswer(ctx context.Context, answer *types
 	}).Create(answer).Error
 }
 
+func (r *examPracticeRepository) ListAttemptsByUser(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	spaceIDs []string,
+	filter types.ListPracticeAttemptsFilter,
+) ([]*types.ExamPracticeAttempt, error) {
+	if len(spaceIDs) == 0 {
+		return []*types.ExamPracticeAttempt{}, nil
+	}
+	limit := filter.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 30
+	}
+	query := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND user_id = ? AND space_id IN ?", tenantID, userID, spaceIDs)
+	if filter.GroupID != "" {
+		query = query.Where("group_id = ?", filter.GroupID)
+	}
+	var attempts []*types.ExamPracticeAttempt
+	err := query.Order("created_at DESC").Limit(limit).Find(&attempts).Error
+	return attempts, err
+}
+
 func (r *examPracticeRepository) ListAnswersByAttempt(ctx context.Context, tenantID uint64, attemptID string) ([]*types.ExamPracticeAnswer, error) {
 	var answers []*types.ExamPracticeAnswer
 	err := r.db.WithContext(ctx).

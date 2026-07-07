@@ -58,12 +58,43 @@ type ListPracticeQuestionGroupsFilter struct {
 	Limit     int
 }
 
+type ListPracticeAttemptsFilter struct {
+	SpaceID string
+	GroupID string
+	Limit   int
+}
+
+type ListWrongQuestionsFilter struct {
+	SpaceID string
+	GroupID string
+	Limit   int
+}
+
 type QuestionGroupPracticeSummary struct {
 	Group         *QuestionGroup        `json:"group"`
 	BankName      string                `json:"bank_name"`
 	QuestionCount int                   `json:"question_count"`
 	LastAttempt   *ExamPracticeAttempt  `json:"last_attempt,omitempty"`
 	Assets        []*QuestionGroupAsset `json:"assets,omitempty"`
+}
+
+type PracticeAttemptSummary struct {
+	Attempt  *ExamPracticeAttempt `json:"attempt"`
+	Group    *QuestionGroup       `json:"group,omitempty"`
+	BankName string               `json:"bank_name"`
+}
+
+type PracticeAttemptDetail struct {
+	Attempt *ExamPracticeAttempt  `json:"attempt"`
+	Group   *QuestionGroupDetail  `json:"group"`
+	Answers []*ExamPracticeAnswer `json:"answers"`
+}
+
+type WrongQuestionItem struct {
+	Attempt  *ExamPracticeAttempt `json:"attempt"`
+	Answer   *ExamPracticeAnswer  `json:"answer"`
+	Group    *QuestionGroup       `json:"group,omitempty"`
+	BankName string               `json:"bank_name"`
 }
 
 type CreatePracticeAttemptResult struct {

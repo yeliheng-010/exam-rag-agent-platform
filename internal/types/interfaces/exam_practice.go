@@ -8,6 +8,9 @@ import (
 
 type ExamPracticeService interface {
 	ListQuestionGroups(ctx context.Context, tenantID uint64, userID string, filter types.ListPracticeQuestionGroupsFilter) ([]*types.QuestionGroupPracticeSummary, error)
+	ListAttempts(ctx context.Context, tenantID uint64, userID string, filter types.ListPracticeAttemptsFilter) ([]*types.PracticeAttemptSummary, error)
+	GetAttemptDetail(ctx context.Context, tenantID uint64, userID string, attemptID string) (*types.PracticeAttemptDetail, error)
+	ListWrongQuestions(ctx context.Context, tenantID uint64, userID string, filter types.ListWrongQuestionsFilter) ([]*types.WrongQuestionItem, error)
 	GetQuestionGroupDetail(ctx context.Context, tenantID uint64, userID string, groupID string) (*types.QuestionGroupDetail, error)
 	CreateAttempt(ctx context.Context, tenantID uint64, userID string, groupID string) (*types.CreatePracticeAttemptResult, error)
 	SubmitAnswer(ctx context.Context, tenantID uint64, userID string, attemptID string, req *types.SubmitPracticeAnswerRequest) (*types.PracticeAnswerResult, error)
@@ -19,6 +22,7 @@ type ExamPracticeRepository interface {
 	GetAttemptByIDAndTenant(ctx context.Context, tenantID uint64, attemptID string) (*types.ExamPracticeAttempt, error)
 	UpdateAttempt(ctx context.Context, attempt *types.ExamPracticeAttempt) error
 	UpsertAnswer(ctx context.Context, answer *types.ExamPracticeAnswer) error
+	ListAttemptsByUser(ctx context.Context, tenantID uint64, userID string, spaceIDs []string, filter types.ListPracticeAttemptsFilter) ([]*types.ExamPracticeAttempt, error)
 	ListAnswersByAttempt(ctx context.Context, tenantID uint64, attemptID string) ([]*types.ExamPracticeAnswer, error)
 	ListLatestAttemptsByGroups(ctx context.Context, tenantID uint64, userID string, groupIDs []string) (map[string]*types.ExamPracticeAttempt, error)
 }

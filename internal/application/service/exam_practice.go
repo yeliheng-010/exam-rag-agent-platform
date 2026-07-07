@@ -68,6 +68,109 @@ func (s *examPracticeService) ListQuestionGroups(
 	return summaries, nil
 }
 
+func (s *examPracticeService) ListAttempts(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	filter types.ListPracticeAttemptsFilter,
+) ([]*types.PracticeAttemptSummary, error) {
+	attempts, err := s.listOwnedReadableAttempts(ctx, tenantID, userID, filter)
+	if err != nil {
+		return nil, err
+	}
+	groups, err := s.groupDetailsForAttempts(ctx, tenantID, attempts)
+	if err != nil {
+		return nil, err
+	}
+	bankNames, err := s.bankNamesForGroups(ctx, tenantID, groups)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*types.PracticeAttemptSummary, 0, len(attempts))
+	for _, attempt := range attempts {
+		item := &types.PracticeAttemptSummary{
+			Attempt:  attempt,
+			BankName: bankNames[attempt.GroupID],
+		}
+		if detail := groups[attempt.GroupID]; detail != nil && detail.Group != nil {
+			item.Group = detail.Group
+		}
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+func (s *examPracticeService) GetAttemptDetail(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	attemptID string,
+) (*types.PracticeAttemptDetail, error) {
+	attempt, err := s.ownedAttempt(ctx, tenantID, userID, attemptID)
+	if err != nil {
+		return nil, err
+	}
+	ok, err := s.spaceService.CanReadSpace(ctx, tenantID, userID, attempt.SpaceID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, ErrExamPermissionDenied
+	}
+	detail, err := s.readableQuestionGroup(ctx, tenantID, userID, attempt.GroupID)
+	if err != nil {
+		return nil, err
+	}
+	answers, err := s.practiceRepo.ListAnswersByAttempt(ctx, tenantID, attempt.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &types.PracticeAttemptDetail{
+		Attempt: attempt,
+		Group:   practiceQuestionGroupView(detail),
+		Answers: answers,
+	}, nil
+}
+
+func (s *examPracticeService) ListWrongQuestions(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	filter types.ListWrongQuestionsFilter,
+) ([]*types.WrongQuestionItem, error) {
+	limit := filter.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 30
+	}
+	attempts, err := s.listOwnedReadableAttempts(ctx, tenantID, userID, types.ListPracticeAttemptsFilter{
+		SpaceID: strings.TrimSpace(filter.SpaceID),
+		GroupID: strings.TrimSpace(filter.GroupID),
+		Limit:   100,
+	})
+	if err != nil {
+		return nil, err
+	}
+	groups, err := s.groupDetailsForAttempts(ctx, tenantID, attempts)
+	if err != nil {
+		return nil, err
+	}
+	bankNames, err := s.bankNamesForGroups(ctx, tenantID, groups)
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.collectWrongQuestionItems(ctx, tenantID, attempts, groups, bankNames)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Answer.AnsweredAt.After(items[j].Answer.AnsweredAt)
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
+}
+
 func (s *examPracticeService) GetQuestionGroupDetail(ctx context.Context, tenantID uint64, userID string, groupID string) (*types.QuestionGroupDetail, error) {
 	detail, err := s.readableQuestionGroup(ctx, tenantID, userID, groupID)
 	if err != nil {
@@ -225,6 +328,109 @@ func (s *examPracticeService) ownedAttempt(ctx context.Context, tenantID uint64,
 		return nil, ErrExamPermissionDenied
 	}
 	return attempt, nil
+}
+
+func (s *examPracticeService) listOwnedReadableAttempts(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	filter types.ListPracticeAttemptsFilter,
+) ([]*types.ExamPracticeAttempt, error) {
+	filter.SpaceID = strings.TrimSpace(filter.SpaceID)
+	filter.GroupID = strings.TrimSpace(filter.GroupID)
+	spaceIDs, err := s.resolveReadableSpaceIDs(ctx, tenantID, userID, filter.SpaceID)
+	if err != nil {
+		return nil, err
+	}
+	return s.practiceRepo.ListAttemptsByUser(ctx, tenantID, userID, spaceIDs, filter)
+}
+
+func (s *examPracticeService) groupDetailsForAttempts(
+	ctx context.Context,
+	tenantID uint64,
+	attempts []*types.ExamPracticeAttempt,
+) (map[string]*types.QuestionGroupDetail, error) {
+	groups := make(map[string]*types.QuestionGroupDetail, len(attempts))
+	for _, attempt := range attempts {
+		if attempt == nil || attempt.GroupID == "" || groups[attempt.GroupID] != nil {
+			continue
+		}
+		detail, err := s.questionRepo.GetQuestionGroupDetailByIDAndTenant(ctx, tenantID, attempt.GroupID)
+		if err != nil {
+			if errors.Is(err, repository.ErrQuestionNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		groups[attempt.GroupID] = detail
+	}
+	return groups, nil
+}
+
+func (s *examPracticeService) collectWrongQuestionItems(
+	ctx context.Context,
+	tenantID uint64,
+	attempts []*types.ExamPracticeAttempt,
+	groups map[string]*types.QuestionGroupDetail,
+	bankNames map[string]string,
+) ([]*types.WrongQuestionItem, error) {
+	items := []*types.WrongQuestionItem{}
+	for _, attempt := range attempts {
+		if attempt == nil {
+			continue
+		}
+		answers, err := s.practiceRepo.ListAnswersByAttempt(ctx, tenantID, attempt.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, answer := range answers {
+			if answer == nil || answer.IsCorrect {
+				continue
+			}
+			item := &types.WrongQuestionItem{
+				Attempt:  attempt,
+				Answer:   answer,
+				BankName: bankNames[attempt.GroupID],
+			}
+			if detail := groups[attempt.GroupID]; detail != nil && detail.Group != nil {
+				item.Group = detail.Group
+			}
+			items = append(items, item)
+		}
+	}
+	return items, nil
+}
+
+func (s *examPracticeService) bankNamesForGroups(
+	ctx context.Context,
+	tenantID uint64,
+	groups map[string]*types.QuestionGroupDetail,
+) (map[string]string, error) {
+	names := map[string]string{}
+	bankNameByID := map[string]string{}
+	for groupID, detail := range groups {
+		if detail == nil || detail.Group == nil || detail.Group.QuestionBankID == "" {
+			continue
+		}
+		bankID := detail.Group.QuestionBankID
+		name, ok := bankNameByID[bankID]
+		if !ok {
+			bank, err := s.questionRepo.GetQuestionBankByIDAndTenant(ctx, bankID, tenantID)
+			if err != nil {
+				if errors.Is(err, repository.ErrQuestionBankNotFound) {
+					bankNameByID[bankID] = ""
+					continue
+				}
+				return nil, err
+			}
+			if bank != nil {
+				name = bank.Name
+			}
+			bankNameByID[bankID] = name
+		}
+		names[groupID] = name
+	}
+	return names, nil
 }
 
 func (s *examPracticeService) resolveReadableSpaceIDs(ctx context.Context, tenantID uint64, userID string, spaceID string) ([]string, error) {

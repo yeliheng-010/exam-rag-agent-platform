@@ -112,7 +112,10 @@
             <h3>题组练习</h3>
             <p>按老师确认后的正式题组进行练习，提交后查看答案、解析和证据。</p>
           </div>
-          <t-button variant="text" :loading="practiceLoading" @click="loadPracticeGroups">刷新</t-button>
+          <div class="panel-actions">
+            <t-button variant="text" :loading="practiceLoading" @click="loadPracticeGroups">刷新</t-button>
+            <t-button variant="outline" @click="router.push('/platform/practice/review')">错题复盘</t-button>
+          </div>
         </div>
         <div v-if="practiceGroups.length" class="practice-grid">
           <div v-for="item in practiceGroups" :key="item.group.id" class="practice-card">
@@ -457,6 +460,12 @@ onMounted(loadData)
   }
 }
 
+.panel-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
 .domain-list,
 .compact-list {
   display: flex;
@@ -584,6 +593,14 @@ onMounted(loadData)
 
   .workbench-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .panel-title,
+  .panel-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>

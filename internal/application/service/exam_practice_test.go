@@ -140,6 +140,101 @@ func TestExamPracticeService_SubmitAnswerRequiresOwnedAttempt(t *testing.T) {
 	}
 }
 
+func TestExamPracticeService_ListAttemptsReturnsCurrentUserAttempts(t *testing.T) {
+	ctx := context.Background()
+	svc, repo := newTestExamPracticeService()
+	now := time.Now()
+	repo.attempts = append(repo.attempts,
+		&types.ExamPracticeAttempt{
+			ID:             "attempt-owned",
+			TenantID:       10000,
+			UserID:         "student-1",
+			SpaceID:        "space-1",
+			QuestionBankID: "bank-1",
+			GroupID:        "group-1",
+			Status:         types.ExamPracticeAttemptStatusCompleted,
+			QuestionCount:  1,
+			StartedAt:      now,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		},
+		&types.ExamPracticeAttempt{
+			ID:             "attempt-other",
+			TenantID:       10000,
+			UserID:         "student-2",
+			SpaceID:        "space-1",
+			QuestionBankID: "bank-1",
+			GroupID:        "group-1",
+			Status:         types.ExamPracticeAttemptStatusCompleted,
+			QuestionCount:  1,
+			StartedAt:      now,
+			CreatedAt:      now.Add(time.Second),
+			UpdatedAt:      now.Add(time.Second),
+		},
+	)
+
+	items, err := svc.ListAttempts(ctx, 10000, "student-1", types.ListPracticeAttemptsFilter{Limit: 10})
+
+	if err != nil {
+		t.Fatalf("ListAttempts returned error: %v", err)
+	}
+	if len(items) != 1 || items[0].Attempt.ID != "attempt-owned" {
+		t.Fatalf("attempt items = %#v, want only attempt-owned", items)
+	}
+}
+
+func TestExamPracticeService_ListWrongQuestionsReturnsOwnIncorrectAnswers(t *testing.T) {
+	ctx := context.Background()
+	svc, repo := newTestExamPracticeService()
+	attempt, err := svc.CreateAttempt(ctx, 10000, "student-1", "group-1")
+	if err != nil {
+		t.Fatalf("CreateAttempt returned error: %v", err)
+	}
+	_, err = svc.SubmitAnswer(ctx, 10000, "student-1", attempt.Attempt.ID, &types.SubmitPracticeAnswerRequest{
+		QuestionID: "question-1",
+		AnswerText: "A",
+	})
+	if err != nil {
+		t.Fatalf("SubmitAnswer returned error: %v", err)
+	}
+	repo.attempts = append(repo.attempts, &types.ExamPracticeAttempt{
+		ID:             "attempt-other",
+		TenantID:       10000,
+		UserID:         "student-2",
+		SpaceID:        "space-1",
+		QuestionBankID: "bank-1",
+		GroupID:        "group-1",
+		Status:         types.ExamPracticeAttemptStatusCompleted,
+		QuestionCount:  1,
+		StartedAt:      time.Now(),
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	})
+	repo.answers = append(repo.answers, &types.ExamPracticeAnswer{
+		ID:         "answer-other",
+		TenantID:   10000,
+		AttemptID:  "attempt-other",
+		QuestionID: "question-1",
+		AnswerText: "A",
+		IsCorrect:  false,
+		AnsweredAt: time.Now().Add(time.Second),
+		CreatedAt:  time.Now().Add(time.Second),
+		UpdatedAt:  time.Now().Add(time.Second),
+	})
+
+	items, err := svc.ListWrongQuestions(ctx, 10000, "student-1", types.ListWrongQuestionsFilter{Limit: 10})
+
+	if err != nil {
+		t.Fatalf("ListWrongQuestions returned error: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("wrong question count = %d, want 1", len(items))
+	}
+	if items[0].Attempt.UserID != "student-1" || items[0].Answer.AttemptID != attempt.Attempt.ID {
+		t.Fatalf("wrong item = %#v, want current student's answer", items[0])
+	}
+}
+
 func newTestExamPracticeService() (*examPracticeService, *stubPracticeRepo) {
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{newPracticeGroupDetail()}}
 	practiceRepo := newStubPracticeRepo()
@@ -248,6 +343,24 @@ func (r *stubPracticeRepo) UpsertAnswer(_ context.Context, answer *types.ExamPra
 	}
 	r.answers = append(r.answers, clonePracticeAnswer(answer))
 	return nil
+}
+
+func (r *stubPracticeRepo) ListAttemptsByUser(_ context.Context, tenantID uint64, userID string, spaceIDs []string, filter types.ListPracticeAttemptsFilter) ([]*types.ExamPracticeAttempt, error) {
+	allowed := make(map[string]bool, len(spaceIDs))
+	for _, spaceID := range spaceIDs {
+		allowed[spaceID] = true
+	}
+	out := []*types.ExamPracticeAttempt{}
+	for _, attempt := range r.attempts {
+		if attempt.TenantID != tenantID || attempt.UserID != userID || !allowed[attempt.SpaceID] {
+			continue
+		}
+		if filter.GroupID != "" && attempt.GroupID != filter.GroupID {
+			continue
+		}
+		out = append(out, clonePracticeAttempt(attempt))
+	}
+	return out, nil
 }
 
 func (r *stubPracticeRepo) ListAnswersByAttempt(_ context.Context, tenantID uint64, attemptID string) ([]*types.ExamPracticeAnswer, error) {

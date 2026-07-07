@@ -121,8 +121,11 @@ func TestExamPracticeRouteGuardSourceMatrix(t *testing.T) {
 		`exam.GET("/practice/question-groups", g.Viewer(), practiceHandler.ListQuestionGroups)`,
 		`exam.GET("/practice/question-groups/:group_id", g.Viewer(), practiceHandler.GetQuestionGroup)`,
 		`exam.POST("/practice/question-groups/:group_id/attempts", g.Viewer(), practiceHandler.CreateAttempt)`,
+		`exam.GET("/practice/attempts", g.Viewer(), practiceHandler.ListAttempts)`,
+		`exam.GET("/practice/attempts/:attempt_id", g.Viewer(), practiceHandler.GetAttempt)`,
 		`exam.POST("/practice/attempts/:attempt_id/answers", g.Viewer(), practiceHandler.SubmitAnswer)`,
 		`exam.POST("/practice/attempts/:attempt_id/complete", g.Viewer(), practiceHandler.CompleteAttempt)`,
+		`exam.GET("/practice/wrong-questions", g.Viewer(), practiceHandler.ListWrongQuestions)`,
 	})
 }
 
