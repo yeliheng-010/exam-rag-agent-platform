@@ -144,7 +144,8 @@ func examResourceCallerContext(role types.TenantRole) context.Context {
 }
 
 type fakeExamResourceRepo struct {
-	saved *types.ExamSpaceResource
+	saved     *types.ExamSpaceResource
+	resources []*types.ExamSpaceResource
 }
 
 func newFakeExamResourceRepo() *fakeExamResourceRepo {
@@ -153,18 +154,63 @@ func newFakeExamResourceRepo() *fakeExamResourceRepo {
 
 func (r *fakeExamResourceRepo) Upsert(_ context.Context, resource *types.ExamSpaceResource) error {
 	r.saved = cloneExamSpaceResource(resource)
+	for i, existing := range r.resources {
+		if existing.TenantID == resource.TenantID &&
+			existing.SpaceID == resource.SpaceID &&
+			existing.ResourceType == resource.ResourceType &&
+			existing.ResourceID == resource.ResourceID {
+			r.resources[i] = cloneExamSpaceResource(resource)
+			return nil
+		}
+	}
+	r.resources = append(r.resources, cloneExamSpaceResource(resource))
 	return nil
 }
 
 func (r *fakeExamResourceRepo) GetByResource(_ context.Context, tenantID uint64, resourceType types.ExamResourceType, resourceID string) (*types.ExamSpaceResource, error) {
-	if r.saved == nil || r.saved.TenantID != tenantID || r.saved.ResourceType != resourceType || r.saved.ResourceID != resourceID {
-		return nil, repository.ErrExamResourceNotFound
+	for _, resource := range r.resources {
+		if resource.TenantID == tenantID && resource.ResourceType == resourceType && resource.ResourceID == resourceID {
+			return cloneExamSpaceResource(resource), nil
+		}
 	}
-	return cloneExamSpaceResource(r.saved), nil
+	return nil, repository.ErrExamResourceNotFound
 }
 
-func (r *fakeExamResourceRepo) List(context.Context, uint64, types.ListExamResourcesFilter, []string) ([]*types.ExamSpaceResource, error) {
-	return nil, nil
+func (r *fakeExamResourceRepo) GetBySpaceResource(_ context.Context, tenantID uint64, spaceID string, resourceType types.ExamResourceType, resourceID string) (*types.ExamSpaceResource, error) {
+	for _, resource := range r.resources {
+		if resource.TenantID == tenantID && resource.SpaceID == spaceID && resource.ResourceType == resourceType && resource.ResourceID == resourceID {
+			return cloneExamSpaceResource(resource), nil
+		}
+	}
+	return nil, repository.ErrExamResourceNotFound
+}
+
+func (r *fakeExamResourceRepo) ListByResource(_ context.Context, tenantID uint64, resourceType types.ExamResourceType, resourceID string) ([]*types.ExamSpaceResource, error) {
+	out := []*types.ExamSpaceResource{}
+	for _, resource := range r.resources {
+		if resource.TenantID == tenantID && resource.ResourceType == resourceType && resource.ResourceID == resourceID {
+			out = append(out, cloneExamSpaceResource(resource))
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeExamResourceRepo) List(_ context.Context, tenantID uint64, filter types.ListExamResourcesFilter, spaceIDs []string) ([]*types.ExamSpaceResource, error) {
+	allowed := map[string]bool{}
+	for _, spaceID := range spaceIDs {
+		allowed[spaceID] = true
+	}
+	out := []*types.ExamSpaceResource{}
+	for _, resource := range r.resources {
+		if resource.TenantID != tenantID || !allowed[resource.SpaceID] {
+			continue
+		}
+		if filter.ResourceType != "" && resource.ResourceType != filter.ResourceType {
+			continue
+		}
+		out = append(out, cloneExamSpaceResource(resource))
+	}
+	return out, nil
 }
 
 type stubExamResourceSpaceService struct {

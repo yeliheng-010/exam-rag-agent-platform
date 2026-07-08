@@ -17,6 +17,7 @@ type examAssignmentService struct {
 	classRepo      interfaces.ExamClassRepository
 	questionRepo   interfaces.ExamQuestionRepository
 	practiceRepo   interfaces.ExamPracticeRepository
+	spaceService   interfaces.ExamSpaceService
 }
 
 func NewExamAssignmentService(
@@ -24,12 +25,14 @@ func NewExamAssignmentService(
 	classRepo interfaces.ExamClassRepository,
 	questionRepo interfaces.ExamQuestionRepository,
 	practiceRepo interfaces.ExamPracticeRepository,
+	spaceService interfaces.ExamSpaceService,
 ) interfaces.ExamAssignmentService {
 	return &examAssignmentService{
 		assignmentRepo: assignmentRepo,
 		classRepo:      classRepo,
 		questionRepo:   questionRepo,
 		practiceRepo:   practiceRepo,
+		spaceService:   spaceService,
 	}
 }
 
@@ -52,7 +55,10 @@ func (s *examAssignmentService) CreateAssignment(
 		return nil, err
 	}
 	if detail.Group.SpaceID != class.SpaceID {
-		return nil, ErrExamPermissionDenied
+		detail, err = s.importAssignmentGroupToClassSpace(ctx, tenantID, userID, class, detail)
+		if err != nil {
+			return nil, err
+		}
 	}
 	title := strings.TrimSpace(req.Title)
 	if title == "" {

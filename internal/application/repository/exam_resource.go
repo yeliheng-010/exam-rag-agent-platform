@@ -24,11 +24,11 @@ func (r *examResourceRepository) Upsert(ctx context.Context, resource *types.Exa
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "tenant_id"},
+			{Name: "space_id"},
 			{Name: "resource_type"},
 			{Name: "resource_id"},
 		},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"space_id",
 			"domain_id",
 			"subject_id",
 			"material_type",
@@ -52,6 +52,31 @@ func (r *examResourceRepository) GetByResource(ctx context.Context, tenantID uin
 		return nil, err
 	}
 	return &resource, nil
+}
+
+func (r *examResourceRepository) GetBySpaceResource(ctx context.Context, tenantID uint64, spaceID string, resourceType types.ExamResourceType, resourceID string) (*types.ExamSpaceResource, error) {
+	var resource types.ExamSpaceResource
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND space_id = ? AND resource_type = ? AND resource_id = ? AND status = ?",
+			tenantID, spaceID, resourceType, resourceID, types.ExamSpaceResourceStatusActive).
+		First(&resource).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrExamResourceNotFound
+		}
+		return nil, err
+	}
+	return &resource, nil
+}
+
+func (r *examResourceRepository) ListByResource(ctx context.Context, tenantID uint64, resourceType types.ExamResourceType, resourceID string) ([]*types.ExamSpaceResource, error) {
+	var resources []*types.ExamSpaceResource
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND resource_type = ? AND resource_id = ? AND status = ?",
+			tenantID, resourceType, resourceID, types.ExamSpaceResourceStatusActive).
+		Order("created_at DESC").
+		Find(&resources).Error
+	return resources, err
 }
 
 func (r *examResourceRepository) List(ctx context.Context, tenantID uint64, filter types.ListExamResourcesFilter, spaceIDs []string) ([]*types.ExamSpaceResource, error) {

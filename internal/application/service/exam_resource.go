@@ -113,43 +113,31 @@ func (s *examResourceService) BindKnowledgeBase(ctx context.Context, tenantID ui
 	if err := s.resourceRepo.Upsert(ctx, resource); err != nil {
 		return nil, err
 	}
-	return s.resourceRepo.GetByResource(ctx, tenantID, types.ExamResourceTypeKnowledgeBase, knowledgeBaseID)
+	return s.resourceRepo.GetBySpaceResource(ctx, tenantID, space.ID, types.ExamResourceTypeKnowledgeBase, knowledgeBaseID)
 }
 
 func (s *examResourceService) GetKnowledgeBaseBinding(ctx context.Context, tenantID uint64, userID string, knowledgeBaseID string) (*types.ExamSpaceResource, error) {
-	resource, err := s.resourceRepo.GetByResource(ctx, tenantID, types.ExamResourceTypeKnowledgeBase, knowledgeBaseID)
-	if err != nil {
-		if errors.Is(err, repository.ErrExamResourceNotFound) {
-			return nil, ErrExamNotFound
-		}
-		return nil, err
-	}
-	ok, err := s.spaceService.CanReadSpace(ctx, tenantID, userID, resource.SpaceID)
+	resources, err := s.resourceRepo.ListByResource(ctx, tenantID, types.ExamResourceTypeKnowledgeBase, knowledgeBaseID)
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
+	resource, err := s.firstReadableResource(ctx, tenantID, userID, resources)
+	if err != nil {
+		return nil, err
+	}
+	if resource == nil {
 		return nil, ErrExamPermissionDenied
 	}
 	return resource, nil
 }
 
 func (s *examResourceService) CanReadKnowledgeBase(ctx context.Context, tenantID uint64, userID string, knowledgeBaseID string) (bool, error) {
-	resource, err := s.resourceRepo.GetByResource(ctx, tenantID, types.ExamResourceTypeKnowledgeBase, knowledgeBaseID)
+	resources, err := s.resourceRepo.ListByResource(ctx, tenantID, types.ExamResourceTypeKnowledgeBase, knowledgeBaseID)
 	if err != nil {
-		if errors.Is(err, repository.ErrExamResourceNotFound) {
-			return false, nil
-		}
 		return false, err
 	}
-	ok, err := s.spaceService.CanReadSpace(ctx, tenantID, userID, resource.SpaceID)
-	if err != nil {
-		if errors.Is(err, ErrExamNotFound) || errors.Is(err, ErrExamPermissionDenied) {
-			return false, nil
-		}
-		return false, err
-	}
-	return ok, nil
+	resource, err := s.firstReadableResource(ctx, tenantID, userID, resources)
+	return resource != nil, err
 }
 
 func (s *examResourceService) ListResources(ctx context.Context, tenantID uint64, userID string, filter types.ListExamResourcesFilter) ([]*types.ExamSpaceResource, error) {
@@ -191,6 +179,25 @@ func (s *examResourceService) resolveReadableSpaceIDs(ctx context.Context, tenan
 		}
 	}
 	return spaceIDs, nil
+}
+
+func (s *examResourceService) firstReadableResource(ctx context.Context, tenantID uint64, userID string, resources []*types.ExamSpaceResource) (*types.ExamSpaceResource, error) {
+	for _, resource := range resources {
+		if resource == nil {
+			continue
+		}
+		ok, err := s.spaceService.CanReadSpace(ctx, tenantID, userID, resource.SpaceID)
+		if err != nil {
+			if errors.Is(err, ErrExamNotFound) || errors.Is(err, ErrExamPermissionDenied) {
+				continue
+			}
+			return nil, err
+		}
+		if ok {
+			return resource, nil
+		}
+	}
+	return nil, nil
 }
 
 func canBindKnowledgeBase(ctx context.Context, kb *types.KnowledgeBase, userID string) bool {

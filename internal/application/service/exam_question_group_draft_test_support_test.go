@@ -22,7 +22,10 @@ type stubQuestionGroupExtractor struct {
 	err        error
 }
 
-type stubQuestionGroupWriter struct{ created []*types.QuestionGroupDetail }
+type stubQuestionGroupWriter struct {
+	banks   []*types.QuestionBank
+	created []*types.QuestionGroupDetail
+}
 
 func newReadyQuestionGroupDraftRepo() *stubExamQuestionGroupDraftRepo {
 	return &stubExamQuestionGroupDraftRepo{
@@ -256,7 +259,8 @@ func (e *stubQuestionGroupExtractor) Extract(context.Context, *types.ExamMateria
 	return e.candidates, e.rawOutput, e.err
 }
 
-func (w *stubQuestionGroupWriter) CreateQuestionBank(context.Context, *types.QuestionBank) error {
+func (w *stubQuestionGroupWriter) CreateQuestionBank(_ context.Context, bank *types.QuestionBank) error {
+	w.banks = append(w.banks, bank)
 	return nil
 }
 
@@ -264,7 +268,12 @@ func (w *stubQuestionGroupWriter) ListQuestionBanks(context.Context, uint64, []s
 	return nil, nil
 }
 
-func (w *stubQuestionGroupWriter) GetQuestionBankByIDAndTenant(context.Context, string, uint64) (*types.QuestionBank, error) {
+func (w *stubQuestionGroupWriter) GetQuestionBankByIDAndTenant(_ context.Context, id string, tenantID uint64) (*types.QuestionBank, error) {
+	for _, bank := range w.banks {
+		if bank != nil && bank.ID == id && bank.TenantID == tenantID && bank.Status == "active" {
+			return bank, nil
+		}
+	}
 	return nil, repository.ErrQuestionBankNotFound
 }
 

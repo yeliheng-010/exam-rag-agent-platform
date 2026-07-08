@@ -19,7 +19,7 @@ func TestExamAssignmentCreateRequiresClassWriteRole(t *testing.T) {
 	group := newPracticeGroupDetail()
 	group.Group.SpaceID = class.SpaceID
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
-	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo()).(*examAssignmentService)
+	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
 
 	_, err := svc.CreateAssignment(ctx, 10000, "student-1", "class-1", &types.CreateExamAssignmentRequest{
 		GroupID: "group-1",
@@ -43,7 +43,7 @@ func TestExamAssignmentCreateRejectsGroupOutsideClassSpace(t *testing.T) {
 	group := newPracticeGroupDetail()
 	group.Group.SpaceID = "other-space"
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
-	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo()).(*examAssignmentService)
+	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
 
 	_, err := svc.CreateAssignment(ctx, 10000, "teacher-1", "class-1", &types.CreateExamAssignmentRequest{
 		GroupID: "group-1",
@@ -52,6 +52,104 @@ func TestExamAssignmentCreateRejectsGroupOutsideClassSpace(t *testing.T) {
 
 	if !errors.Is(err, ErrExamPermissionDenied) {
 		t.Fatalf("CreateAssignment error = %v, want ErrExamPermissionDenied", err)
+	}
+}
+
+func TestExamAssignmentCreateImportsReadableGroupOutsideClassSpace(t *testing.T) {
+	ctx := context.Background()
+	classRepo := newFakeExamClassRepo()
+	assignRepo := newStubExamAssignmentRepo(classRepo)
+	class := seedExamClass(classRepo, "class-1", 10000, "teacher-1", "CLASSCODE")
+	seedExamClassMember(classRepo, "class-1", 10000, "teacher-1", types.ExamClassRoleTeacher, types.ExamClassMemberStatusActive)
+	group := newPracticeGroupDetail()
+	group.Group.SpaceID = "personal-space"
+	group.Assets = []*types.QuestionGroupAsset{{
+		ID:            "asset-1",
+		TenantID:      10000,
+		GroupID:       group.Group.ID,
+		AssetType:     "image",
+		StorageURI:    "oss://exam/asset-1.png",
+		AltText:       "diagram",
+		SourceChunkID: "chunk-asset",
+		BBox:          types.JSONMap{},
+		Metadata:      types.JSONMap{},
+		SortOrder:     1,
+		CreatedAt:     time.Now(),
+	}}
+	questionRepo := &stubQuestionGroupWriter{
+		banks: []*types.QuestionBank{{
+			ID:              "bank-1",
+			TenantID:        10000,
+			SpaceID:         "personal-space",
+			DomainID:        "gaokao",
+			Name:            "2026高考英语",
+			SourceType:      "material_structuring",
+			ReviewStatus:    types.ExamReviewStatusPrivate,
+			Status:          "active",
+			CreatedByUserID: "teacher-1",
+			CreatedAt:       time.Now(),
+			UpdatedAt:       time.Now(),
+		}},
+		created: []*types.QuestionGroupDetail{group},
+	}
+	svc := NewExamAssignmentService(
+		assignRepo,
+		classRepo,
+		questionRepo,
+		newStubPracticeRepo(),
+		newStubExamAssignmentSpaceService("personal-space"),
+	).(*examAssignmentService)
+
+	summary, err := svc.CreateAssignment(ctx, 10000, "teacher-1", "class-1", &types.CreateExamAssignmentRequest{
+		GroupID: group.Group.ID,
+		Title:   "Reading homework",
+	})
+
+	if err != nil {
+		t.Fatalf("CreateAssignment returned error: %v", err)
+	}
+	if summary.Assignment.SpaceID != class.SpaceID {
+		t.Fatalf("assignment space_id = %s, want %s", summary.Assignment.SpaceID, class.SpaceID)
+	}
+	if summary.Assignment.GroupID == group.Group.ID {
+		t.Fatalf("assignment reused source group %s, want imported class-space group", group.Group.ID)
+	}
+	if len(questionRepo.created) != 2 {
+		t.Fatalf("created group count = %d, want source plus imported group", len(questionRepo.created))
+	}
+	imported := questionRepo.created[1]
+	if imported.Group.SpaceID != class.SpaceID {
+		t.Fatalf("imported group space_id = %s, want %s", imported.Group.SpaceID, class.SpaceID)
+	}
+	if imported.Group.QuestionBankID == group.Group.QuestionBankID {
+		t.Fatalf("imported group reused source bank %s", group.Group.QuestionBankID)
+	}
+	if len(imported.Assets) != 1 || imported.Assets[0].GroupID != imported.Group.ID || imported.Assets[0].ID == "asset-1" {
+		t.Fatalf("imported assets were not cloned correctly: %#v", imported.Assets)
+	}
+	if len(imported.Questions) != 1 {
+		t.Fatalf("imported question count = %d, want 1", len(imported.Questions))
+	}
+	importedQuestion := imported.Questions[0]
+	if importedQuestion.Question.ID == "question-1" ||
+		importedQuestion.Question.QuestionBankID != imported.Group.QuestionBankID ||
+		importedQuestion.Question.GroupID == nil ||
+		*importedQuestion.Question.GroupID != imported.Group.ID {
+		t.Fatalf("imported question scope/id = %#v, want cloned class-space question", importedQuestion.Question)
+	}
+	if len(importedQuestion.Options) != 2 || importedQuestion.Options[0].QuestionID != importedQuestion.Question.ID {
+		t.Fatalf("imported options were not cloned correctly: %#v", importedQuestion.Options)
+	}
+	if len(importedQuestion.Answers) != 1 || importedQuestion.Answers[0].QuestionID != importedQuestion.Question.ID {
+		t.Fatalf("imported answers were not cloned correctly: %#v", importedQuestion.Answers)
+	}
+	if len(importedQuestion.Explanations) != 1 || importedQuestion.Explanations[0].QuestionID != importedQuestion.Question.ID {
+		t.Fatalf("imported explanations were not cloned correctly: %#v", importedQuestion.Explanations)
+	}
+	if len(importedQuestion.ChunkRefs) != 1 ||
+		importedQuestion.ChunkRefs[0].QuestionID != importedQuestion.Question.ID ||
+		importedQuestion.ChunkRefs[0].ChunkID != "chunk-1" {
+		t.Fatalf("imported chunk refs were not cloned correctly: %#v", importedQuestion.ChunkRefs)
 	}
 }
 
@@ -66,7 +164,7 @@ func TestExamAssignmentAttemptStoresAssignmentID(t *testing.T) {
 	group.Group.SpaceID = class.SpaceID
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
 	practiceRepo := newStubPracticeRepo()
-	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, practiceRepo).(*examAssignmentService)
+	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, practiceRepo, newStubExamAssignmentSpaceService()).(*examAssignmentService)
 	assignment, err := svc.CreateAssignment(ctx, 10000, "teacher-1", class.ID, &types.CreateExamAssignmentRequest{
 		GroupID:      "group-1",
 		Title:        "Reading homework",
@@ -100,7 +198,7 @@ func TestExamAssignmentListMineRequiresActiveClassMember(t *testing.T) {
 	group := newPracticeGroupDetail()
 	group.Group.SpaceID = class.SpaceID
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
-	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo()).(*examAssignmentService)
+	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
 	if _, err := svc.CreateAssignment(ctx, 10000, "teacher-1", class.ID, &types.CreateExamAssignmentRequest{
 		GroupID: "group-1",
 		Title:   "Reading homework",
@@ -193,4 +291,36 @@ func cloneExamClassAssignment(assignment *types.ExamClassAssignment) *types.Exam
 func assignmentDueAt() *time.Time {
 	due := time.Now().Add(48 * time.Hour)
 	return &due
+}
+
+type stubExamAssignmentSpaceService struct {
+	readable map[string]bool
+}
+
+func newStubExamAssignmentSpaceService(readableSpaces ...string) *stubExamAssignmentSpaceService {
+	readable := map[string]bool{}
+	for _, spaceID := range readableSpaces {
+		readable[spaceID] = true
+	}
+	return &stubExamAssignmentSpaceService{readable: readable}
+}
+
+func (s *stubExamAssignmentSpaceService) ListSpaces(context.Context, uint64, string) ([]*types.ExamSpace, error) {
+	return nil, nil
+}
+
+func (s *stubExamAssignmentSpaceService) EnsurePersonalSpace(context.Context, uint64, string) (*types.ExamSpace, error) {
+	return nil, nil
+}
+
+func (s *stubExamAssignmentSpaceService) CanReadSpace(_ context.Context, _ uint64, _ string, spaceID string) (bool, error) {
+	return s.readable[spaceID], nil
+}
+
+func (s *stubExamAssignmentSpaceService) CanWriteSpace(context.Context, uint64, string, string) (bool, error) {
+	return false, nil
+}
+
+func (s *stubExamAssignmentSpaceService) GetSpace(context.Context, uint64, string, string) (*types.ExamSpace, error) {
+	return nil, ErrExamNotFound
 }

@@ -503,6 +503,16 @@
               :label="assignmentGroupOptionLabel(item)"
             />
           </t-select>
+          <t-alert
+            v-if="!assignmentGroupsLoading && !assignmentGroups.length"
+            theme="info"
+            message="暂无可发布题组，请先在题库中心完成试卷结构化并确认题组。"
+          />
+          <t-alert
+            v-else-if="!assignmentGroupsLoading && hasImportableAssignmentGroups"
+            theme="info"
+            message="选择可导入题组发布时，系统会自动复制到当前班级空间后再生成练习任务。"
+          />
         </t-form-item>
         <t-form-item label="任务标题" name="title">
           <t-input v-model="assignmentForm.title" placeholder="留空则使用题组标题" clearable />
@@ -608,6 +618,10 @@ const assignmentVisible = ref(false)
 const canReviewMembers = computed(() => authStore.hasRole('contributor'))
 const canManageResources = computed(() => authStore.hasRole('contributor'))
 const canManageAssignments = computed(() => authStore.hasRole('contributor'))
+const hasImportableAssignmentGroups = computed(() => {
+  const classSpaceId = classInfo.value?.space_id
+  return assignmentGroups.value.some((item) => item.group?.space_id && item.group.space_id !== classSpaceId)
+})
 
 const bindForm = ref({
   kb_id: '',
@@ -961,7 +975,7 @@ const loadAssignmentGroups = async () => {
   if (!classInfo.value?.space_id) return
   assignmentGroupsLoading.value = true
   try {
-    const res = await listPracticeQuestionGroups({ space_id: classInfo.value.space_id, limit: 100 })
+    const res = await listPracticeQuestionGroups({ limit: 100 })
     assignmentGroups.value = res.data || []
   } catch (error: any) {
     MessagePlugin.error(error?.message || '可发布题组加载失败')
@@ -983,7 +997,8 @@ const assignmentGroupTypeLabel = (type?: string) => {
 
 const assignmentGroupOptionLabel = (item: QuestionGroupPracticeSummary) => {
   const title = item.group.title || item.group.material_text || assignmentGroupTypeLabel(item.group.group_type)
-  return `${title} · ${item.bank_name || '题库'} · ${item.question_count} 题`
+  const scope = item.group.space_id === classInfo.value?.space_id ? '班级题组' : '可导入题组'
+  return `${title} · ${scope} · ${item.bank_name || '题库'} · ${item.question_count} 题`
 }
 
 const assignmentGroupLabel = (item: ExamAssignmentSummary) => {

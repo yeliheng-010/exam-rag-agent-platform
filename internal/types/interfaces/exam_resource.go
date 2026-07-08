@@ -16,5 +16,7 @@ type ExamResourceService interface {
 type ExamResourceRepository interface {
 	Upsert(ctx context.Context, resource *types.ExamSpaceResource) error
 	GetByResource(ctx context.Context, tenantID uint64, resourceType types.ExamResourceType, resourceID string) (*types.ExamSpaceResource, error)
+	GetBySpaceResource(ctx context.Context, tenantID uint64, spaceID string, resourceType types.ExamResourceType, resourceID string) (*types.ExamSpaceResource, error)
+	ListByResource(ctx context.Context, tenantID uint64, resourceType types.ExamResourceType, resourceID string) ([]*types.ExamSpaceResource, error)
 	List(ctx context.Context, tenantID uint64, filter types.ListExamResourcesFilter, spaceIDs []string) ([]*types.ExamSpaceResource, error)
 }
