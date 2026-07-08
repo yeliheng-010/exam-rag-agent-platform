@@ -11,6 +11,7 @@ func RegisterExamRoutes(
 	spaceHandler *handler.ExamSpaceHandler,
 	teacherApplicationHandler *handler.ExamTeacherApplicationHandler,
 	classHandler *handler.ExamClassHandler,
+	assignmentHandler *handler.ExamAssignmentHandler,
 	questionHandler *handler.ExamQuestionHandler,
 	practiceHandler *handler.ExamPracticeHandler,
 	questionDraftHandler *handler.ExamQuestionDraftHandler,
@@ -40,6 +41,10 @@ func RegisterExamRoutes(
 		exam.GET("/classes/:class_id/members", g.Viewer(), classHandler.ListClassMembers)
 		exam.POST("/classes/:class_id/members/:user_id/approve", g.Viewer(), classHandler.ApproveClassMember)
 		exam.POST("/classes/:class_id/members/:user_id/reject", g.Viewer(), classHandler.RejectClassMember)
+		exam.GET("/classes/:class_id/assignments", g.Viewer(), assignmentHandler.ListClassAssignments)
+		exam.POST("/classes/:class_id/assignments", g.Viewer(), assignmentHandler.CreateAssignment)
+		exam.GET("/assignments", g.Viewer(), assignmentHandler.ListMyAssignments)
+		exam.POST("/assignments/:assignment_id/attempts", g.Viewer(), assignmentHandler.CreateAssignmentAttempt)
 
 		exam.GET("/question-banks", g.Contributor(), questionHandler.ListQuestionBanks)
 		exam.POST("/question-banks", g.Contributor(), questionHandler.CreateQuestionBank)

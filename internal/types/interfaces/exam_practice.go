@@ -28,4 +28,5 @@ type ExamPracticeRepository interface {
 	ListAttemptsByUser(ctx context.Context, tenantID uint64, userID string, spaceIDs []string, filter types.ListPracticeAttemptsFilter) ([]*types.ExamPracticeAttempt, error)
 	ListAnswersByAttempt(ctx context.Context, tenantID uint64, attemptID string) ([]*types.ExamPracticeAnswer, error)
 	ListLatestAttemptsByGroups(ctx context.Context, tenantID uint64, userID string, groupIDs []string) (map[string]*types.ExamPracticeAttempt, error)
+	ListLatestAttemptsByAssignments(ctx context.Context, tenantID uint64, userID string, assignmentIDs []string) (map[string]*types.ExamPracticeAttempt, error)
 }

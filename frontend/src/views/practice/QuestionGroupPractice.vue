@@ -134,7 +134,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { createPracticeAttempt, submitPracticeAnswer, completePracticeAttempt } from '@/api/exam/practice'
+import { createPracticeAttempt, getPracticeAttempt, submitPracticeAnswer, completePracticeAttempt } from '@/api/exam/practice'
 import { listExamResources } from '@/api/exam/resource'
 import { useMenuStore } from '@/stores/menu'
 import { useSettingsStore } from '@/stores/settings'
@@ -323,7 +323,8 @@ const loadData = async () => {
   if (!groupId) return
   loading.value = true
   try {
-    const res = await createPracticeAttempt(groupId)
+    const attemptId = typeof route.query.attempt_id === 'string' ? route.query.attempt_id : ''
+    const res = attemptId ? await getPracticeAttempt(attemptId) : await createPracticeAttempt(groupId)
     group.value = res.data.group
     attempt.value = res.data.attempt
     currentQuestionIndex.value = 0

@@ -502,6 +502,23 @@ func (r *stubPracticeRepo) ListLatestAttemptsByGroups(_ context.Context, tenantI
 	return out, nil
 }
 
+func (r *stubPracticeRepo) ListLatestAttemptsByAssignments(_ context.Context, tenantID uint64, userID string, assignmentIDs []string) (map[string]*types.ExamPracticeAttempt, error) {
+	allowed := make(map[string]bool, len(assignmentIDs))
+	for _, assignmentID := range assignmentIDs {
+		allowed[assignmentID] = true
+	}
+	out := map[string]*types.ExamPracticeAttempt{}
+	for _, attempt := range r.attempts {
+		if attempt.AssignmentID == nil {
+			continue
+		}
+		if attempt.TenantID == tenantID && attempt.UserID == userID && allowed[*attempt.AssignmentID] && out[*attempt.AssignmentID] == nil {
+			out[*attempt.AssignmentID] = clonePracticeAttempt(attempt)
+		}
+	}
+	return out, nil
+}
+
 func clonePracticeAttempt(attempt *types.ExamPracticeAttempt) *types.ExamPracticeAttempt {
 	if attempt == nil {
 		return nil

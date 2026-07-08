@@ -106,6 +106,44 @@
         <t-empty v-else-if="!resourcesLoading" size="small" description="暂无可用班级知识库" />
       </section>
 
+      <section class="panel assignment-panel">
+        <div class="panel-title">
+          <div>
+            <h3>班级任务</h3>
+            <p>优先完成老师发布的练习任务，系统会把本次练习记录关联到对应班级任务。</p>
+          </div>
+          <t-button variant="text" :loading="assignmentLoading" @click="loadClassAssignments">刷新</t-button>
+        </div>
+        <div v-if="classAssignments.length" class="practice-grid">
+          <div v-for="item in classAssignments" :key="item.assignment.id" class="practice-card assignment-card">
+            <div class="practice-card__main">
+              <div>
+                <strong>{{ item.assignment.title || assignmentGroupLabel(item) }}</strong>
+                <span>{{ item.bank_name || '题库' }} · {{ assignmentGroupLabel(item) }} · {{ item.question_count }} 题</span>
+              </div>
+              <t-tag variant="light" :theme="item.last_attempt?.status === 'completed' ? 'success' : 'warning'">
+                {{ assignmentProgress(item) }}
+              </t-tag>
+            </div>
+            <div class="practice-card__material">
+              {{ item.assignment.instructions || item.group?.material_text || item.group?.title || '老师发布的班级练习任务' }}
+            </div>
+            <div class="practice-card__footer">
+              <span>{{ assignmentDueText(item.assignment.due_at) }}</span>
+              <t-button
+                size="small"
+                theme="primary"
+                :loading="startingAssignmentId === item.assignment.id"
+                @click="goAssignmentPractice(item)"
+              >
+                {{ item.last_attempt ? '继续任务' : '开始任务' }}
+              </t-button>
+            </div>
+          </div>
+        </div>
+        <t-empty v-else-if="!assignmentLoading" size="small" description="暂无班级任务" />
+      </section>
+
       <section class="panel practice-panel">
         <div class="panel-title">
           <div>
@@ -180,11 +218,12 @@ import { listExamClasses } from '@/api/exam/class'
 import { listQuestionBanks } from '@/api/exam/question-bank'
 import { listExamResources } from '@/api/exam/resource'
 import { listPracticeQuestionGroups } from '@/api/exam/practice'
+import { createAssignmentAttempt, listMyExamAssignments } from '@/api/exam/assignment'
 import { listKnowledgeBases } from '@/api/knowledge-base'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import type { KnowledgeBaseInfo } from '@/api/auth'
-import type { ExamClass, ExamDomain, ExamMaterialType, ExamSpace, ExamSpaceResource, QuestionBank, QuestionGroupPracticeSummary, QuestionGroupType, ReviewStatus } from '@/types/exam'
+import type { ExamAssignmentSummary, ExamClass, ExamDomain, ExamMaterialType, ExamSpace, ExamSpaceResource, QuestionBank, QuestionGroupPracticeSummary, QuestionGroupType, ReviewStatus } from '@/types/exam'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -192,6 +231,8 @@ const settingsStore = useSettingsStore()
 const loading = ref(false)
 const resourcesLoading = ref(false)
 const practiceLoading = ref(false)
+const assignmentLoading = ref(false)
+const startingAssignmentId = ref('')
 const domains = ref<ExamDomain[]>([])
 const personalSpace = ref<ExamSpace | null>(null)
 const classes = ref<ExamClass[]>([])
@@ -199,6 +240,7 @@ const questionBanks = ref<QuestionBank[]>([])
 const classResources = ref<ExamSpaceResource[]>([])
 const knowledgeBases = ref<KnowledgeBaseInfo[]>([])
 const practiceGroups = ref<QuestionGroupPracticeSummary[]>([])
+const classAssignments = ref<ExamAssignmentSummary[]>([])
 const canUseQuestionBanks = computed(() => authStore.hasRole('contributor'))
 
 const questionBankColumns = computed(() => [
@@ -277,8 +319,41 @@ const practiceProgress = (item: QuestionGroupPracticeSummary) => {
   return `${attempt.answered_count}/${attempt.question_count}`
 }
 
+const assignmentGroupLabel = (item: ExamAssignmentSummary) => {
+  return item.group?.title || item.group?.material_text || groupTypeLabel(item.group?.group_type || '')
+}
+
+const assignmentProgress = (item: ExamAssignmentSummary) => {
+  const attempt = item.last_attempt
+  if (!attempt) return '未开始'
+  if (attempt.status === 'completed') return `已完成 ${attempt.correct_count}/${attempt.question_count}`
+  return `进行中 ${attempt.answered_count}/${attempt.question_count}`
+}
+
+const assignmentDueText = (value?: string) => {
+  if (!value) return '不限截止'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return `截止 ${value}`
+  return `截止 ${date.toLocaleString()}`
+}
+
 const goPractice = (groupId: string) => {
   router.push(`/platform/practice/question-groups/${groupId}`)
+}
+
+const goAssignmentPractice = async (item: ExamAssignmentSummary) => {
+  if (!item.assignment?.id) return
+  startingAssignmentId.value = item.assignment.id
+  try {
+    const res = await createAssignmentAttempt(item.assignment.id)
+    const attemptId = res.data?.attempt?.id
+    const query = attemptId ? `?attempt_id=${attemptId}` : ''
+    router.push(`/platform/practice/question-groups/${item.assignment.group_id}${query}`)
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '进入练习任务失败')
+  } finally {
+    startingAssignmentId.value = ''
+  }
 }
 
 const loadClassResources = async () => {
@@ -309,6 +384,18 @@ const loadPracticeGroups = async () => {
   }
 }
 
+const loadClassAssignments = async () => {
+  assignmentLoading.value = true
+  try {
+    const res = await listMyExamAssignments({ limit: 8 })
+    classAssignments.value = res.data || []
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '班级任务加载失败')
+  } finally {
+    assignmentLoading.value = false
+  }
+}
+
 const startChat = (kbId: string) => {
   if (!kbId) return
   settingsStore.selectKnowledgeBases([kbId])
@@ -330,7 +417,7 @@ const loadData = async () => {
     personalSpace.value = spaceRes.data || null
     classes.value = classRes.data || []
     questionBanks.value = bankRes.data || []
-    await Promise.all([loadClassResources(), loadPracticeGroups()])
+    await Promise.all([loadClassResources(), loadClassAssignments(), loadPracticeGroups()])
   } catch (error: any) {
     MessagePlugin.error(error?.message || '学习中心加载失败')
   } finally {
@@ -436,6 +523,14 @@ onMounted(loadData)
 
 .practice-panel {
   margin-bottom: 12px;
+}
+
+.assignment-panel {
+  margin-bottom: 12px;
+}
+
+.assignment-card {
+  border-color: var(--td-brand-color-4);
 }
 
 .panel-title {

@@ -13,6 +13,7 @@ export type ExamQuestionGroupDraftStatus = 'pending_review' | 'approved' | 'reje
 export type QuestionGroupType = 'reading_passage' | 'math_problem' | 'single_question' | string
 export type ExamPracticeAttemptStatus = 'in_progress' | 'completed'
 export type PracticeAnswerReviewStatus = 'unreviewed' | 'reviewing' | 'mastered'
+export type ExamAssignmentStatus = 'published' | 'archived'
 
 export interface ExamDomain {
   id: string
@@ -71,6 +72,22 @@ export interface ExamClassMember {
   role: ExamClassRole
   status: ExamClassMemberStatus
   joined_at: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ExamClassAssignment {
+  id: string
+  tenant_id: number
+  class_id: string
+  space_id: string
+  question_bank_id: string
+  group_id: string
+  title: string
+  instructions: string
+  status: ExamAssignmentStatus
+  due_at?: string
+  created_by_user_id: string
   created_at: string
   updated_at: string
 }
@@ -335,6 +352,7 @@ export interface ExamPracticeAttempt {
   space_id: string
   question_bank_id: string
   group_id: string
+  assignment_id?: string
   status: ExamPracticeAttemptStatus
   question_count: number
   answered_count: number
@@ -343,6 +361,14 @@ export interface ExamPracticeAttempt {
   completed_at?: string
   created_at: string
   updated_at: string
+}
+
+export interface ExamAssignmentSummary {
+  assignment: ExamClassAssignment
+  group?: QuestionGroup
+  bank_name: string
+  question_count: number
+  last_attempt?: ExamPracticeAttempt
 }
 
 export interface ExamPracticeAnswer {

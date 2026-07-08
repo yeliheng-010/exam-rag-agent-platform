@@ -142,3 +142,29 @@ func (r *examPracticeRepository) ListLatestAttemptsByGroups(
 	}
 	return out, nil
 }
+
+func (r *examPracticeRepository) ListLatestAttemptsByAssignments(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	assignmentIDs []string,
+) (map[string]*types.ExamPracticeAttempt, error) {
+	out := make(map[string]*types.ExamPracticeAttempt, len(assignmentIDs))
+	if len(assignmentIDs) == 0 {
+		return out, nil
+	}
+	var attempts []*types.ExamPracticeAttempt
+	if err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND user_id = ? AND assignment_id IN ?", tenantID, userID, assignmentIDs).
+		Order("created_at DESC").
+		Find(&attempts).Error; err != nil {
+		return nil, err
+	}
+	for _, attempt := range attempts {
+		if attempt == nil || attempt.AssignmentID == nil || out[*attempt.AssignmentID] != nil {
+			continue
+		}
+		out[*attempt.AssignmentID] = attempt
+	}
+	return out, nil
+}

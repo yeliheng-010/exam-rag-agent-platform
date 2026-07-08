@@ -1,0 +1,21 @@
+package interfaces
+
+import (
+	"context"
+
+	"github.com/Tencent/WeKnora/internal/types"
+)
+
+type ExamAssignmentService interface {
+	CreateAssignment(ctx context.Context, tenantID uint64, userID string, classID string, req *types.CreateExamAssignmentRequest) (*types.ExamAssignmentSummary, error)
+	ListClassAssignments(ctx context.Context, tenantID uint64, userID string, classID string, filter types.ListExamAssignmentsFilter) ([]*types.ExamAssignmentSummary, error)
+	ListMyAssignments(ctx context.Context, tenantID uint64, userID string, filter types.ListExamAssignmentsFilter) ([]*types.ExamAssignmentSummary, error)
+	CreateAssignmentAttempt(ctx context.Context, tenantID uint64, userID string, assignmentID string) (*types.CreatePracticeAttemptResult, error)
+}
+
+type ExamAssignmentRepository interface {
+	CreateAssignment(ctx context.Context, assignment *types.ExamClassAssignment) error
+	GetAssignmentByIDAndTenant(ctx context.Context, tenantID uint64, assignmentID string) (*types.ExamClassAssignment, error)
+	ListAssignmentsByClass(ctx context.Context, tenantID uint64, classID string, limit int) ([]*types.ExamClassAssignment, error)
+	ListAssignmentsByUserClasses(ctx context.Context, tenantID uint64, userID string, limit int) ([]*types.ExamClassAssignment, error)
+}

@@ -252,6 +252,61 @@
             </div>
           </div>
         </t-tab-panel>
+        <t-tab-panel value="assignments" label="练习任务">
+          <div class="tab-panel">
+            <div class="panel-title-row">
+              <div>
+                <h3>班级练习任务</h3>
+                <p>老师可把已确认的正式题组发布为练习任务，学生从任务入口进入后会记录本次作业关联。</p>
+              </div>
+              <t-space size="small">
+                <t-button variant="outline" :loading="assignmentsLoading" @click="loadAssignments">
+                  <template #icon><t-icon name="refresh" /></template>
+                  刷新
+                </t-button>
+                <t-button v-if="canManageAssignments" theme="primary" @click="openAssignmentDialog">
+                  <template #icon><t-icon name="add" /></template>
+                  发布任务
+                </t-button>
+              </t-space>
+            </div>
+            <t-alert
+              v-if="!canManageAssignments"
+              theme="info"
+              message="当前账号可查看并完成班级练习任务，任务发布由班级老师或助教处理。"
+            />
+            <t-loading :loading="assignmentsLoading">
+              <div v-if="assignments.length" class="assignment-list">
+                <div v-for="item in assignments" :key="item.assignment.id" class="assignment-card">
+                  <div class="assignment-card__header">
+                    <div>
+                      <strong>{{ item.assignment.title || assignmentGroupLabel(item) }}</strong>
+                      <span>{{ item.bank_name || '题库' }} · {{ assignmentGroupLabel(item) }}</span>
+                    </div>
+                    <t-tag variant="light" :theme="item.last_attempt?.status === 'completed' ? 'success' : 'warning'">
+                      {{ assignmentProgress(item) }}
+                    </t-tag>
+                  </div>
+                  <p v-if="item.assignment.instructions" class="assignment-card__instructions">
+                    {{ item.assignment.instructions }}
+                  </p>
+                  <div class="assignment-card__footer">
+                    <span>{{ item.question_count }} 题 · {{ assignmentDueText(item.assignment.due_at) }}</span>
+                    <t-button
+                      size="small"
+                      theme="primary"
+                      :loading="startingAssignmentId === item.assignment.id"
+                      @click="startAssignmentPractice(item)"
+                    >
+                      {{ item.last_attempt ? '继续练习' : '开始练习' }}
+                    </t-button>
+                  </div>
+                </div>
+              </div>
+              <t-empty v-else-if="!assignmentsLoading" size="small" description="暂无班级练习任务" />
+            </t-loading>
+          </div>
+        </t-tab-panel>
         <t-tab-panel v-for="item in futureTabs" :key="item.value" :value="item.value" :label="item.label">
           <div class="tab-panel">
             <h3>{{ item.label }}</h3>
@@ -424,6 +479,46 @@
         </t-form-item>
       </t-form>
     </t-dialog>
+
+    <t-dialog
+      v-model:visible="assignmentVisible"
+      header="发布练习任务"
+      width="720px"
+      :confirm-btn="{ content: '发布', loading: creatingAssignment }"
+      @confirm="submitCreateAssignment"
+    >
+      <t-form ref="assignmentFormRef" :data="assignmentForm" :rules="assignmentRules" label-align="top">
+        <t-form-item label="练习题组" name="group_id">
+          <t-select
+            v-model="assignmentForm.group_id"
+            :loading="assignmentGroupsLoading"
+            placeholder="选择一个已确认的正式题组"
+            clearable
+            filterable
+          >
+            <t-option
+              v-for="item in assignmentGroups"
+              :key="item.group.id"
+              :value="item.group.id"
+              :label="assignmentGroupOptionLabel(item)"
+            />
+          </t-select>
+        </t-form-item>
+        <t-form-item label="任务标题" name="title">
+          <t-input v-model="assignmentForm.title" placeholder="留空则使用题组标题" clearable />
+        </t-form-item>
+        <t-form-item label="截止时间" name="due_at">
+          <t-input v-model="assignmentForm.due_at" placeholder="可选，例如 2026-07-30 23:59:00" clearable />
+        </t-form-item>
+        <t-form-item label="任务说明" name="instructions">
+          <t-textarea
+            v-model="assignmentForm.instructions"
+            placeholder="可选：答题要求、复习范围或注意事项"
+            :autosize="{ minRows: 3, maxRows: 5 }"
+          />
+        </t-form-item>
+      </t-form>
+    </t-dialog>
   </div>
 </template>
 
@@ -438,11 +533,14 @@ import { listExamMaterials, listExamStructuringTasks, registerExamMaterial } fro
 import { extractQuestionGroupDrafts } from '@/api/exam/question-group-draft'
 import { listQuestionBanks } from '@/api/exam/question-bank'
 import { bindKnowledgeBaseResource, listExamResources } from '@/api/exam/resource'
+import { createAssignmentAttempt, createClassAssignment, listClassAssignments } from '@/api/exam/assignment'
+import { listPracticeQuestionGroups } from '@/api/exam/practice'
 import { listKnowledgeBases, listKnowledgeFiles } from '@/api/knowledge-base'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
 import type {
   ExamClass,
+  ExamAssignmentSummary,
   ExamClassMember,
   ExamClassRole,
   ExamDomain,
@@ -454,6 +552,7 @@ import type {
   ExamSpaceResource,
   ExamSubject,
   QuestionBank,
+  QuestionGroupPracticeSummary,
   ReviewStatus,
 } from '@/types/exam'
 import type { KnowledgeBaseInfo } from '@/api/auth'
@@ -474,6 +573,8 @@ const loading = ref(false)
 const membersLoading = ref(false)
 const resourcesLoading = ref(false)
 const materialsLoading = ref(false)
+const assignmentsLoading = ref(false)
+const assignmentGroupsLoading = ref(false)
 const domainsLoading = ref(false)
 const subjectsLoading = ref(false)
 const knowledgeBasesLoading = ref(false)
@@ -481,8 +582,10 @@ const knowledgeFilesLoading = ref(false)
 const questionBanksLoading = ref(false)
 const bindingResource = ref(false)
 const registeringMaterial = ref(false)
+const creatingAssignment = ref(false)
 const reviewingUserId = ref('')
 const extractingTaskId = ref('')
+const startingAssignmentId = ref('')
 const activeTab = ref('overview')
 const classInfo = ref<ExamClass | null>(null)
 const members = ref<ExamClassMember[]>([])
@@ -494,12 +597,17 @@ const subjects = ref<ExamSubject[]>([])
 const knowledgeBases = ref<KnowledgeBaseInfo[]>([])
 const knowledgeFiles = ref<KnowledgeFileItem[]>([])
 const questionBanks = ref<QuestionBank[]>([])
+const assignments = ref<ExamAssignmentSummary[]>([])
+const assignmentGroups = ref<QuestionGroupPracticeSummary[]>([])
 const resourceFormRef = ref<FormInstanceFunctions>()
 const materialFormRef = ref<FormInstanceFunctions>()
+const assignmentFormRef = ref<FormInstanceFunctions>()
 const bindVisible = ref(false)
 const materialVisible = ref(false)
+const assignmentVisible = ref(false)
 const canReviewMembers = computed(() => authStore.hasRole('contributor'))
 const canManageResources = computed(() => authStore.hasRole('contributor'))
+const canManageAssignments = computed(() => authStore.hasRole('contributor'))
 
 const bindForm = ref({
   kb_id: '',
@@ -535,9 +643,15 @@ const materialForm = ref<{
   create_task: true,
 })
 
+const assignmentForm = ref({
+  group_id: '',
+  title: '',
+  instructions: '',
+  due_at: '',
+})
+
 const futureTabs = [
   { value: 'questionSets', label: '题集', desc: '班级题集来自题库筛选、试卷结构化和老师手动组题。', empty: '题集能力将在结构化题库后启用' },
-  { value: 'homework', label: '作业', desc: '老师可从题集生成作业，学生答题后进入错题与学习报告。', empty: '作业闭环将在练习阶段启用' },
   { value: 'analytics', label: '分析', desc: '班级分析聚合掌握度、错题分布、任务完成率和资料使用情况。', empty: '分析指标将在学习记录接入后生成' },
   { value: 'entitlements', label: '权益', desc: '高成本解析、Agent 工具调用和班级人数会进入权益校验。', empty: '权益明细将在支付模块接入后显示' },
   { value: 'settings', label: '设置', desc: '班级名称、考试域、成员上限和归档策略在此维护。', empty: '班级设置将在编辑接口接入后启用' },
@@ -587,6 +701,10 @@ const materialRules: Record<string, FormRule[]> = {
   knowledge_base_id: [{ required: true, message: '请选择知识库', type: 'error' }],
   knowledge_id: [{ required: true, message: '请选择文档', type: 'error' }],
   domain_id: [{ required: true, message: '请选择考试方向', type: 'error' }],
+}
+
+const assignmentRules: Record<string, FormRule[]> = {
+  group_id: [{ required: true, message: '请选择题组', type: 'error' }],
 }
 
 const formatDate = (value?: string) => {
@@ -825,6 +943,131 @@ const loadResourceTab = async () => {
   ])
 }
 
+const loadAssignments = async () => {
+  const classId = String(route.params.classId || '')
+  if (!classId) return
+  assignmentsLoading.value = true
+  try {
+    const res = await listClassAssignments(classId, { limit: 100 })
+    assignments.value = res.data || []
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '班级练习任务加载失败')
+  } finally {
+    assignmentsLoading.value = false
+  }
+}
+
+const loadAssignmentGroups = async () => {
+  if (!classInfo.value?.space_id) return
+  assignmentGroupsLoading.value = true
+  try {
+    const res = await listPracticeQuestionGroups({ space_id: classInfo.value.space_id, limit: 100 })
+    assignmentGroups.value = res.data || []
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '可发布题组加载失败')
+  } finally {
+    assignmentGroupsLoading.value = false
+  }
+}
+
+const assignmentGroupTypeLabel = (type?: string) => {
+  const map: Record<string, string> = {
+    reading_passage: '阅读',
+    math_problem: '数学题',
+    single_question: '单题',
+    cloze: '完型',
+    essay: '作文',
+  }
+  return type ? (map[type] || type) : '题组'
+}
+
+const assignmentGroupOptionLabel = (item: QuestionGroupPracticeSummary) => {
+  const title = item.group.title || item.group.material_text || assignmentGroupTypeLabel(item.group.group_type)
+  return `${title} · ${item.bank_name || '题库'} · ${item.question_count} 题`
+}
+
+const assignmentGroupLabel = (item: ExamAssignmentSummary) => {
+  return item.group?.title || item.group?.material_text || assignmentGroupTypeLabel(item.group?.group_type)
+}
+
+const assignmentProgress = (item: ExamAssignmentSummary) => {
+  const attempt = item.last_attempt
+  if (!attempt) return '未开始'
+  if (attempt.status === 'completed') return `已完成 ${attempt.correct_count}/${attempt.question_count}`
+  return `进行中 ${attempt.answered_count}/${attempt.question_count}`
+}
+
+const assignmentDueText = (value?: string) => {
+  if (!value) return '不限截止'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return `截止 ${value}`
+  return `截止 ${date.toLocaleString()}`
+}
+
+const normalizeAssignmentDueAt = (value: string) => {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  let normalized = trimmed.includes('T') ? trimmed : trimmed.replace(' ', 'T')
+  if (normalized.length === 10) {
+    normalized = `${normalized}T23:59:59`
+  }
+  if (!/[zZ]|[+-]\d{2}:\d{2}$/.test(normalized)) {
+    normalized = `${normalized}+08:00`
+  }
+  return normalized
+}
+
+const openAssignmentDialog = async () => {
+  if (!canManageAssignments.value) return
+  assignmentForm.value = {
+    group_id: '',
+    title: '',
+    instructions: '',
+    due_at: '',
+  }
+  assignmentVisible.value = true
+  await loadAssignmentGroups()
+}
+
+const submitCreateAssignment = async () => {
+  const classId = String(route.params.classId || '')
+  if (!classId) return
+  const result = await assignmentFormRef.value?.validate()
+  if (result !== true) return
+
+  creatingAssignment.value = true
+  try {
+    await createClassAssignment(classId, {
+      group_id: assignmentForm.value.group_id,
+      title: assignmentForm.value.title.trim() || undefined,
+      instructions: assignmentForm.value.instructions.trim() || undefined,
+      due_at: normalizeAssignmentDueAt(assignmentForm.value.due_at),
+    })
+    MessagePlugin.success('练习任务已发布')
+    assignmentVisible.value = false
+    await loadAssignments()
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '发布练习任务失败')
+  } finally {
+    creatingAssignment.value = false
+  }
+}
+
+const startAssignmentPractice = async (item: ExamAssignmentSummary) => {
+  if (!item.assignment?.id) return
+  startingAssignmentId.value = item.assignment.id
+  try {
+    const res = await createAssignmentAttempt(item.assignment.id)
+    const attemptId = res.data?.attempt?.id
+    const query = attemptId ? `?attempt_id=${attemptId}` : ''
+    router.push(`/platform/practice/question-groups/${item.assignment.group_id}${query}`)
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '进入练习任务失败')
+  } finally {
+    startingAssignmentId.value = ''
+  }
+}
+
 const extractTask = async (task: ExamStructuringTask) => {
   if (!task?.id) return
   extractingTaskId.value = task.id
@@ -1016,6 +1259,9 @@ watch(activeTab, (tab) => {
   if (tab === 'resources') {
     loadResourceTab()
   }
+  if (tab === 'assignments') {
+    loadAssignments()
+  }
 })
 
 onMounted(async () => {
@@ -1029,6 +1275,9 @@ onMounted(async () => {
   }
   if (activeTab.value === 'resources') {
     await loadResourceTab()
+  }
+  if (activeTab.value === 'assignments') {
+    await loadAssignments()
   }
 })
 </script>
@@ -1169,6 +1418,74 @@ onMounted(async () => {
   color: var(--td-error-color);
   font-size: 12px;
   line-height: 18px;
+}
+
+.assignment-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.assignment-card {
+  display: flex;
+  min-height: 148px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
+  background: var(--td-bg-color-container);
+}
+
+.assignment-card__header,
+.assignment-card__footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.assignment-card__header {
+  strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+    line-height: 22px;
+    font-weight: 600;
+  }
+
+  span {
+    display: block;
+    margin-top: 4px;
+    color: var(--td-text-color-secondary);
+    font-size: 12px;
+    line-height: 18px;
+  }
+}
+
+.assignment-card__instructions {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--td-text-color-secondary);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.assignment-card__footer {
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--td-component-stroke);
+
+  span {
+    color: var(--td-text-color-placeholder);
+    font-size: 12px;
+  }
 }
 
 .dialog-grid {

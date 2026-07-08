@@ -21,6 +21,7 @@ type ExamPracticeAttempt struct {
 	SpaceID        string                    `json:"space_id" gorm:"type:varchar(36);not null;index"`
 	QuestionBankID string                    `json:"question_bank_id" gorm:"type:varchar(36);not null;index"`
 	GroupID        string                    `json:"group_id" gorm:"type:varchar(36);not null;index"`
+	AssignmentID   *string                   `json:"assignment_id,omitempty" gorm:"type:varchar(36);index"`
 	Status         ExamPracticeAttemptStatus `json:"status" gorm:"type:varchar(32);not null;default:'in_progress'"`
 	QuestionCount  int                       `json:"question_count" gorm:"not null;default:0"`
 	AnsweredCount  int                       `json:"answered_count" gorm:"not null;default:0"`
