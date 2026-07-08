@@ -93,6 +93,37 @@ export interface ExamClassAssignment {
   updated_at: string
 }
 
+export interface ExamClassAnalyticsMember {
+  member: ExamClassMember
+  assignment_count: number
+  started_count: number
+  completed_count: number
+  completion_rate: number
+  average_correct_rate: number
+  last_activity_at?: string
+}
+
+export interface ExamClassAnalyticsAssignment {
+  assignment: ExamClassAssignment
+  started_count: number
+  completed_count: number
+  completion_rate: number
+  average_correct_rate: number
+}
+
+export interface ExamClassAnalyticsSummary {
+  class: ExamClass
+  total_students: number
+  assignment_count: number
+  total_assignment_slots: number
+  started_count: number
+  completed_count: number
+  completion_rate: number
+  average_correct_rate: number
+  members: ExamClassAnalyticsMember[]
+  assignments: ExamClassAnalyticsAssignment[]
+}
+
 export interface ExamTeacherApplication {
   id: string
   tenant_id: number

@@ -204,6 +204,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 		return s
 	}))
 	must(container.Provide(service.NewExamClassService))
+	must(container.Provide(service.NewExamAnalyticsService))
 	must(container.Provide(service.NewExamAssignmentService))
 	must(container.Provide(service.NewExamQuestionService))
 	must(container.Provide(service.NewExamPracticeService))
@@ -383,6 +384,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewExamSpaceHandler))
 	must(container.Provide(handler.NewExamTeacherApplicationHandler))
 	must(container.Provide(handler.NewExamClassHandler))
+	must(container.Provide(handler.NewExamAnalyticsHandler))
 	must(container.Provide(handler.NewExamAssignmentHandler))
 	must(container.Provide(handler.NewExamQuestionHandler))
 	must(container.Provide(handler.NewExamPracticeHandler))

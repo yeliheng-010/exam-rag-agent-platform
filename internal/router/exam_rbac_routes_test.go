@@ -146,6 +146,18 @@ func TestExamAssignmentRouteGuardSourceMatrix(t *testing.T) {
 	})
 }
 
+func TestExamClassAnalyticsRouteGuardSourceMatrix(t *testing.T) {
+	sourceBytes, err := os.ReadFile("exam.go")
+	if err != nil {
+		t.Fatalf("read exam.go: %v", err)
+	}
+	source := string(sourceBytes)
+
+	mustContainAll(t, source, []string{
+		`exam.GET("/classes/:class_id/analytics", g.Viewer(), analyticsHandler.GetClassAnalytics)`,
+	})
+}
+
 func TestExamRAGRouteGuardSourceMatrix(t *testing.T) {
 	sourceBytes, err := os.ReadFile("router.go")
 	if err != nil {

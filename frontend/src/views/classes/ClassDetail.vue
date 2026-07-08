@@ -318,6 +318,127 @@
             </t-loading>
           </div>
         </t-tab-panel>
+        <t-tab-panel value="analytics" label="分析">
+          <div class="tab-panel">
+            <div class="panel-title-row">
+              <div>
+                <h3>班级练习分析</h3>
+                <p>基于班级已发布练习任务和学生最新作答记录，汇总完成率、正确率与学生参与情况。</p>
+              </div>
+              <t-button v-if="canViewAnalytics" variant="outline" :loading="analyticsLoading" @click="loadClassAnalytics">
+                <template #icon><t-icon name="refresh" /></template>
+                刷新
+              </t-button>
+            </div>
+            <t-alert
+              v-if="!canViewAnalytics"
+              theme="info"
+              message="当前账号可完成练习并查看自己的学习记录，全班分析由班级老师或助教查看。"
+            />
+            <t-loading v-else :loading="analyticsLoading">
+              <div v-if="classAnalytics" class="analytics-panel">
+                <div class="analytics-summary-grid">
+                  <div class="summary-item">
+                    <span>学生数</span>
+                    <strong>{{ classAnalytics.total_students }}</strong>
+                  </div>
+                  <div class="summary-item">
+                    <span>练习任务</span>
+                    <strong>{{ classAnalytics.assignment_count }}</strong>
+                  </div>
+                  <div class="summary-item">
+                    <span>完成率</span>
+                    <strong>{{ formatPercent(classAnalytics.completion_rate) }}</strong>
+                  </div>
+                  <div class="summary-item">
+                    <span>平均正确率</span>
+                    <strong>{{ formatPercent(classAnalytics.average_correct_rate) }}</strong>
+                  </div>
+                  <div class="summary-item">
+                    <span>进度槽位</span>
+                    <strong>{{ classAnalytics.completed_count }}/{{ classAnalytics.total_assignment_slots }}</strong>
+                  </div>
+                </div>
+
+                <div class="analytics-section">
+                  <div class="section-title-row">
+                    <div>
+                      <h3>学生维度</h3>
+                      <p>只统计已加入班级的学生，不纳入老师、助教或待审核成员。</p>
+                    </div>
+                  </div>
+                  <t-table
+                    row-key="student_key"
+                    :data="classAnalyticsMembers"
+                    :columns="analyticsMemberColumns"
+                    :pagination="{ pageSize: 8, total: classAnalyticsMembers.length }"
+                    size="small"
+                  >
+                    <template #student="{ row }">
+                      <div class="resource-name-cell">
+                        <strong>{{ row.member.user_id }}</strong>
+                        <span>{{ roleLabel(row.member.role) }}</span>
+                      </div>
+                    </template>
+                    <template #progress="{ row }">
+                      {{ row.completed_count }}/{{ row.assignment_count }}
+                    </template>
+                    <template #completion_rate="{ row }">
+                      {{ formatPercent(row.completion_rate) }}
+                    </template>
+                    <template #average_correct_rate="{ row }">
+                      {{ formatPercent(row.average_correct_rate) }}
+                    </template>
+                    <template #last_activity_at="{ row }">
+                      {{ row.last_activity_at ? formatDate(row.last_activity_at) : '-' }}
+                    </template>
+                  </t-table>
+                  <t-empty v-if="!classAnalyticsMembers.length && !analyticsLoading" size="small" description="暂无学生练习数据" />
+                </div>
+
+                <div class="analytics-section">
+                  <div class="section-title-row">
+                    <div>
+                      <h3>任务维度</h3>
+                      <p>按练习任务聚合学生开始数、完成人数和平均正确率，用于快速定位需要讲评的任务。</p>
+                    </div>
+                  </div>
+                  <t-table
+                    row-key="assignment_key"
+                    :data="classAnalyticsAssignments"
+                    :columns="analyticsAssignmentColumns"
+                    :pagination="{ pageSize: 8, total: classAnalyticsAssignments.length }"
+                    size="small"
+                  >
+                    <template #assignment="{ row }">
+                      <div class="resource-name-cell">
+                        <strong>{{ analyticsAssignmentTitle(row) }}</strong>
+                        <span>{{ row.assignment.group_id }}</span>
+                      </div>
+                    </template>
+                    <template #started_count="{ row }">
+                      {{ row.started_count }}/{{ classAnalytics.total_students }}
+                    </template>
+                    <template #completed_count="{ row }">
+                      {{ row.completed_count }}/{{ classAnalytics.total_students }}
+                    </template>
+                    <template #completion_rate="{ row }">
+                      {{ formatPercent(row.completion_rate) }}
+                    </template>
+                    <template #average_correct_rate="{ row }">
+                      {{ formatPercent(row.average_correct_rate) }}
+                    </template>
+                    <template #due_at="{ row }">
+                      {{ row.assignment.due_at ? formatDate(row.assignment.due_at) : '不限截止' }}
+                    </template>
+                  </t-table>
+                  <t-empty v-if="!classAnalyticsAssignments.length && !analyticsLoading" size="small" description="暂无练习任务分析" />
+                </div>
+              </div>
+              <t-empty v-else-if="!analyticsLoading" size="small" description="暂无班级分析数据" />
+            </t-loading>
+          </div>
+        </t-tab-panel>
         <t-tab-panel v-for="item in futureTabs" :key="item.value" :value="item.value" :label="item.label">
           <div class="tab-panel">
             <h3>{{ item.label }}</h3>
@@ -603,6 +724,7 @@ import { listExamMaterials, listExamStructuringTasks, registerExamMaterial } fro
 import { extractQuestionGroupDrafts } from '@/api/exam/question-group-draft'
 import { listQuestionBanks } from '@/api/exam/question-bank'
 import { bindKnowledgeBaseResource, listExamResources } from '@/api/exam/resource'
+import { getClassAnalytics } from '@/api/exam/analytics'
 import {
   createAssignmentAttempt,
   createClassAssignment,
@@ -615,6 +737,8 @@ import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
 import type {
   ExamClass,
+  ExamClassAnalyticsAssignment,
+  ExamClassAnalyticsSummary,
   ExamAssignmentProgressStatus,
   ExamAssignmentProgressSummary,
   ExamAssignmentSummary,
@@ -660,6 +784,7 @@ const membersLoading = ref(false)
 const resourcesLoading = ref(false)
 const materialsLoading = ref(false)
 const assignmentsLoading = ref(false)
+const analyticsLoading = ref(false)
 const assignmentGroupsLoading = ref(false)
 const assignmentProgressLoading = ref(false)
 const domainsLoading = ref(false)
@@ -687,6 +812,7 @@ const knowledgeFiles = ref<KnowledgeFileItem[]>([])
 const questionBanks = ref<QuestionBank[]>([])
 const assignments = ref<ExamAssignmentSummary[]>([])
 const assignmentGroups = ref<QuestionGroupPracticeSummary[]>([])
+const classAnalytics = ref<ExamClassAnalyticsSummary | null>(null)
 const assignmentProgressDetail = ref<ExamAssignmentProgressSummary | null>(null)
 const resourceFormRef = ref<FormInstanceFunctions>()
 const materialFormRef = ref<FormInstanceFunctions>()
@@ -698,9 +824,22 @@ const assignmentProgressVisible = ref(false)
 const canReviewMembers = computed(() => authStore.hasRole('contributor'))
 const canManageResources = computed(() => authStore.hasRole('contributor'))
 const canManageAssignments = computed(() => authStore.hasRole('contributor'))
+const canViewAnalytics = computed(() => authStore.hasRole('contributor'))
 const hasImportableAssignmentGroups = computed(() => {
   const classSpaceId = classInfo.value?.space_id
   return assignmentGroups.value.some((item) => item.group?.space_id && item.group.space_id !== classSpaceId)
+})
+const classAnalyticsMembers = computed(() => {
+  return (classAnalytics.value?.members || []).map(item => ({
+    ...item,
+    student_key: item.member.user_id,
+  }))
+})
+const classAnalyticsAssignments = computed(() => {
+  return (classAnalytics.value?.assignments || []).map(item => ({
+    ...item,
+    assignment_key: item.assignment.id,
+  }))
 })
 const assignmentProgressRows = computed<AssignmentProgressRow[]>(() => {
   return (assignmentProgressDetail.value?.members || []).map((item) => {
@@ -759,7 +898,6 @@ const assignmentForm = ref({
 
 const futureTabs = [
   { value: 'questionSets', label: '题集', desc: '班级题集来自题库筛选、试卷结构化和老师手动组题。', empty: '题集能力将在结构化题库后启用' },
-  { value: 'analytics', label: '分析', desc: '班级分析聚合掌握度、错题分布、任务完成率和资料使用情况。', empty: '分析指标将在学习记录接入后生成' },
   { value: 'entitlements', label: '权益', desc: '高成本解析、Agent 工具调用和班级人数会进入权益校验。', empty: '权益明细将在支付模块接入后显示' },
   { value: 'settings', label: '设置', desc: '班级名称、考试域、成员上限和归档策略在此维护。', empty: '班级设置将在编辑接口接入后启用' },
 ]
@@ -806,6 +944,24 @@ const assignmentProgressColumns = [
   { colKey: 'correct_text', title: '正确数', width: 100 },
   { colKey: 'correct_rate', title: '正确率', cell: 'correct_rate', width: 100 },
   { colKey: 'completed_at', title: '完成时间', cell: 'completed_at', width: 180 },
+]
+
+const analyticsMemberColumns = [
+  { colKey: 'student', title: '学生', cell: 'student', ellipsis: true },
+  { colKey: 'started_count', title: '已开始', width: 100 },
+  { colKey: 'progress', title: '完成进度', cell: 'progress', width: 110 },
+  { colKey: 'completion_rate', title: '完成率', cell: 'completion_rate', width: 100 },
+  { colKey: 'average_correct_rate', title: '平均正确率', cell: 'average_correct_rate', width: 120 },
+  { colKey: 'last_activity_at', title: '最近练习', cell: 'last_activity_at', width: 180 },
+]
+
+const analyticsAssignmentColumns = [
+  { colKey: 'assignment', title: '任务', cell: 'assignment', ellipsis: true },
+  { colKey: 'started_count', title: '已开始', cell: 'started_count', width: 100 },
+  { colKey: 'completed_count', title: '已完成', cell: 'completed_count', width: 100 },
+  { colKey: 'completion_rate', title: '完成率', cell: 'completion_rate', width: 100 },
+  { colKey: 'average_correct_rate', title: '平均正确率', cell: 'average_correct_rate', width: 120 },
+  { colKey: 'due_at', title: '截止时间', cell: 'due_at', width: 180 },
 ]
 
 const bindRules: Record<string, FormRule[]> = {
@@ -1093,6 +1249,21 @@ const loadAssignments = async () => {
   }
 }
 
+const loadClassAnalytics = async () => {
+  if (!canViewAnalytics.value) return
+  const classId = String(route.params.classId || '')
+  if (!classId) return
+  analyticsLoading.value = true
+  try {
+    const res = await getClassAnalytics(classId)
+    classAnalytics.value = res.data
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '班级分析加载失败')
+  } finally {
+    analyticsLoading.value = false
+  }
+}
+
 const loadAssignmentGroups = async () => {
   if (!classInfo.value?.space_id) return
   assignmentGroupsLoading.value = true
@@ -1125,6 +1296,10 @@ const assignmentGroupOptionLabel = (item: QuestionGroupPracticeSummary) => {
 
 const assignmentGroupLabel = (item: ExamAssignmentSummary) => {
   return item.group?.title || item.group?.material_text || assignmentGroupTypeLabel(item.group?.group_type)
+}
+
+const analyticsAssignmentTitle = (item: ExamClassAnalyticsAssignment) => {
+  return item.assignment.title || item.assignment.group_id || '未命名任务'
 }
 
 const assignmentProgress = (item: ExamAssignmentSummary) => {
@@ -1418,6 +1593,9 @@ watch(activeTab, (tab) => {
   if (tab === 'assignments') {
     loadAssignments()
   }
+  if (tab === 'analytics') {
+    loadClassAnalytics()
+  }
 })
 
 onMounted(async () => {
@@ -1434,6 +1612,9 @@ onMounted(async () => {
   }
   if (activeTab.value === 'assignments') {
     await loadAssignments()
+  }
+  if (activeTab.value === 'analytics') {
+    await loadClassAnalytics()
   }
 })
 </script>
@@ -1656,6 +1837,24 @@ onMounted(async () => {
   gap: 12px;
 }
 
+.analytics-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.analytics-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.analytics-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .dialog-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1685,6 +1884,7 @@ onMounted(async () => {
   .summary-grid,
   .flow-grid,
   .assignment-progress__summary,
+  .analytics-summary-grid,
   .dialog-grid {
     grid-template-columns: 1fr;
   }
