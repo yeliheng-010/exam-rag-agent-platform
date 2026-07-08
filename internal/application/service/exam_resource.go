@@ -47,15 +47,16 @@ func (s *examResourceService) BindKnowledgeBase(ctx context.Context, tenantID ui
 	if kb.TenantID != tenantID {
 		return nil, ErrExamPermissionDenied
 	}
-	if !canBindKnowledgeBase(ctx, kb, userID) {
-		return nil, ErrExamPermissionDenied
-	}
 
 	space, err := s.spaceService.GetSpace(ctx, tenantID, userID, strings.TrimSpace(req.SpaceID))
 	if err != nil {
 		return nil, err
 	}
-	if space.SpaceType != types.ExamSpaceTypePublic {
+	if space.SpaceType == types.ExamSpaceTypePublic {
+		if !canBindKnowledgeBase(ctx, kb, userID) {
+			return nil, ErrExamPermissionDenied
+		}
+	} else {
 		canWrite, err := s.spaceService.CanWriteSpace(ctx, tenantID, userID, space.ID)
 		if err != nil {
 			return nil, err

@@ -148,6 +148,9 @@ func (s *examSpaceService) canUseSpace(ctx context.Context, tenantID uint64, use
 	case types.ExamSpaceTypePersonal:
 		return space.OwnerUserID != nil && *space.OwnerUserID == userID, nil
 	case types.ExamSpaceTypeClass:
+		if types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleAdmin) {
+			return true, nil
+		}
 		class, err := s.classRepo.GetBySpaceIDAndTenant(ctx, space.ID, tenantID)
 		if err != nil {
 			if errors.Is(err, repository.ErrExamClassNotFound) {
