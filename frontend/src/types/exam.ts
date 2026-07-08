@@ -14,6 +14,7 @@ export type QuestionGroupType = 'reading_passage' | 'math_problem' | 'single_que
 export type ExamPracticeAttemptStatus = 'in_progress' | 'completed'
 export type PracticeAnswerReviewStatus = 'unreviewed' | 'reviewing' | 'mastered'
 export type ExamAssignmentStatus = 'published' | 'archived'
+export type ExamAssignmentProgressStatus = 'not_started' | 'in_progress' | 'completed'
 
 export interface ExamDomain {
   id: string
@@ -369,6 +370,22 @@ export interface ExamAssignmentSummary {
   bank_name: string
   question_count: number
   last_attempt?: ExamPracticeAttempt
+}
+
+export interface ExamAssignmentMemberProgress {
+  member: ExamClassMember
+  attempt?: ExamPracticeAttempt
+  status: ExamAssignmentProgressStatus
+  correct_rate: number
+}
+
+export interface ExamAssignmentProgressSummary {
+  assignment: ExamClassAssignment
+  total_students: number
+  started_count: number
+  completed_count: number
+  average_correct_rate: number
+  members: ExamAssignmentMemberProgress[]
 }
 
 export interface ExamPracticeAnswer {

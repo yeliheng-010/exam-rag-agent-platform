@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -169,6 +170,84 @@ func (s *examAssignmentService) CreateAssignmentAttempt(
 		Attempt: attempt,
 		Group:   practiceQuestionGroupView(detail),
 	}, nil
+}
+
+func (s *examAssignmentService) GetAssignmentProgress(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	classID string,
+	assignmentID string,
+) (*types.ExamAssignmentProgressSummary, error) {
+	class, err := s.ensureCanWriteAssignmentClass(ctx, tenantID, userID, strings.TrimSpace(classID))
+	if err != nil {
+		return nil, err
+	}
+	assignment, err := s.assignmentByID(ctx, tenantID, strings.TrimSpace(assignmentID))
+	if err != nil {
+		return nil, err
+	}
+	if assignment.ClassID != class.ID || assignment.Status != types.ExamAssignmentStatusPublished {
+		return nil, ErrExamNotFound
+	}
+	members, err := s.classRepo.ListMembers(ctx, class.ID, tenantID, []types.ExamClassMemberStatus{
+		types.ExamClassMemberStatusActive,
+	})
+	if err != nil {
+		return nil, err
+	}
+	students := make([]*types.ExamClassMember, 0, len(members))
+	userIDs := make([]string, 0, len(members))
+	for _, member := range members {
+		if member == nil || member.Role != types.ExamClassRoleStudent {
+			continue
+		}
+		students = append(students, member)
+		userIDs = append(userIDs, member.UserID)
+	}
+	sort.Slice(students, func(i, j int) bool {
+		if students[i].JoinedAt.Equal(students[j].JoinedAt) {
+			return students[i].UserID < students[j].UserID
+		}
+		return students[i].JoinedAt.Before(students[j].JoinedAt)
+	})
+	attempts, err := s.practiceRepo.ListLatestAttemptsByAssignmentUsers(ctx, tenantID, assignment.ID, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	summary := &types.ExamAssignmentProgressSummary{
+		Assignment:    assignment,
+		TotalStudents: len(students),
+		Members:       make([]*types.ExamAssignmentMemberProgress, 0, len(students)),
+	}
+	var correctRateTotal float64
+	for _, student := range students {
+		attempt := attempts[student.UserID]
+		status := types.ExamAssignmentProgressStatusNotStarted
+		correctRate := 0.0
+		if attempt != nil {
+			summary.StartedCount++
+			status = types.ExamAssignmentProgressStatusInProgress
+			if attempt.QuestionCount > 0 {
+				correctRate = float64(attempt.CorrectCount) / float64(attempt.QuestionCount)
+			}
+			correctRateTotal += correctRate
+			if attempt.Status == types.ExamPracticeAttemptStatusCompleted {
+				status = types.ExamAssignmentProgressStatusCompleted
+				summary.CompletedCount++
+			}
+		}
+		summary.Members = append(summary.Members, &types.ExamAssignmentMemberProgress{
+			Member:      student,
+			Attempt:     attempt,
+			Status:      status,
+			CorrectRate: correctRate,
+		})
+	}
+	if summary.StartedCount > 0 {
+		summary.AverageCorrectRate = correctRateTotal / float64(summary.StartedCount)
+	}
+	return summary, nil
 }
 
 func (s *examAssignmentService) ensureCanWriteAssignmentClass(ctx context.Context, tenantID uint64, userID string, classID string) (*types.ExamClass, error) {

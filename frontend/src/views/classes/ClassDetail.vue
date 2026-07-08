@@ -292,14 +292,25 @@
                   </p>
                   <div class="assignment-card__footer">
                     <span>{{ item.question_count }} 题 · {{ assignmentDueText(item.assignment.due_at) }}</span>
-                    <t-button
-                      size="small"
-                      theme="primary"
-                      :loading="startingAssignmentId === item.assignment.id"
-                      @click="startAssignmentPractice(item)"
-                    >
-                      {{ item.last_attempt ? '继续练习' : '开始练习' }}
-                    </t-button>
+                    <t-space size="small">
+                      <t-button
+                        v-if="canManageAssignments"
+                        size="small"
+                        variant="outline"
+                        :loading="loadingAssignmentProgressId === item.assignment.id"
+                        @click="openAssignmentProgress(item)"
+                      >
+                        查看结果
+                      </t-button>
+                      <t-button
+                        size="small"
+                        theme="primary"
+                        :loading="startingAssignmentId === item.assignment.id"
+                        @click="startAssignmentPractice(item)"
+                      >
+                        {{ item.last_attempt ? '继续练习' : '开始练习' }}
+                      </t-button>
+                    </t-space>
                   </div>
                 </div>
               </div>
@@ -529,6 +540,55 @@
         </t-form-item>
       </t-form>
     </t-dialog>
+
+    <t-dialog
+      v-model:visible="assignmentProgressVisible"
+      header="练习结果"
+      width="920px"
+      :footer="false"
+    >
+      <t-loading :loading="assignmentProgressLoading">
+        <div v-if="assignmentProgressDetail" class="assignment-progress">
+          <div class="assignment-progress__summary">
+            <div class="summary-item">
+              <span>学生总数</span>
+              <strong>{{ assignmentProgressDetail.total_students }}</strong>
+            </div>
+            <div class="summary-item">
+              <span>已开始</span>
+              <strong>{{ assignmentProgressDetail.started_count }}</strong>
+            </div>
+            <div class="summary-item">
+              <span>已完成</span>
+              <strong>{{ assignmentProgressDetail.completed_count }}</strong>
+            </div>
+            <div class="summary-item">
+              <span>平均正确率</span>
+              <strong>{{ formatPercent(assignmentProgressDetail.average_correct_rate) }}</strong>
+            </div>
+          </div>
+          <t-table
+            row-key="user_id"
+            :data="assignmentProgressRows"
+            :columns="assignmentProgressColumns"
+            :pagination="{ pageSize: 8, total: assignmentProgressRows.length }"
+            size="small"
+          >
+            <template #status="{ row }">
+              <t-tag variant="light" :theme="assignmentProgressStatusTheme(row.status)">
+                {{ assignmentProgressStatusLabel(row.status) }}
+              </t-tag>
+            </template>
+            <template #correct_rate="{ row }">
+              {{ formatPercent(row.correct_rate) }}
+            </template>
+            <template #completed_at="{ row }">
+              {{ row.completed_at ? formatDate(row.completed_at) : '-' }}
+            </template>
+          </t-table>
+        </div>
+      </t-loading>
+    </t-dialog>
   </div>
 </template>
 
@@ -543,13 +603,20 @@ import { listExamMaterials, listExamStructuringTasks, registerExamMaterial } fro
 import { extractQuestionGroupDrafts } from '@/api/exam/question-group-draft'
 import { listQuestionBanks } from '@/api/exam/question-bank'
 import { bindKnowledgeBaseResource, listExamResources } from '@/api/exam/resource'
-import { createAssignmentAttempt, createClassAssignment, listClassAssignments } from '@/api/exam/assignment'
+import {
+  createAssignmentAttempt,
+  createClassAssignment,
+  getClassAssignmentProgress,
+  listClassAssignments,
+} from '@/api/exam/assignment'
 import { listPracticeQuestionGroups } from '@/api/exam/practice'
 import { listKnowledgeBases, listKnowledgeFiles } from '@/api/knowledge-base'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
 import type {
   ExamClass,
+  ExamAssignmentProgressStatus,
+  ExamAssignmentProgressSummary,
   ExamAssignmentSummary,
   ExamClassMember,
   ExamClassRole,
@@ -575,6 +642,15 @@ interface KnowledgeFileItem {
   parse_status?: string
 }
 
+interface AssignmentProgressRow {
+  user_id: string
+  status: ExamAssignmentProgressStatus
+  answered_text: string
+  correct_text: string
+  correct_rate: number
+  completed_at?: string
+}
+
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
@@ -585,6 +661,7 @@ const resourcesLoading = ref(false)
 const materialsLoading = ref(false)
 const assignmentsLoading = ref(false)
 const assignmentGroupsLoading = ref(false)
+const assignmentProgressLoading = ref(false)
 const domainsLoading = ref(false)
 const subjectsLoading = ref(false)
 const knowledgeBasesLoading = ref(false)
@@ -596,6 +673,7 @@ const creatingAssignment = ref(false)
 const reviewingUserId = ref('')
 const extractingTaskId = ref('')
 const startingAssignmentId = ref('')
+const loadingAssignmentProgressId = ref('')
 const activeTab = ref('overview')
 const classInfo = ref<ExamClass | null>(null)
 const members = ref<ExamClassMember[]>([])
@@ -609,18 +687,33 @@ const knowledgeFiles = ref<KnowledgeFileItem[]>([])
 const questionBanks = ref<QuestionBank[]>([])
 const assignments = ref<ExamAssignmentSummary[]>([])
 const assignmentGroups = ref<QuestionGroupPracticeSummary[]>([])
+const assignmentProgressDetail = ref<ExamAssignmentProgressSummary | null>(null)
 const resourceFormRef = ref<FormInstanceFunctions>()
 const materialFormRef = ref<FormInstanceFunctions>()
 const assignmentFormRef = ref<FormInstanceFunctions>()
 const bindVisible = ref(false)
 const materialVisible = ref(false)
 const assignmentVisible = ref(false)
+const assignmentProgressVisible = ref(false)
 const canReviewMembers = computed(() => authStore.hasRole('contributor'))
 const canManageResources = computed(() => authStore.hasRole('contributor'))
 const canManageAssignments = computed(() => authStore.hasRole('contributor'))
 const hasImportableAssignmentGroups = computed(() => {
   const classSpaceId = classInfo.value?.space_id
   return assignmentGroups.value.some((item) => item.group?.space_id && item.group.space_id !== classSpaceId)
+})
+const assignmentProgressRows = computed<AssignmentProgressRow[]>(() => {
+  return (assignmentProgressDetail.value?.members || []).map((item) => {
+    const attempt = item.attempt
+    return {
+      user_id: item.member.user_id,
+      status: item.status,
+      answered_text: attempt ? `${attempt.answered_count}/${attempt.question_count}` : '-',
+      correct_text: attempt ? `${attempt.correct_count}/${attempt.question_count}` : '-',
+      correct_rate: item.correct_rate || 0,
+      completed_at: attempt?.completed_at,
+    }
+  })
 })
 
 const bindForm = ref({
@@ -706,6 +799,15 @@ const taskColumns = [
   { colKey: 'actions', title: '操作', cell: 'actions', width: 180 },
 ]
 
+const assignmentProgressColumns = [
+  { colKey: 'user_id', title: '学生 ID', ellipsis: true },
+  { colKey: 'status', title: '状态', cell: 'status', width: 110 },
+  { colKey: 'answered_text', title: '答题数', width: 100 },
+  { colKey: 'correct_text', title: '正确数', width: 100 },
+  { colKey: 'correct_rate', title: '正确率', cell: 'correct_rate', width: 100 },
+  { colKey: 'completed_at', title: '完成时间', cell: 'completed_at', width: 180 },
+]
+
 const bindRules: Record<string, FormRule[]> = {
   kb_id: [{ required: true, message: '请选择知识库', type: 'error' }],
   domain_id: [{ required: true, message: '请选择考试方向', type: 'error' }],
@@ -724,6 +826,26 @@ const assignmentRules: Record<string, FormRule[]> = {
 const formatDate = (value?: string) => {
   if (!value) return ''
   return new Date(value).toLocaleString()
+}
+
+const formatPercent = (value?: number) => {
+  if (!value) return '0%'
+  return `${Math.round(value * 100)}%`
+}
+
+const assignmentProgressStatusLabel = (status: ExamAssignmentProgressStatus) => {
+  const map: Record<ExamAssignmentProgressStatus, string> = {
+    not_started: '未开始',
+    in_progress: '进行中',
+    completed: '已完成',
+  }
+  return map[status] || status
+}
+
+const assignmentProgressStatusTheme = (status: ExamAssignmentProgressStatus) => {
+  if (status === 'completed') return 'success'
+  if (status === 'in_progress') return 'warning'
+  return 'default'
 }
 
 const domainName = (domainId?: string) => {
@@ -1065,6 +1187,25 @@ const submitCreateAssignment = async () => {
     MessagePlugin.error(error?.message || '发布练习任务失败')
   } finally {
     creatingAssignment.value = false
+  }
+}
+
+const openAssignmentProgress = async (item: ExamAssignmentSummary) => {
+  const classId = String(route.params.classId || '')
+  if (!classId || !item.assignment?.id || !canManageAssignments.value) return
+  assignmentProgressVisible.value = true
+  assignmentProgressDetail.value = null
+  assignmentProgressLoading.value = true
+  loadingAssignmentProgressId.value = item.assignment.id
+  try {
+    const res = await getClassAssignmentProgress(classId, item.assignment.id)
+    assignmentProgressDetail.value = res.data
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '练习结果加载失败')
+    assignmentProgressVisible.value = false
+  } finally {
+    assignmentProgressLoading.value = false
+    loadingAssignmentProgressId.value = ''
   }
 }
 
@@ -1503,6 +1644,18 @@ onMounted(async () => {
   }
 }
 
+.assignment-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.assignment-progress__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .dialog-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1531,6 +1684,7 @@ onMounted(async () => {
 
   .summary-grid,
   .flow-grid,
+  .assignment-progress__summary,
   .dialog-grid {
     grid-template-columns: 1fr;
   }

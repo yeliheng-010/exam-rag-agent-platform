@@ -140,6 +140,7 @@ func TestExamAssignmentRouteGuardSourceMatrix(t *testing.T) {
 	mustContainAll(t, source, []string{
 		`exam.GET("/classes/:class_id/assignments", g.Viewer(), assignmentHandler.ListClassAssignments)`,
 		`exam.POST("/classes/:class_id/assignments", g.Viewer(), assignmentHandler.CreateAssignment)`,
+		`exam.GET("/classes/:class_id/assignments/:assignment_id/progress", g.Viewer(), assignmentHandler.GetAssignmentProgress)`,
 		`exam.GET("/assignments", g.Viewer(), assignmentHandler.ListMyAssignments)`,
 		`exam.POST("/assignments/:assignment_id/attempts", g.Viewer(), assignmentHandler.CreateAssignmentAttempt)`,
 	})

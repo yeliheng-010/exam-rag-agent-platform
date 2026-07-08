@@ -11,6 +11,7 @@ type ExamAssignmentService interface {
 	ListClassAssignments(ctx context.Context, tenantID uint64, userID string, classID string, filter types.ListExamAssignmentsFilter) ([]*types.ExamAssignmentSummary, error)
 	ListMyAssignments(ctx context.Context, tenantID uint64, userID string, filter types.ListExamAssignmentsFilter) ([]*types.ExamAssignmentSummary, error)
 	CreateAssignmentAttempt(ctx context.Context, tenantID uint64, userID string, assignmentID string) (*types.CreatePracticeAttemptResult, error)
+	GetAssignmentProgress(ctx context.Context, tenantID uint64, userID string, classID string, assignmentID string) (*types.ExamAssignmentProgressSummary, error)
 }
 
 type ExamAssignmentRepository interface {

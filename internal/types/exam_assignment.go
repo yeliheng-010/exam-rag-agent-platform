@@ -3,10 +3,15 @@ package types
 import "time"
 
 type ExamAssignmentStatus string
+type ExamAssignmentProgressStatus string
 
 const (
 	ExamAssignmentStatusPublished ExamAssignmentStatus = "published"
 	ExamAssignmentStatusArchived  ExamAssignmentStatus = "archived"
+
+	ExamAssignmentProgressStatusNotStarted ExamAssignmentProgressStatus = "not_started"
+	ExamAssignmentProgressStatusInProgress ExamAssignmentProgressStatus = "in_progress"
+	ExamAssignmentProgressStatusCompleted  ExamAssignmentProgressStatus = "completed"
 )
 
 type ExamClassAssignment struct {
@@ -46,4 +51,20 @@ type ExamAssignmentSummary struct {
 	BankName      string               `json:"bank_name"`
 	QuestionCount int                  `json:"question_count"`
 	LastAttempt   *ExamPracticeAttempt `json:"last_attempt,omitempty"`
+}
+
+type ExamAssignmentMemberProgress struct {
+	Member      *ExamClassMember             `json:"member"`
+	Attempt     *ExamPracticeAttempt         `json:"attempt,omitempty"`
+	Status      ExamAssignmentProgressStatus `json:"status"`
+	CorrectRate float64                      `json:"correct_rate"`
+}
+
+type ExamAssignmentProgressSummary struct {
+	Assignment         *ExamClassAssignment            `json:"assignment"`
+	TotalStudents      int                             `json:"total_students"`
+	StartedCount       int                             `json:"started_count"`
+	CompletedCount     int                             `json:"completed_count"`
+	AverageCorrectRate float64                         `json:"average_correct_rate"`
+	Members            []*ExamAssignmentMemberProgress `json:"members"`
 }

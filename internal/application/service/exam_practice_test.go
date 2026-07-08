@@ -519,6 +519,27 @@ func (r *stubPracticeRepo) ListLatestAttemptsByAssignments(_ context.Context, te
 	return out, nil
 }
 
+func (r *stubPracticeRepo) ListLatestAttemptsByAssignmentUsers(_ context.Context, tenantID uint64, assignmentID string, userIDs []string) (map[string]*types.ExamPracticeAttempt, error) {
+	allowed := make(map[string]bool, len(userIDs))
+	for _, userID := range userIDs {
+		allowed[userID] = true
+	}
+	out := map[string]*types.ExamPracticeAttempt{}
+	for _, attempt := range r.attempts {
+		if attempt.AssignmentID == nil {
+			continue
+		}
+		if attempt.TenantID != tenantID || *attempt.AssignmentID != assignmentID || !allowed[attempt.UserID] {
+			continue
+		}
+		existing := out[attempt.UserID]
+		if existing == nil || existing.CreatedAt.Before(attempt.CreatedAt) {
+			out[attempt.UserID] = clonePracticeAttempt(attempt)
+		}
+	}
+	return out, nil
+}
+
 func clonePracticeAttempt(attempt *types.ExamPracticeAttempt) *types.ExamPracticeAttempt {
 	if attempt == nil {
 		return nil

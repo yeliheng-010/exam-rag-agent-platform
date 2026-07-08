@@ -222,6 +222,130 @@ func TestExamAssignmentListMineRequiresActiveClassMember(t *testing.T) {
 	}
 }
 
+func TestExamAssignmentProgressSummarizesActiveStudents(t *testing.T) {
+	ctx := context.Background()
+	classRepo := newFakeExamClassRepo()
+	assignRepo := newStubExamAssignmentRepo(classRepo)
+	class := seedExamClass(classRepo, "class-1", 10000, "teacher-1", "CLASSCODE")
+	seedExamClassMember(classRepo, class.ID, 10000, "teacher-1", types.ExamClassRoleTeacher, types.ExamClassMemberStatusActive)
+	seedExamClassMember(classRepo, class.ID, 10000, "assistant-1", types.ExamClassRoleAssistant, types.ExamClassMemberStatusActive)
+	seedExamClassMember(classRepo, class.ID, 10000, "student-done", types.ExamClassRoleStudent, types.ExamClassMemberStatusActive)
+	seedExamClassMember(classRepo, class.ID, 10000, "student-new", types.ExamClassRoleStudent, types.ExamClassMemberStatusActive)
+	seedExamClassMember(classRepo, class.ID, 10000, "student-pending", types.ExamClassRoleStudent, types.ExamClassMemberStatusPending)
+	group := newPracticeGroupDetail()
+	group.Group.SpaceID = class.SpaceID
+	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
+	practiceRepo := newStubPracticeRepo()
+	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, practiceRepo, newStubExamAssignmentSpaceService()).(*examAssignmentService)
+	assignment, err := svc.CreateAssignment(ctx, 10000, "teacher-1", class.ID, &types.CreateExamAssignmentRequest{
+		GroupID: group.Group.ID,
+		Title:   "Reading homework",
+	})
+	if err != nil {
+		t.Fatalf("CreateAssignment returned error: %v", err)
+	}
+	completedAt := time.Now()
+	assignmentID := assignment.Assignment.ID
+	practiceRepo.attempts = append(practiceRepo.attempts, &types.ExamPracticeAttempt{
+		ID:             "attempt-done",
+		TenantID:       10000,
+		UserID:         "student-done",
+		SpaceID:        class.SpaceID,
+		QuestionBankID: group.Group.QuestionBankID,
+		GroupID:        group.Group.ID,
+		AssignmentID:   &assignmentID,
+		Status:         types.ExamPracticeAttemptStatusCompleted,
+		QuestionCount:  5,
+		AnsweredCount:  5,
+		CorrectCount:   4,
+		StartedAt:      completedAt.Add(-15 * time.Minute),
+		CompletedAt:    &completedAt,
+		CreatedAt:      completedAt.Add(-15 * time.Minute),
+		UpdatedAt:      completedAt,
+	})
+	practiceRepo.attempts = append(practiceRepo.attempts, &types.ExamPracticeAttempt{
+		ID:             "attempt-pending-member",
+		TenantID:       10000,
+		UserID:         "student-pending",
+		SpaceID:        class.SpaceID,
+		QuestionBankID: group.Group.QuestionBankID,
+		GroupID:        group.Group.ID,
+		AssignmentID:   &assignmentID,
+		Status:         types.ExamPracticeAttemptStatusCompleted,
+		QuestionCount:  5,
+		AnsweredCount:  5,
+		CorrectCount:   5,
+		StartedAt:      completedAt,
+		CompletedAt:    &completedAt,
+		CreatedAt:      completedAt,
+		UpdatedAt:      completedAt,
+	})
+
+	progress, err := svc.GetAssignmentProgress(ctx, 10000, "teacher-1", class.ID, assignment.Assignment.ID)
+
+	if err != nil {
+		t.Fatalf("GetAssignmentProgress returned error: %v", err)
+	}
+	if progress.TotalStudents != 2 || progress.StartedCount != 1 || progress.CompletedCount != 1 {
+		t.Fatalf("progress counts = total %d started %d completed %d, want 2/1/1", progress.TotalStudents, progress.StartedCount, progress.CompletedCount)
+	}
+	if progress.AverageCorrectRate != 0.8 {
+		t.Fatalf("average correct rate = %.2f, want 0.80", progress.AverageCorrectRate)
+	}
+	if len(progress.Members) != 2 {
+		t.Fatalf("member progress count = %d, want 2", len(progress.Members))
+	}
+	done := findAssignmentProgress(progress.Members, "student-done")
+	if done == nil || done.Status != types.ExamAssignmentProgressStatusCompleted || done.CorrectRate != 0.8 {
+		t.Fatalf("student-done progress = %#v, want completed with 0.8 rate", done)
+	}
+	notStarted := findAssignmentProgress(progress.Members, "student-new")
+	if notStarted == nil || notStarted.Status != types.ExamAssignmentProgressStatusNotStarted || notStarted.Attempt != nil {
+		t.Fatalf("student-new progress = %#v, want not started without attempt", notStarted)
+	}
+	if findAssignmentProgress(progress.Members, "student-pending") != nil {
+		t.Fatalf("pending student should not be included in assignment progress")
+	}
+	if findAssignmentProgress(progress.Members, "assistant-1") != nil {
+		t.Fatalf("assistant should not be included as a student progress row")
+	}
+}
+
+func TestExamAssignmentProgressRequiresClassWriteRole(t *testing.T) {
+	ctx := context.Background()
+	classRepo := newFakeExamClassRepo()
+	assignRepo := newStubExamAssignmentRepo(classRepo)
+	class := seedExamClass(classRepo, "class-1", 10000, "teacher-1", "CLASSCODE")
+	seedExamClassMember(classRepo, class.ID, 10000, "teacher-1", types.ExamClassRoleTeacher, types.ExamClassMemberStatusActive)
+	seedExamClassMember(classRepo, class.ID, 10000, "student-1", types.ExamClassRoleStudent, types.ExamClassMemberStatusActive)
+	group := newPracticeGroupDetail()
+	group.Group.SpaceID = class.SpaceID
+	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
+	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
+	assignment, err := svc.CreateAssignment(ctx, 10000, "teacher-1", class.ID, &types.CreateExamAssignmentRequest{
+		GroupID: group.Group.ID,
+		Title:   "Reading homework",
+	})
+	if err != nil {
+		t.Fatalf("CreateAssignment returned error: %v", err)
+	}
+
+	_, err = svc.GetAssignmentProgress(ctx, 10000, "student-1", class.ID, assignment.Assignment.ID)
+
+	if !errors.Is(err, ErrExamPermissionDenied) {
+		t.Fatalf("GetAssignmentProgress error = %v, want ErrExamPermissionDenied", err)
+	}
+}
+
+func findAssignmentProgress(items []*types.ExamAssignmentMemberProgress, userID string) *types.ExamAssignmentMemberProgress {
+	for _, item := range items {
+		if item != nil && item.Member != nil && item.Member.UserID == userID {
+			return item
+		}
+	}
+	return nil
+}
+
 type stubExamAssignmentRepo struct {
 	assignments []*types.ExamClassAssignment
 	classRepo   *fakeExamClassRepo

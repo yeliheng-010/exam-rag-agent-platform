@@ -168,3 +168,29 @@ func (r *examPracticeRepository) ListLatestAttemptsByAssignments(
 	}
 	return out, nil
 }
+
+func (r *examPracticeRepository) ListLatestAttemptsByAssignmentUsers(
+	ctx context.Context,
+	tenantID uint64,
+	assignmentID string,
+	userIDs []string,
+) (map[string]*types.ExamPracticeAttempt, error) {
+	out := make(map[string]*types.ExamPracticeAttempt, len(userIDs))
+	if assignmentID == "" || len(userIDs) == 0 {
+		return out, nil
+	}
+	var attempts []*types.ExamPracticeAttempt
+	if err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND assignment_id = ? AND user_id IN ?", tenantID, assignmentID, userIDs).
+		Order("created_at DESC").
+		Find(&attempts).Error; err != nil {
+		return nil, err
+	}
+	for _, attempt := range attempts {
+		if attempt == nil || out[attempt.UserID] != nil {
+			continue
+		}
+		out[attempt.UserID] = attempt
+	}
+	return out, nil
+}

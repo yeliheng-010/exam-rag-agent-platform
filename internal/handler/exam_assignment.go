@@ -81,3 +81,17 @@ func (h *ExamAssignmentHandler) CreateAssignmentAttempt(c *gin.Context) {
 	}
 	c.JSON(http.StatusCreated, gin.H{"success": true, "data": result})
 }
+
+func (h *ExamAssignmentHandler) GetAssignmentProgress(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(types.UserIDContextKey.String())
+	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+
+	result, err := h.assignmentService.GetAssignmentProgress(ctx, tenantID, userID, c.Param("class_id"), c.Param("assignment_id"))
+	if err != nil {
+		logger.Errorf(ctx, "Failed to get exam assignment progress: %v", err)
+		writeExamError(c, err, "Failed to get exam assignment progress")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}

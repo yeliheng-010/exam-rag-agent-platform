@@ -1,5 +1,10 @@
 import { get, post } from '@/utils/request'
-import type { ApiResponse, CreatePracticeAttemptResult, ExamAssignmentSummary } from '@/types/exam'
+import type {
+  ApiResponse,
+  CreatePracticeAttemptResult,
+  ExamAssignmentProgressSummary,
+  ExamAssignmentSummary,
+} from '@/types/exam'
 
 export interface CreateClassAssignmentPayload {
   group_id: string
@@ -33,4 +38,8 @@ export function createClassAssignment(classId: string, data: CreateClassAssignme
 
 export function createAssignmentAttempt(assignmentId: string) {
   return post(`/api/v1/exam/assignments/${assignmentId}/attempts`, {}) as unknown as Promise<ApiResponse<CreatePracticeAttemptResult>>
+}
+
+export function getClassAssignmentProgress(classId: string, assignmentId: string) {
+  return get(`/api/v1/exam/classes/${classId}/assignments/${assignmentId}/progress`) as unknown as Promise<ApiResponse<ExamAssignmentProgressSummary>>
 }
