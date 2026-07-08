@@ -125,6 +125,7 @@ func TestExamPracticeRouteGuardSourceMatrix(t *testing.T) {
 		`exam.GET("/practice/attempts/:attempt_id", g.Viewer(), practiceHandler.GetAttempt)`,
 		`exam.POST("/practice/attempts/:attempt_id/answers", g.Viewer(), practiceHandler.SubmitAnswer)`,
 		`exam.POST("/practice/attempts/:attempt_id/complete", g.Viewer(), practiceHandler.CompleteAttempt)`,
+		`exam.PATCH("/practice/answers/:answer_id/review", g.Viewer(), practiceHandler.UpdateAnswerReview)`,
 		`exam.GET("/practice/wrong-questions", g.Viewer(), practiceHandler.ListWrongQuestions)`,
 	})
 }

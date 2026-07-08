@@ -1,11 +1,13 @@
-import { get, post } from '@/utils/request'
+import { get, patch, post } from '@/utils/request'
 import type {
   ApiResponse,
   CreatePracticeAttemptResult,
   ExamPracticeAttempt,
+  ExamPracticeAnswer,
   PracticeAnswerResult,
   PracticeAttemptDetail,
   PracticeAttemptSummary,
+  PracticeAnswerReviewStatus,
   QuestionGroupDetail,
   QuestionGroupPracticeSummary,
   WrongQuestionItem,
@@ -21,6 +23,11 @@ export interface ListPracticeQuestionGroupsParams {
 export interface SubmitPracticeAnswerPayload {
   question_id: string
   answer_text: string
+}
+
+export interface UpdatePracticeAnswerReviewPayload {
+  review_status: PracticeAnswerReviewStatus
+  review_note?: string
 }
 
 export interface ListPracticeAttemptsParams {
@@ -64,6 +71,10 @@ export function getPracticeAttempt(attemptId: string) {
 
 export function listWrongQuestions(params?: ListWrongQuestionsParams) {
   return get(`/api/v1/exam/practice/wrong-questions${buildPracticeQuery(params)}`) as unknown as Promise<ApiResponse<WrongQuestionItem[]>>
+}
+
+export function updatePracticeAnswerReview(answerId: string, data: UpdatePracticeAnswerReviewPayload) {
+  return patch(`/api/v1/exam/practice/answers/${answerId}/review`, data) as unknown as Promise<ApiResponse<ExamPracticeAnswer>>
 }
 
 export function getPracticeQuestionGroup(groupId: string) {

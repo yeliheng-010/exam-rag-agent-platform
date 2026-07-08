@@ -235,6 +235,101 @@ func TestExamPracticeService_ListWrongQuestionsReturnsOwnIncorrectAnswers(t *tes
 	}
 }
 
+func TestExamPracticeService_UpdateAnswerReviewStoresMasteryState(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newTestExamPracticeService()
+	attempt, err := svc.CreateAttempt(ctx, 10000, "student-1", "group-1")
+	if err != nil {
+		t.Fatalf("CreateAttempt returned error: %v", err)
+	}
+	result, err := svc.SubmitAnswer(ctx, 10000, "student-1", attempt.Attempt.ID, &types.SubmitPracticeAnswerRequest{
+		QuestionID: "question-1",
+		AnswerText: "A",
+	})
+	if err != nil {
+		t.Fatalf("SubmitAnswer returned error: %v", err)
+	}
+
+	answer, err := svc.UpdateAnswerReview(ctx, 10000, "student-1", result.Answer.ID, &types.UpdatePracticeAnswerReviewRequest{
+		ReviewStatus: types.PracticeAnswerReviewStatusMastered,
+		ReviewNote:   "Need to re-check paragraph two.",
+	})
+
+	if err != nil {
+		t.Fatalf("UpdateAnswerReview returned error: %v", err)
+	}
+	if answer.ReviewStatus != types.PracticeAnswerReviewStatusMastered {
+		t.Fatalf("review status = %q, want mastered", answer.ReviewStatus)
+	}
+	if answer.ReviewNote != "Need to re-check paragraph two." {
+		t.Fatalf("review note = %q", answer.ReviewNote)
+	}
+	if answer.ReviewedAt == nil {
+		t.Fatalf("reviewed_at should be set")
+	}
+}
+
+func TestExamPracticeService_UpdateAnswerReviewRequiresOwnedAnswer(t *testing.T) {
+	ctx := context.Background()
+	svc, repo := newTestExamPracticeService()
+	repo.attempts = append(repo.attempts, &types.ExamPracticeAttempt{
+		ID:             "attempt-other",
+		TenantID:       10000,
+		UserID:         "student-2",
+		SpaceID:        "space-1",
+		QuestionBankID: "bank-1",
+		GroupID:        "group-1",
+		Status:         types.ExamPracticeAttemptStatusCompleted,
+		QuestionCount:  1,
+		StartedAt:      time.Now(),
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	})
+	repo.answers = append(repo.answers, &types.ExamPracticeAnswer{
+		ID:         "answer-other",
+		TenantID:   10000,
+		AttemptID:  "attempt-other",
+		QuestionID: "question-1",
+		AnswerText: "A",
+		IsCorrect:  false,
+		AnsweredAt: time.Now(),
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	})
+
+	_, err := svc.UpdateAnswerReview(ctx, 10000, "student-1", "answer-other", &types.UpdatePracticeAnswerReviewRequest{
+		ReviewStatus: types.PracticeAnswerReviewStatusReviewing,
+	})
+
+	if !errors.Is(err, ErrExamPermissionDenied) {
+		t.Fatalf("UpdateAnswerReview error = %v, want ErrExamPermissionDenied", err)
+	}
+}
+
+func TestExamPracticeService_UpdateAnswerReviewRejectsInvalidStatus(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newTestExamPracticeService()
+	attempt, err := svc.CreateAttempt(ctx, 10000, "student-1", "group-1")
+	if err != nil {
+		t.Fatalf("CreateAttempt returned error: %v", err)
+	}
+	result, err := svc.SubmitAnswer(ctx, 10000, "student-1", attempt.Attempt.ID, &types.SubmitPracticeAnswerRequest{
+		QuestionID: "question-1",
+		AnswerText: "A",
+	})
+	if err != nil {
+		t.Fatalf("SubmitAnswer returned error: %v", err)
+	}
+
+	_, err = svc.UpdateAnswerReview(ctx, 10000, "student-1", result.Answer.ID, &types.UpdatePracticeAnswerReviewRequest{
+		ReviewStatus: types.PracticeAnswerReviewStatus("done"),
+	})
+
+	if !errors.Is(err, ErrExamInvalidRequest) {
+		t.Fatalf("UpdateAnswerReview error = %v, want ErrExamInvalidRequest", err)
+	}
+}
+
 func newTestExamPracticeService() (*examPracticeService, *stubPracticeRepo) {
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{newPracticeGroupDetail()}}
 	practiceRepo := newStubPracticeRepo()
@@ -338,6 +433,26 @@ func (r *stubPracticeRepo) UpsertAnswer(_ context.Context, answer *types.ExamPra
 			cp.ID = existing.ID
 			cp.CreatedAt = existing.CreatedAt
 			r.answers[i] = cp
+			return nil
+		}
+	}
+	r.answers = append(r.answers, clonePracticeAnswer(answer))
+	return nil
+}
+
+func (r *stubPracticeRepo) GetAnswerByIDAndTenant(_ context.Context, tenantID uint64, answerID string) (*types.ExamPracticeAnswer, error) {
+	for _, answer := range r.answers {
+		if answer.ID == answerID && answer.TenantID == tenantID {
+			return clonePracticeAnswer(answer), nil
+		}
+	}
+	return nil, repository.ErrExamPracticeAnswerNotFound
+}
+
+func (r *stubPracticeRepo) UpdateAnswer(_ context.Context, answer *types.ExamPracticeAnswer) error {
+	for i, existing := range r.answers {
+		if existing.ID == answer.ID {
+			r.answers[i] = clonePracticeAnswer(answer)
 			return nil
 		}
 	}

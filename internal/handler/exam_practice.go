@@ -141,6 +141,25 @@ func (h *ExamPracticeHandler) SubmitAnswer(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
 }
 
+func (h *ExamPracticeHandler) UpdateAnswerReview(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(types.UserIDContextKey.String())
+	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+
+	var req types.UpdatePracticeAnswerReviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(apperrors.NewValidationError("Invalid request parameters").WithDetails(err.Error()))
+		return
+	}
+	answer, err := h.practiceService.UpdateAnswerReview(ctx, tenantID, userID, c.Param("answer_id"), &req)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to update practice answer review: %v", err)
+		writeExamError(c, err, "Failed to update practice answer review")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": answer})
+}
+
 func (h *ExamPracticeHandler) CompleteAttempt(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.GetString(types.UserIDContextKey.String())

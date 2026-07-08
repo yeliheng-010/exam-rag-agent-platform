@@ -12,6 +12,7 @@ export type ExamQuestionDraftStatus = 'pending_review' | 'approved' | 'rejected'
 export type ExamQuestionGroupDraftStatus = 'pending_review' | 'approved' | 'rejected'
 export type QuestionGroupType = 'reading_passage' | 'math_problem' | 'single_question' | string
 export type ExamPracticeAttemptStatus = 'in_progress' | 'completed'
+export type PracticeAnswerReviewStatus = 'unreviewed' | 'reviewing' | 'mastered'
 
 export interface ExamDomain {
   id: string
@@ -356,6 +357,9 @@ export interface ExamPracticeAnswer {
   question_snapshot: Record<string, any>
   answer_snapshot: Array<Record<string, any>>
   explanation_snapshot: Array<Record<string, any>>
+  review_status: PracticeAnswerReviewStatus
+  review_note: string
+  reviewed_at?: string
   answered_at: string
   created_at: string
   updated_at: string

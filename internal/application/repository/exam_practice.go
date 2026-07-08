@@ -11,6 +11,7 @@ import (
 )
 
 var ErrExamPracticeAttemptNotFound = errors.New("exam practice attempt not found")
+var ErrExamPracticeAnswerNotFound = errors.New("exam practice answer not found")
 
 type examPracticeRepository struct {
 	db *gorm.DB
@@ -56,10 +57,31 @@ func (r *examPracticeRepository) UpsertAnswer(ctx context.Context, answer *types
 			"question_snapshot",
 			"answer_snapshot",
 			"explanation_snapshot",
+			"review_status",
+			"review_note",
+			"reviewed_at",
 			"answered_at",
 			"updated_at",
 		}),
 	}).Create(answer).Error
+}
+
+func (r *examPracticeRepository) GetAnswerByIDAndTenant(ctx context.Context, tenantID uint64, answerID string) (*types.ExamPracticeAnswer, error) {
+	var answer types.ExamPracticeAnswer
+	err := r.db.WithContext(ctx).
+		Where("id = ? AND tenant_id = ?", answerID, tenantID).
+		First(&answer).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrExamPracticeAnswerNotFound
+		}
+		return nil, err
+	}
+	return &answer, nil
+}
+
+func (r *examPracticeRepository) UpdateAnswer(ctx context.Context, answer *types.ExamPracticeAnswer) error {
+	return r.db.WithContext(ctx).Save(answer).Error
 }
 
 func (r *examPracticeRepository) ListAttemptsByUser(

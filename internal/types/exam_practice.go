@@ -3,10 +3,15 @@ package types
 import "time"
 
 type ExamPracticeAttemptStatus string
+type PracticeAnswerReviewStatus string
 
 const (
 	ExamPracticeAttemptStatusInProgress ExamPracticeAttemptStatus = "in_progress"
 	ExamPracticeAttemptStatusCompleted  ExamPracticeAttemptStatus = "completed"
+
+	PracticeAnswerReviewStatusUnreviewed PracticeAnswerReviewStatus = "unreviewed"
+	PracticeAnswerReviewStatusReviewing  PracticeAnswerReviewStatus = "reviewing"
+	PracticeAnswerReviewStatusMastered   PracticeAnswerReviewStatus = "mastered"
 )
 
 type ExamPracticeAttempt struct {
@@ -31,20 +36,23 @@ func (ExamPracticeAttempt) TableName() string {
 }
 
 type ExamPracticeAnswer struct {
-	ID                  string    `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID            uint64    `json:"tenant_id" gorm:"not null;index"`
-	AttemptID           string    `json:"attempt_id" gorm:"type:varchar(36);not null;index;uniqueIndex:uniq_exam_practice_answer_question"`
-	QuestionID          string    `json:"question_id" gorm:"type:varchar(36);not null;index;uniqueIndex:uniq_exam_practice_answer_question"`
-	QuestionNo          string    `json:"question_no" gorm:"type:varchar(64);not null;default:''"`
-	AnswerText          string    `json:"answer_text" gorm:"type:text;not null;default:''"`
-	IsCorrect           bool      `json:"is_correct" gorm:"not null;default:false"`
-	CorrectAnswer       string    `json:"correct_answer" gorm:"type:text;not null;default:''"`
-	QuestionSnapshot    JSONMap   `json:"question_snapshot" gorm:"type:jsonb;not null"`
-	AnswerSnapshot      JSON      `json:"answer_snapshot" gorm:"type:jsonb;not null"`
-	ExplanationSnapshot JSON      `json:"explanation_snapshot" gorm:"type:jsonb;not null"`
-	AnsweredAt          time.Time `json:"answered_at"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	ID                  string                     `json:"id" gorm:"type:varchar(36);primaryKey"`
+	TenantID            uint64                     `json:"tenant_id" gorm:"not null;index"`
+	AttemptID           string                     `json:"attempt_id" gorm:"type:varchar(36);not null;index;uniqueIndex:uniq_exam_practice_answer_question"`
+	QuestionID          string                     `json:"question_id" gorm:"type:varchar(36);not null;index;uniqueIndex:uniq_exam_practice_answer_question"`
+	QuestionNo          string                     `json:"question_no" gorm:"type:varchar(64);not null;default:''"`
+	AnswerText          string                     `json:"answer_text" gorm:"type:text;not null;default:''"`
+	IsCorrect           bool                       `json:"is_correct" gorm:"not null;default:false"`
+	CorrectAnswer       string                     `json:"correct_answer" gorm:"type:text;not null;default:''"`
+	QuestionSnapshot    JSONMap                    `json:"question_snapshot" gorm:"type:jsonb;not null"`
+	AnswerSnapshot      JSON                       `json:"answer_snapshot" gorm:"type:jsonb;not null"`
+	ExplanationSnapshot JSON                       `json:"explanation_snapshot" gorm:"type:jsonb;not null"`
+	ReviewStatus        PracticeAnswerReviewStatus `json:"review_status" gorm:"type:varchar(32);not null;default:'unreviewed'"`
+	ReviewNote          string                     `json:"review_note" gorm:"type:text;not null;default:''"`
+	ReviewedAt          *time.Time                 `json:"reviewed_at,omitempty"`
+	AnsweredAt          time.Time                  `json:"answered_at"`
+	CreatedAt           time.Time                  `json:"created_at"`
+	UpdatedAt           time.Time                  `json:"updated_at"`
 }
 
 func (ExamPracticeAnswer) TableName() string {
@@ -105,6 +113,11 @@ type CreatePracticeAttemptResult struct {
 type SubmitPracticeAnswerRequest struct {
 	QuestionID string `json:"question_id" binding:"required"`
 	AnswerText string `json:"answer_text" binding:"required"`
+}
+
+type UpdatePracticeAnswerReviewRequest struct {
+	ReviewStatus PracticeAnswerReviewStatus `json:"review_status" binding:"required"`
+	ReviewNote   string                     `json:"review_note"`
 }
 
 type PracticeAnswerResult struct {

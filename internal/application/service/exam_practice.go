@@ -252,6 +252,9 @@ func (s *examPracticeService) SubmitAnswer(
 		QuestionSnapshot:    buildQuestionSnapshot(question),
 		AnswerSnapshot:      mustPracticeJSON(question.Answers),
 		ExplanationSnapshot: mustPracticeJSON(question.Explanations),
+		ReviewStatus:        types.PracticeAnswerReviewStatusUnreviewed,
+		ReviewNote:          "",
+		ReviewedAt:          nil,
 		AnsweredAt:          now,
 		CreatedAt:           now,
 		UpdatedAt:           now,
@@ -269,6 +272,52 @@ func (s *examPracticeService) SubmitAnswer(
 		Explanations:   question.Explanations,
 		ChunkRefs:      question.ChunkRefs,
 	}, nil
+}
+
+func (s *examPracticeService) UpdateAnswerReview(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	answerID string,
+	req *types.UpdatePracticeAnswerReviewRequest,
+) (*types.ExamPracticeAnswer, error) {
+	if req == nil || strings.TrimSpace(answerID) == "" {
+		return nil, ErrExamInvalidRequest
+	}
+	if !isValidPracticeAnswerReviewStatus(req.ReviewStatus) {
+		return nil, ErrExamInvalidRequest
+	}
+	note := strings.TrimSpace(req.ReviewNote)
+	if len([]rune(note)) > 2000 {
+		return nil, ErrExamInvalidRequest
+	}
+	answer, err := s.practiceRepo.GetAnswerByIDAndTenant(ctx, tenantID, strings.TrimSpace(answerID))
+	if err != nil {
+		if errors.Is(err, repository.ErrExamPracticeAnswerNotFound) {
+			return nil, ErrExamNotFound
+		}
+		return nil, err
+	}
+	attempt, err := s.ownedAttempt(ctx, tenantID, userID, answer.AttemptID)
+	if err != nil {
+		return nil, err
+	}
+	ok, err := s.spaceService.CanReadSpace(ctx, tenantID, userID, attempt.SpaceID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, ErrExamPermissionDenied
+	}
+	now := time.Now()
+	answer.ReviewStatus = req.ReviewStatus
+	answer.ReviewNote = note
+	answer.ReviewedAt = &now
+	answer.UpdatedAt = now
+	if err := s.practiceRepo.UpdateAnswer(ctx, answer); err != nil {
+		return nil, err
+	}
+	return answer, nil
 }
 
 func (s *examPracticeService) CompleteAttempt(ctx context.Context, tenantID uint64, userID string, attemptID string) (*types.ExamPracticeAttempt, error) {
@@ -577,4 +626,15 @@ func normalizedPracticeAnswerTokens(values []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func isValidPracticeAnswerReviewStatus(status types.PracticeAnswerReviewStatus) bool {
+	switch status {
+	case types.PracticeAnswerReviewStatusUnreviewed,
+		types.PracticeAnswerReviewStatusReviewing,
+		types.PracticeAnswerReviewStatusMastered:
+		return true
+	default:
+		return false
+	}
 }
