@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import {
@@ -23,6 +23,12 @@ import {
   splitChunkText,
 } from './questionGroupDraftReviewUtils'
 import type { GroupDraftForm } from './questionGroupDraftReviewUtils'
+import {
+  createQuestionGroupExtractionPoller,
+  draftHasBlockingQuality,
+  normalizeExtractionPercent,
+  shouldPollQuestionGroupExtraction,
+} from './questionGroupExtractionProgress'
 
 export { groupDraftStatusLabel, groupDraftStatusTheme }
 
@@ -30,7 +36,7 @@ export function useQuestionGroupDraftReview() {
   const route = useRoute()
   const router = useRouter()
   const loading = ref(false)
-  const extracting = ref(false)
+  const startingExtraction = ref(false)
   const saving = ref(false)
   const approving = ref(false)
   const rejecting = ref(false)
@@ -50,33 +56,43 @@ export function useQuestionGroupDraftReview() {
   })
   const selectedQuestion = computed(() => form.value.questions[selectedQuestionIndex.value] || null)
   const canEditSelected = computed(() => selectedDraft.value?.status === 'pending_review')
+  const canApproveSelected = computed(() => canEditSelected.value && !draftHasBlockingQuality(selectedDraft.value))
+  const selectedQualityReport = computed(() => selectedDraft.value?.quality_report)
+  const extracting = computed(() => startingExtraction.value || shouldPollQuestionGroupExtraction(data.value?.task.status))
+  const extractionPercent = computed(() => normalizeExtractionPercent(data.value?.task.progress?.percent))
+  const extractionWarnings = computed(() => data.value?.task.progress?.warnings || [])
+  let previousTaskStatus: string | undefined
 
-  const loadDrafts = async () => {
+  const loadDrafts = async (silent = false) => {
     const taskId = String(route.params.taskId || '')
     if (!taskId) return
-    loading.value = true
+    if (!silent) loading.value = true
     try {
       const res = await listQuestionGroupDrafts(taskId)
       applyResult(res.data)
     } catch (error: any) {
-      MessagePlugin.error(error?.message || '题组草稿加载失败')
+      if (!silent) MessagePlugin.error(error?.message || '题组草稿加载失败')
+      else poller.sync(data.value?.task.status)
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
     }
   }
+
+  const poller = createQuestionGroupExtractionPoller(() => loadDrafts(true))
+  onBeforeUnmount(poller.stop)
 
   const extractDrafts = async (force = false) => {
     const taskId = String(route.params.taskId || '')
     if (!taskId) return
-    extracting.value = true
+    startingExtraction.value = true
     try {
       const res = await extractQuestionGroupDrafts(taskId, force)
-      MessagePlugin.success('题组抽取完成')
+      MessagePlugin.success('题组抽取任务已启动')
       applyResult(res.data)
     } catch (error: any) {
       MessagePlugin.error(error?.message || '题组抽取失败')
     } finally {
-      extracting.value = false
+      startingExtraction.value = false
     }
   }
 
@@ -174,6 +190,11 @@ export function useQuestionGroupDraftReview() {
   }
 
   const applyResult = (result: ListQuestionGroupDraftsResult) => {
+    const nextStatus = result?.task?.status
+    if (previousTaskStatus === 'extracting' && nextStatus === 'reviewing') {
+      MessagePlugin.success('题组抽取完成，请检查质量报告')
+    }
+    previousTaskStatus = nextStatus
     data.value = result
     drafts.value = result?.drafts || []
     const current = selectedDraft.value
@@ -183,6 +204,7 @@ export function useQuestionGroupDraftReview() {
       selectedDraft.value = null
       form.value = emptyForm()
     }
+    poller.sync(nextStatus)
   }
 
   const replaceDraft = (draft: ExamQuestionGroupDraft) => {
@@ -255,6 +277,10 @@ export function useQuestionGroupDraftReview() {
     assetText,
     headerText,
     canEditSelected,
+    canApproveSelected,
+    selectedQualityReport,
+    extractionPercent,
+    extractionWarnings,
     loadDrafts,
     extractDrafts,
     selectDraft,

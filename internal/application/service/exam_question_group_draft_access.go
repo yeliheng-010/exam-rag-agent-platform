@@ -10,12 +10,12 @@ import (
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
-func (s *examQuestionGroupDraftService) prepareExtraction(ctx context.Context, tenantID uint64, userID string, taskID string) (*types.ExamStructuringTask, *types.ExamMaterial, error) {
+func (s *examQuestionGroupDraftService) prepareExtraction(ctx context.Context, tenantID uint64, userID string, taskID string, force bool) (*types.ExamStructuringTask, *types.ExamMaterial, error) {
 	task, err := s.getTaskForWrite(ctx, tenantID, userID, taskID)
 	if err != nil {
 		return nil, nil, err
 	}
-	canExtract, err := s.canExtractQuestionGroups(ctx, tenantID, task)
+	canExtract, err := s.canExtractQuestionGroups(ctx, tenantID, task, force)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -35,15 +35,28 @@ func (s *examQuestionGroupDraftService) prepareExtraction(ctx context.Context, t
 	return task, material, nil
 }
 
-func (s *examQuestionGroupDraftService) canExtractQuestionGroups(ctx context.Context, tenantID uint64, task *types.ExamStructuringTask) (bool, error) {
+func (s *examQuestionGroupDraftService) canExtractQuestionGroups(ctx context.Context, tenantID uint64, task *types.ExamStructuringTask, force bool) (bool, error) {
 	switch task.Status {
 	case types.ExamStructuringTaskStatusReadyForReview, types.ExamStructuringTaskStatusFailed:
 		return true, nil
+	case types.ExamStructuringTaskStatusReviewing:
+		return s.canForceExtractReviewingTask(ctx, tenantID, task, force)
 	case types.ExamStructuringTaskStatusCompleted:
 		return s.canExtractCompletedLegacyTask(ctx, tenantID, task)
 	default:
 		return false, nil
 	}
+}
+
+func (s *examQuestionGroupDraftService) canForceExtractReviewingTask(ctx context.Context, tenantID uint64, task *types.ExamStructuringTask, force bool) (bool, error) {
+	if !force {
+		return false, nil
+	}
+	stats, err := s.draftRepo.CountDraftsByTask(ctx, tenantID, task.ID)
+	if err != nil {
+		return false, err
+	}
+	return stats.Approved == 0, nil
 }
 
 func (s *examQuestionGroupDraftService) canExtractCompletedLegacyTask(ctx context.Context, tenantID uint64, task *types.ExamStructuringTask) (bool, error) {

@@ -102,6 +102,7 @@ func TestExamQuestionGroupDraftRouteGuardSourceMatrix(t *testing.T) {
 
 	mustContainAll(t, source, []string{
 		`exam.GET("/question-banks/:bank_id/question-groups", g.Viewer(), questionHandler.ListQuestionGroupDetails)`,
+		`exam.POST("/question-banks/:bank_id/rag-diagnostics", g.Contributor(), ragDiagnosticHandler.EvaluateQuestionBank)`,
 		`exam.POST("/structuring-tasks/:task_id/group-extract", g.Contributor(), questionGroupDraftHandler.ExtractDrafts)`,
 		`exam.GET("/structuring-tasks/:task_id/group-drafts", g.Contributor(), questionGroupDraftHandler.ListDrafts)`,
 		`exam.PATCH("/question-group-drafts/:draft_id", g.Contributor(), questionGroupDraftHandler.UpdateDraft)`,
@@ -155,6 +156,19 @@ func TestExamClassAnalyticsRouteGuardSourceMatrix(t *testing.T) {
 
 	mustContainAll(t, source, []string{
 		`exam.GET("/classes/:class_id/analytics", g.Viewer(), analyticsHandler.GetClassAnalytics)`,
+	})
+}
+
+func TestExamInterventionRouteGuardSourceMatrix(t *testing.T) {
+	sourceBytes, err := os.ReadFile("exam.go")
+	if err != nil {
+		t.Fatalf("read exam.go: %v", err)
+	}
+	source := string(sourceBytes)
+
+	mustContainAll(t, source, []string{
+		`exam.GET("/classes/:class_id/practice-recommendations", g.Viewer(), interventionHandler.GetClassRecommendations)`,
+		`exam.GET("/practice/recommendations", g.Viewer(), interventionHandler.GetStudentRecommendations)`,
 	})
 }
 

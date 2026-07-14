@@ -488,6 +488,20 @@ func (r *stubPracticeRepo) ListAnswersByAttempt(_ context.Context, tenantID uint
 	return out, nil
 }
 
+func (r *stubPracticeRepo) ListAnswersByAttempts(_ context.Context, tenantID uint64, attemptIDs []string) ([]*types.ExamPracticeAnswer, error) {
+	allowed := make(map[string]bool, len(attemptIDs))
+	for _, attemptID := range attemptIDs {
+		allowed[attemptID] = true
+	}
+	out := []*types.ExamPracticeAnswer{}
+	for _, answer := range r.answers {
+		if answer.TenantID == tenantID && allowed[answer.AttemptID] {
+			out = append(out, clonePracticeAnswer(answer))
+		}
+	}
+	return out, nil
+}
+
 func (r *stubPracticeRepo) ListLatestAttemptsByGroups(_ context.Context, tenantID uint64, userID string, groupIDs []string) (map[string]*types.ExamPracticeAttempt, error) {
 	allowed := make(map[string]bool, len(groupIDs))
 	for _, groupID := range groupIDs {

@@ -1617,7 +1617,10 @@ const defaultMaxCompletionTokens = ref(2048);
 const defaultTemperature = ref(0.7);
 
 // 知识库相关工具列表（用于 watch(hasKnowledgeBase) 从"无"变"有"时 seed 默认工具）
-const knowledgeBaseTools = ['grep_chunks', 'knowledge_search', 'list_knowledge_chunks', 'query_knowledge_graph', 'get_document_info', 'database_query'];
+const knowledgeBaseTools = ['grep_chunks', 'knowledge_search', 'exam_question_context', 'list_knowledge_chunks', 'query_knowledge_graph', 'get_document_info', 'database_query'];
+
+// 学习数据工具不依赖知识库，切到 Agent 模式时默认启用
+const learningTools = ['exam_learning_diagnosis', 'exam_class_diagnosis', 'exam_practice_recommendation'];
 
 // Wiki 读取类工具（用于 watch(agentMode) 切到 smart-reasoning 时 seed 默认工具）
 const wikiReadTools = ['wiki_search', 'wiki_read_page', 'wiki_read_source_doc', 'wiki_flag_issue'];
@@ -1643,9 +1646,13 @@ const allTools = computed(() => [
   // 基础思考类
   { value: 'thinking', label: t('agentEditor.tools.thinking'), description: t('agentEditor.tools.thinkingDesc'), group: 'base' },
   { value: 'todo_write', label: t('agentEditor.tools.todoWrite'), description: t('agentEditor.tools.todoWriteDesc'), group: 'base' },
+  { value: 'exam_learning_diagnosis', label: t('agentEditor.tools.examLearningDiagnosis'), description: t('agentEditor.tools.examLearningDiagnosisDesc'), group: 'learning' },
+  { value: 'exam_class_diagnosis', label: t('agentEditor.tools.examClassDiagnosis'), description: t('agentEditor.tools.examClassDiagnosisDesc'), group: 'learning' },
+  { value: 'exam_practice_recommendation', label: t('agentEditor.tools.examPracticeRecommendation'), description: t('agentEditor.tools.examPracticeRecommendationDesc'), group: 'learning' },
   // 知识库语义/关键词检索
   { value: 'grep_chunks', label: t('agentEditor.tools.grepChunks'), description: t('agentEditor.tools.grepChunksDesc'), group: 'rag' },
   { value: 'knowledge_search', label: t('agentEditor.tools.knowledgeSearch'), description: t('agentEditor.tools.knowledgeSearchDesc'), group: 'rag' },
+  { value: 'exam_question_context', label: t('agentEditor.tools.examQuestionContext'), description: t('agentEditor.tools.examQuestionContextDesc'), group: 'rag' },
   { value: 'list_knowledge_chunks', label: t('agentEditor.tools.listChunks'), description: t('agentEditor.tools.listChunksDesc'), group: 'rag' },
   { value: 'query_knowledge_graph', label: t('agentEditor.tools.queryGraph'), description: t('agentEditor.tools.queryGraphDesc'), group: 'rag' },
   { value: 'get_document_info', label: t('agentEditor.tools.getDocInfo'), description: t('agentEditor.tools.getDocInfoDesc'), group: 'rag' },
@@ -1671,6 +1678,7 @@ const allTools = computed(() => [
 // 工具分组元信息
 const toolGroups = computed(() => [
   { key: 'base', label: t('agentEditor.tools.groupBase') },
+  { key: 'learning', label: t('agentEditor.tools.groupLearning') },
   { key: 'rag', label: t('agentEditor.tools.groupRag') },
   { key: 'wiki_read', label: t('agentEditor.tools.groupWikiRead') },
   { key: 'wiki_edit', label: t('agentEditor.tools.groupWikiEdit') },
@@ -2800,10 +2808,11 @@ watch(agentMode, (val, _oldVal) => {
     // 注意：默认不注入 thinking / todo_write —— 它们用于显式反思或多步计划，
     // 会显著增加 token 消耗，用户按需手动勾选。
     if (formData.value.config.allowed_tools.length === 0) {
-      const tools: string[] = [];
+      const tools: string[] = [...learningTools];
       if (hasRagKnowledgeBase.value) {
         tools.push(
           'knowledge_search',
+          'exam_question_context',
           'grep_chunks',
           'list_knowledge_chunks',
           'query_knowledge_graph',
@@ -4762,6 +4771,10 @@ const handleSave = async () => {
 // 不同分组的左侧色条
 .tool-group--base .tool-group-bar {
   background: var(--td-gray-color-6, #a0a7ab);
+}
+
+.tool-group--learning .tool-group-bar {
+  background: var(--td-success-color, #2ba471);
 }
 
 .tool-group--rag .tool-group-bar {

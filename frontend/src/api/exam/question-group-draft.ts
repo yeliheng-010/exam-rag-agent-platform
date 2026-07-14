@@ -25,12 +25,8 @@ export interface UpdateQuestionGroupDraftPayload {
   source_chunk_ids: string[]
 }
 
-const GROUP_EXTRACTION_TIMEOUT_MS = 10 * 60 * 1000
-
 export function extractQuestionGroupDrafts(taskId: string, force = false) {
-  return post(`/api/v1/exam/structuring-tasks/${taskId}/group-extract`, { force }, {
-    timeout: GROUP_EXTRACTION_TIMEOUT_MS,
-  }) as unknown as Promise<ApiResponse<ListQuestionGroupDraftsResult>>
+  return post(`/api/v1/exam/structuring-tasks/${taskId}/group-extract`, { force }) as unknown as Promise<ApiResponse<ListQuestionGroupDraftsResult>>
 }
 
 export function listQuestionGroupDrafts(taskId: string) {

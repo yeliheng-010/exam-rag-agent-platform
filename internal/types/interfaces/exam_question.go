@@ -26,5 +26,6 @@ type ExamQuestionRepository interface {
 	CreateQuestionGroupDetail(ctx context.Context, detail *types.QuestionGroupDetail) error
 	ListQuestionGroupDetailsByBank(ctx context.Context, tenantID uint64, bankID string) ([]*types.QuestionGroupDetail, error)
 	GetQuestionGroupDetailByIDAndTenant(ctx context.Context, tenantID uint64, groupID string) (*types.QuestionGroupDetail, error)
+	FindQuestionGroupDetailByChunkIDs(ctx context.Context, tenantID uint64, chunkIDs []string) (*types.QuestionGroupDetail, error)
 	ListQuestionGroupPracticeSummaries(ctx context.Context, tenantID uint64, spaceIDs []string, filter types.ListPracticeQuestionGroupsFilter) ([]*types.QuestionGroupPracticeSummary, error)
 }

@@ -4,9 +4,9 @@ package types
 // router.NewAsynqServer — a task enqueued to a queue that the server does not
 // list will never be consumed.
 const (
-	QueueCritical   = "critical"
-	QueueDefault    = "default"
-	QueueLow        = "low"
+	QueueCritical = "critical"
+	QueueDefault  = "default"
+	QueueLow      = "low"
 	// QueueMultimodal isolates high-volume, slow VLM image tasks (OCR + caption)
 	// so a single large scanned PDF (hundreds–thousands of page images) cannot
 	// saturate the shared worker pool and block user-facing document parsing in
@@ -24,24 +24,33 @@ const (
 )
 
 const (
-	TypeChunkExtract         = "chunk:extract"
-	TypeDocumentProcess      = "document:process"       // 文档处理任务
-	TypeFAQImport            = "faq:import"             // FAQ导入任务（包含dry run模式）
-	TypeQuestionGeneration   = "question:generation"    // 问题生成任务
-	TypeSummaryGeneration    = "summary:generation"     // 摘要生成任务
-	TypeKBClone              = "kb:clone"               // 知识库复制任务
-	TypeIndexDelete          = "index:delete"           // 索引删除任务
-	TypeKBDelete             = "kb:delete"              // 知识库删除任务
-	TypeKnowledgeListDelete  = "knowledge:list_delete"  // 批量删除知识任务
-	TypeKnowledgeListReparse = "knowledge:list_reparse" // 批量重解析知识任务
-	TypeKnowledgeMove        = "knowledge:move"         // 知识移动任务
-	TypeDataTableSummary     = "datatable:summary"      // 表格摘要任务
-	TypeImageMultimodal      = "image:multimodal"       // 图片多模态处理任务（OCR + VLM Caption）
-	TypeKnowledgePostProcess = "knowledge:post_process" // 知识后处理任务（统一调度）
-	TypeManualProcess        = "manual:process"         // 手工知识更新任务（cleanup + 重新索引）
-	TypeDataSourceSync       = "datasource:sync"        // 数据源同步任务
-	TypeWikiIngest           = "wiki:ingest"            // Wiki 页面同步任务
+	TypeChunkExtract                = "chunk:extract"
+	TypeDocumentProcess             = "document:process"       // 文档处理任务
+	TypeFAQImport                   = "faq:import"             // FAQ导入任务（包含dry run模式）
+	TypeQuestionGeneration          = "question:generation"    // 问题生成任务
+	TypeSummaryGeneration           = "summary:generation"     // 摘要生成任务
+	TypeKBClone                     = "kb:clone"               // 知识库复制任务
+	TypeIndexDelete                 = "index:delete"           // 索引删除任务
+	TypeKBDelete                    = "kb:delete"              // 知识库删除任务
+	TypeKnowledgeListDelete         = "knowledge:list_delete"  // 批量删除知识任务
+	TypeKnowledgeListReparse        = "knowledge:list_reparse" // 批量重解析知识任务
+	TypeKnowledgeMove               = "knowledge:move"         // 知识移动任务
+	TypeDataTableSummary            = "datatable:summary"      // 表格摘要任务
+	TypeImageMultimodal             = "image:multimodal"       // 图片多模态处理任务（OCR + VLM Caption）
+	TypeKnowledgePostProcess        = "knowledge:post_process" // 知识后处理任务（统一调度）
+	TypeManualProcess               = "manual:process"         // 手工知识更新任务（cleanup + 重新索引）
+	TypeDataSourceSync              = "datasource:sync"        // 数据源同步任务
+	TypeWikiIngest                  = "wiki:ingest"            // Wiki 页面同步任务
+	TypeExamQuestionGroupExtraction = "exam:question_group_extract"
 )
+
+type ExamQuestionGroupExtractionPayload struct {
+	TracingContext
+	TenantID uint64 `json:"tenant_id"`
+	UserID   string `json:"user_id"`
+	TaskID   string `json:"task_id"`
+	Force    bool   `json:"force"`
+}
 
 // ExtractChunkPayload represents the extract chunk task payload
 type ExtractChunkPayload struct {
@@ -205,8 +214,8 @@ type KnowledgeListDeletePayload struct {
 // KnowledgeListReparsePayload represents the batch knowledge reparse task payload
 type KnowledgeListReparsePayload struct {
 	TracingContext
-	TenantID      uint64                      `json:"tenant_id"`
-	KnowledgeIDs  []string                    `json:"knowledge_ids"`
+	TenantID      uint64                     `json:"tenant_id"`
+	KnowledgeIDs  []string                   `json:"knowledge_ids"`
 	ProcessConfig *KnowledgeProcessOverrides `json:"process_config,omitempty"`
 }
 

@@ -85,22 +85,26 @@ func knowledgeBaseIDsForPrompt(config *types.AgentConfig) []string {
 
 // agentService implements agent-related business logic
 type agentService struct {
-	cfg                   *config.Config
-	modelService          interfaces.ModelService
-	mcpServiceService     interfaces.MCPServiceService
-	mcpManager            *mcp.MCPManager
-	eventBus              *event.EventBus
-	db                    *gorm.DB
-	webSearchService      interfaces.WebSearchService
-	knowledgeBaseService  interfaces.KnowledgeBaseService
-	knowledgeService      interfaces.KnowledgeService
-	fileService           interfaces.FileService
-	chunkService          interfaces.ChunkService
-	duckdb                *sql.DB
-	webSearchStateService interfaces.WebSearchStateService
-	wikiPageService       interfaces.WikiPageService
-	tenantService         interfaces.TenantService
-	toolApprovalGate      approval.MCPApproval
+	cfg                     *config.Config
+	modelService            interfaces.ModelService
+	mcpServiceService       interfaces.MCPServiceService
+	mcpManager              *mcp.MCPManager
+	eventBus                *event.EventBus
+	db                      *gorm.DB
+	webSearchService        interfaces.WebSearchService
+	knowledgeBaseService    interfaces.KnowledgeBaseService
+	knowledgeService        interfaces.KnowledgeService
+	fileService             interfaces.FileService
+	chunkService            interfaces.ChunkService
+	questionRepo            interfaces.ExamQuestionRepository
+	examPracticeService     interfaces.ExamPracticeService
+	examAnalyticsService    interfaces.ExamAnalyticsService
+	examInterventionService interfaces.ExamInterventionService
+	duckdb                  *sql.DB
+	webSearchStateService   interfaces.WebSearchStateService
+	wikiPageService         interfaces.WikiPageService
+	tenantService           interfaces.TenantService
+	toolApprovalGate        approval.MCPApproval
 }
 
 // NewAgentService creates a new agent service
@@ -111,6 +115,10 @@ func NewAgentService(
 	knowledgeService interfaces.KnowledgeService,
 	fileService interfaces.FileService,
 	chunkService interfaces.ChunkService,
+	questionRepo interfaces.ExamQuestionRepository,
+	examPracticeService interfaces.ExamPracticeService,
+	examAnalyticsService interfaces.ExamAnalyticsService,
+	examInterventionService interfaces.ExamInterventionService,
 	mcpServiceService interfaces.MCPServiceService,
 	mcpManager *mcp.MCPManager,
 	eventBus *event.EventBus,
@@ -123,22 +131,26 @@ func NewAgentService(
 	toolApprovalGate approval.MCPApproval,
 ) interfaces.AgentService {
 	return &agentService{
-		cfg:                   cfg,
-		modelService:          modelService,
-		knowledgeBaseService:  knowledgeBaseService,
-		knowledgeService:      knowledgeService,
-		fileService:           fileService,
-		chunkService:          chunkService,
-		mcpServiceService:     mcpServiceService,
-		mcpManager:            mcpManager,
-		eventBus:              eventBus,
-		db:                    db,
-		webSearchService:      webSearchService,
-		duckdb:                duckdb,
-		webSearchStateService: webSearchStateService,
-		wikiPageService:       wikiPageService,
-		tenantService:         tenantService,
-		toolApprovalGate:      toolApprovalGate,
+		cfg:                     cfg,
+		modelService:            modelService,
+		knowledgeBaseService:    knowledgeBaseService,
+		knowledgeService:        knowledgeService,
+		fileService:             fileService,
+		chunkService:            chunkService,
+		questionRepo:            questionRepo,
+		examPracticeService:     examPracticeService,
+		examAnalyticsService:    examAnalyticsService,
+		examInterventionService: examInterventionService,
+		mcpServiceService:       mcpServiceService,
+		mcpManager:              mcpManager,
+		eventBus:                eventBus,
+		db:                      db,
+		webSearchService:        webSearchService,
+		duckdb:                  duckdb,
+		webSearchStateService:   webSearchStateService,
+		wikiPageService:         wikiPageService,
+		tenantService:           tenantService,
+		toolApprovalGate:        toolApprovalGate,
 	}
 }
 
@@ -470,6 +482,7 @@ func (s *agentService) registerTools(
 		filteredTools := make([]string, 0)
 		kbTools := map[string]bool{
 			tools.ToolKnowledgeSearch:     true,
+			tools.ToolExamQuestionContext: true,
 			tools.ToolGrepChunks:          true,
 			tools.ToolListKnowledgeChunks: true,
 			tools.ToolQueryKnowledgeGraph: true,
@@ -518,6 +531,7 @@ func (s *agentService) registerTools(
 	// content from RAG-style knowledge bases.
 	ragToolSet := map[string]bool{
 		tools.ToolKnowledgeSearch:     true,
+		tools.ToolExamQuestionContext: true,
 		tools.ToolGrepChunks:          true,
 		tools.ToolListKnowledgeChunks: true,
 		tools.ToolQueryKnowledgeGraph: true,
@@ -589,11 +603,24 @@ func (s *agentService) registerTools(
 				s.knowledgeBaseService,
 				s.knowledgeService,
 				s.chunkService,
+				s.questionRepo,
 				config.SearchTargets,
 				rerankModel,
 				chatModel,
 				s.cfg,
 			)
+		case tools.ToolExamQuestionContext:
+			toolToRegister = tools.NewExamQuestionContextTool(
+				s.questionRepo,
+				s.knowledgeBaseService,
+				config.SearchTargets,
+			)
+		case tools.ToolExamLearningDiagnosis:
+			toolToRegister = tools.NewExamLearningDiagnosisTool(s.examPracticeService)
+		case tools.ToolExamClassDiagnosis:
+			toolToRegister = tools.NewExamClassDiagnosisTool(s.examAnalyticsService)
+		case tools.ToolExamPracticeRecommendation:
+			toolToRegister = tools.NewExamPracticeRecommendationTool(s.examInterventionService)
 		case tools.ToolGrepChunks:
 			toolToRegister = tools.NewGrepChunksTool(s.db, config.SearchTargets)
 			logger.Infof(ctx, "Registered grep_chunks tool with searchTargets: %d targets", len(config.SearchTargets))

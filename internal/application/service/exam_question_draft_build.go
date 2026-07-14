@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Tencent/WeKnora/internal/examtext"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/google/uuid"
 )
@@ -114,7 +115,7 @@ func buildQuestionDetailFromDraft(draft *types.ExamQuestionDraft, userID string)
 		Question:     buildQuestionFromDraft(draft, questionID, userID, now),
 		Options:      buildQuestionOptions(questionID, options),
 		Answers:      buildQuestionAnswers(questionID, answer, now),
-		Explanations: buildQuestionExplanations(questionID, draft.Explanation, now),
+		Explanations: buildQuestionExplanationsFromContext(questionID, draft.Explanation, answer, options, draft.Stem, now),
 		ChunkRefs:    buildQuestionChunkRefs(questionID, chunkIDs, draft.Confidence, now),
 	}, nil
 }
@@ -161,16 +162,53 @@ func buildQuestionAnswers(questionID string, answer string, now time.Time) []*ty
 }
 
 func buildQuestionExplanations(questionID string, explanation string, now time.Time) []*types.QuestionExplanation {
+	return buildQuestionExplanationsWithSource(questionID, explanation, "llm_review", now)
+}
+
+func buildQuestionExplanationsFromContext(
+	questionID string,
+	explanation string,
+	answer string,
+	options []types.ExamQuestionDraftOption,
+	material string,
+	now time.Time,
+) []*types.QuestionExplanation {
+	sourceType := "llm_review"
 	if strings.TrimSpace(explanation) == "" {
+		explanation = examtext.BuildBaselineExplanation(answer, toExplanationOptions(options), material)
+		sourceType = examtext.ExplanationSourceAutoBaseline
+	}
+	return buildQuestionExplanationsWithSource(questionID, explanation, sourceType, now)
+}
+
+func buildQuestionExplanationsWithSource(questionID string, explanation string, sourceType string, now time.Time) []*types.QuestionExplanation {
+	explanation = strings.TrimSpace(explanation)
+	if explanation == "" {
 		return nil
+	}
+	sourceType = strings.TrimSpace(sourceType)
+	if sourceType == "" {
+		sourceType = "manual"
 	}
 	return []*types.QuestionExplanation{{
 		ID:              uuid.New().String(),
 		QuestionID:      questionID,
-		ExplanationText: strings.TrimSpace(explanation),
-		SourceType:      "llm_review",
+		ExplanationText: explanation,
+		SourceType:      sourceType,
 		CreatedAt:       now,
 	}}
+}
+
+func toExplanationOptions(options []types.ExamQuestionDraftOption) []examtext.ExplanationOption {
+	out := make([]examtext.ExplanationOption, 0, len(options))
+	for i, option := range options {
+		out = append(out, examtext.ExplanationOption{
+			Key:       strings.TrimSpace(option.Key),
+			Content:   strings.TrimSpace(option.Content),
+			SortOrder: i + 1,
+		})
+	}
+	return out
 }
 
 func buildQuestionChunkRefs(questionID string, chunkIDs []string, confidence float64, now time.Time) []*types.QuestionChunkRef {

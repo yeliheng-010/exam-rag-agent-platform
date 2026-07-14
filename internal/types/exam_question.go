@@ -129,7 +129,7 @@ type QuestionGroupAsset struct {
 	StorageURI    string    `json:"storage_uri" gorm:"type:text;not null;default:''"`
 	AltText       string    `json:"alt_text" gorm:"type:text;not null;default:''"`
 	SourceChunkID string    `json:"source_chunk_id" gorm:"type:varchar(36);not null;default:''"`
-	BBox          JSONMap   `json:"bbox" gorm:"type:jsonb;not null"`
+	BBox          JSONMap   `json:"bbox" gorm:"column:bbox;type:jsonb;not null"`
 	Metadata      JSONMap   `json:"metadata" gorm:"type:jsonb;not null"`
 	SortOrder     int       `json:"sort_order" gorm:"not null;default:0"`
 	CreatedAt     time.Time `json:"created_at"`

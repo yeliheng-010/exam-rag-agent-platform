@@ -25,8 +25,9 @@ type stubExamQuestionDraftSpace struct {
 }
 
 type stubExamQuestionDraftChunkReader struct {
-	chunks []*types.Chunk
-	err    error
+	chunks      []*types.Chunk
+	err         error
+	gotTenantID uint64
 }
 
 type stubExamQuestionExtractor struct {
@@ -271,7 +272,8 @@ func (s *stubExamQuestionDraftSpace) GetSpace(context.Context, uint64, string, s
 	return &types.ExamSpace{ID: "space-1", TenantID: 10000}, nil
 }
 
-func (r *stubExamQuestionDraftChunkReader) ListChunksByKnowledgeID(context.Context, string) ([]*types.Chunk, error) {
+func (r *stubExamQuestionDraftChunkReader) ListChunksByKnowledgeID(ctx context.Context, _ string) ([]*types.Chunk, error) {
+	r.gotTenantID, _ = types.TenantIDFromContext(ctx)
 	return r.chunks, r.err
 }
 

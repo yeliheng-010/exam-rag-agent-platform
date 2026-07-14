@@ -126,6 +126,7 @@ type KnowledgeSearchTool struct {
 	knowledgeBaseService interfaces.KnowledgeBaseService
 	knowledgeService     interfaces.KnowledgeService
 	chunkService         interfaces.ChunkService
+	questionRepo         interfaces.ExamQuestionRepository
 	searchTargets        types.SearchTargets // Pre-computed unified search targets
 	rerankModel          rerank.Reranker
 	chatModel            chat.Chat      // Optional chat model for LLM-based reranking
@@ -140,6 +141,7 @@ func NewKnowledgeSearchTool(
 	knowledgeBaseService interfaces.KnowledgeBaseService,
 	knowledgeService interfaces.KnowledgeService,
 	chunkService interfaces.ChunkService,
+	questionRepo interfaces.ExamQuestionRepository,
 	searchTargets types.SearchTargets,
 	rerankModel rerank.Reranker,
 	chatModel chat.Chat,
@@ -150,6 +152,7 @@ func NewKnowledgeSearchTool(
 		knowledgeBaseService: knowledgeBaseService,
 		knowledgeService:     knowledgeService,
 		chunkService:         chunkService,
+		questionRepo:         questionRepo,
 		searchTargets:        searchTargets,
 		rerankModel:          rerankModel,
 		chatModel:            chatModel,

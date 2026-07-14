@@ -102,16 +102,27 @@ func (s *examAnalyticsService) summarizeClassAnalytics(
 	summary := newClassAnalyticsSummary(class, students, assignments)
 	memberByUser := analyticsMembersByUser(summary.Members)
 	studentIDs := analyticsStudentIDs(students)
+	latestAttempts := map[string]analyticsAttemptContext{}
 	for _, assignment := range assignments {
 		if assignment == nil {
 			continue
 		}
-		assignmentSummary, err := s.summarizeAssignmentAnalytics(ctx, tenantID, assignment, studentIDs, memberByUser)
+		assignmentSummary, attempts, err := s.summarizeAssignmentAnalytics(ctx, tenantID, assignment, studentIDs, memberByUser)
 		if err != nil {
 			return nil, err
 		}
+		for _, attempt := range attempts {
+			if attempt != nil {
+				latestAttempts[attempt.ID] = newAnalyticsAttemptContext(attempt)
+			}
+		}
 		mergeAssignmentAnalytics(summary, assignmentSummary)
 	}
+	wrongQuestions, err := s.frequentWrongQuestions(ctx, tenantID, latestAttempts)
+	if err != nil {
+		return nil, err
+	}
+	summary.FrequentWrongQuestions = wrongQuestions
 	finalizeClassAnalytics(summary)
 	return summary, nil
 }
@@ -122,10 +133,10 @@ func (s *examAnalyticsService) summarizeAssignmentAnalytics(
 	assignment *types.ExamClassAssignment,
 	studentIDs []string,
 	memberByUser map[string]*types.ExamClassAnalyticsMember,
-) (*types.ExamClassAnalyticsAssignment, error) {
+) (*types.ExamClassAnalyticsAssignment, map[string]*types.ExamPracticeAttempt, error) {
 	attempts, err := s.practiceRepo.ListLatestAttemptsByAssignmentUsers(ctx, tenantID, assignment.ID, studentIDs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	item := &types.ExamClassAnalyticsAssignment{Assignment: assignment}
 	for _, userID := range studentIDs {
@@ -136,7 +147,7 @@ func (s *examAnalyticsService) summarizeAssignmentAnalytics(
 		applyAnalyticsAttempt(item, member, attempts[userID])
 	}
 	finalizeAssignmentAnalytics(item, len(studentIDs))
-	return item, nil
+	return item, attempts, nil
 }
 
 func newClassAnalyticsSummary(
@@ -149,12 +160,13 @@ func newClassAnalyticsSummary(
 		members = append(members, &types.ExamClassAnalyticsMember{Member: student})
 	}
 	return &types.ExamClassAnalyticsSummary{
-		Class:                class,
-		TotalStudents:        len(students),
-		AssignmentCount:      len(assignments),
-		TotalAssignmentSlots: len(students) * len(assignments),
-		Members:              members,
-		Assignments:          make([]*types.ExamClassAnalyticsAssignment, 0, len(assignments)),
+		Class:                  class,
+		TotalStudents:          len(students),
+		AssignmentCount:        len(assignments),
+		TotalAssignmentSlots:   len(students) * len(assignments),
+		Members:                members,
+		Assignments:            make([]*types.ExamClassAnalyticsAssignment, 0, len(assignments)),
+		FrequentWrongQuestions: make([]*types.ExamClassFrequentWrongQuestion, 0),
 	}
 }
 
@@ -243,24 +255,6 @@ func finalizeMemberAnalytics(item *types.ExamClassAnalyticsMember) {
 	if item.StartedCount > 0 {
 		item.AverageCorrectRate = item.AverageCorrectRate / float64(item.StartedCount)
 	}
-}
-
-func sortAnalyticsMembers(items []*types.ExamClassAnalyticsMember) {
-	sort.SliceStable(items, func(i, j int) bool {
-		if items[i].CompletedCount != items[j].CompletedCount {
-			return items[i].CompletedCount > items[j].CompletedCount
-		}
-		if items[i].AverageCorrectRate != items[j].AverageCorrectRate {
-			return items[i].AverageCorrectRate > items[j].AverageCorrectRate
-		}
-		return items[i].Member.UserID < items[j].Member.UserID
-	})
-}
-
-func sortAnalyticsAssignments(items []*types.ExamClassAnalyticsAssignment) {
-	sort.SliceStable(items, func(i, j int) bool {
-		return items[i].Assignment.CreatedAt.After(items[j].Assignment.CreatedAt)
-	})
 }
 
 func analyticsAttemptCorrectRate(attempt *types.ExamPracticeAttempt) float64 {

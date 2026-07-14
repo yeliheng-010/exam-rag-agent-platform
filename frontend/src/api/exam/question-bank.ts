@@ -1,5 +1,5 @@
 import { get, post } from '@/utils/request'
-import type { ApiResponse, QuestionBank, QuestionDetail } from '@/types/exam'
+import type { ApiResponse, ExamRAGDiagnosticCase, ExamRAGDiagnosticResult, QuestionBank, QuestionDetail } from '@/types/exam'
 
 export interface CreateQuestionBankPayload {
   space_id: string
@@ -28,6 +28,10 @@ export function getQuestionBank(bankId: string) {
 
 export function listQuestionDetails(bankId: string) {
   return get(`/api/v1/exam/question-banks/${bankId}/questions`) as unknown as Promise<ApiResponse<QuestionDetail[]>>
+}
+
+export function runQuestionBankRAGDiagnostic(bankId: string, data?: { knowledge_base_ids?: string[]; cases?: ExamRAGDiagnosticCase[] }) {
+  return post(`/api/v1/exam/question-banks/${bankId}/rag-diagnostics`, data || {}) as unknown as Promise<ApiResponse<ExamRAGDiagnosticResult>>
 }
 
 export { listQuestionGroupDetails } from './question-group'

@@ -38,6 +38,57 @@
   min-height: 680px;
 }
 
+.task-progress-band {
+  display: grid;
+  grid-template-columns: minmax(220px, 360px) minmax(240px, 1fr);
+  gap: 24px;
+  align-items: center;
+  margin: 0 0 16px;
+  padding: 14px 0;
+  border-top: 1px solid var(--td-component-stroke);
+  border-bottom: 1px solid var(--td-component-stroke);
+}
+
+.task-progress-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  strong {
+    font-size: 14px;
+  }
+
+  span {
+    color: var(--td-text-color-secondary);
+    font-size: 12px;
+  }
+}
+
+.preflight-warnings,
+.quality-report {
+  margin-bottom: 16px;
+}
+
+.preflight-warning {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-left: 3px solid var(--td-warning-color);
+  background: var(--td-warning-color-light);
+
+  div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  span {
+    color: var(--td-text-color-secondary);
+    font-size: 12px;
+  }
+}
+
 .draft-list,
 .editor-panel {
   border: 1px solid var(--td-component-stroke);
@@ -54,7 +105,7 @@
 .draft-item {
   display: grid;
   width: 100%;
-  grid-template-columns: minmax(0, 1fr) 52px auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 8px;
   align-items: center;
   padding: 10px;
@@ -70,6 +121,18 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+}
+
+.quality-count {
+  font-size: 12px;
+
+  &.error {
+    color: var(--td-error-color);
+  }
+
+  &.warning {
+    color: var(--td-warning-color);
   }
 }
 
@@ -96,6 +159,46 @@
   span {
     color: var(--td-text-color-placeholder);
     font-size: 12px;
+  }
+}
+
+.quality-report {
+  padding: 12px 0;
+  border-top: 1px solid var(--td-component-stroke);
+  border-bottom: 1px solid var(--td-component-stroke);
+}
+
+.quality-report-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+
+  span {
+    color: var(--td-text-color-secondary);
+    font-size: 12px;
+  }
+}
+
+.quality-report ul {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    font-size: 13px;
+  }
+
+  li.error {
+    color: var(--td-error-color);
+  }
+
+  li.warning {
+    color: var(--td-warning-color);
   }
 }
 
@@ -153,6 +256,7 @@
   }
 
   .review-layout,
+  .task-progress-band,
   .form-grid,
   .form-grid.two,
   .form-grid.compact {

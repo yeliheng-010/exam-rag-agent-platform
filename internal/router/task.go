@@ -23,18 +23,19 @@ import (
 type AsynqTaskParams struct {
 	dig.In
 
-	Server               *asynq.Server
-	KnowledgeService     interfaces.KnowledgeService
-	KnowledgeBaseService interfaces.KnowledgeBaseService
-	TagService           interfaces.KnowledgeTagService
-	DataSourceService    interfaces.DataSourceService
-	ChunkExtractor       interfaces.TaskHandler `name:"chunkExtractor"`
-	DataTableSummary     interfaces.TaskHandler `name:"dataTableSummary"`
-	ImageMultimodal      interfaces.TaskHandler `name:"imageMultimodal"`
-	KnowledgePostProcess interfaces.TaskHandler `name:"knowledgePostProcess"`
-	WikiIngest           interfaces.TaskHandler `name:"wikiIngest"`
-	DeadLetterRepo       interfaces.TaskDeadLetterRepository
-	SpanTracker          service.SpanTracker
+	Server                    *asynq.Server
+	KnowledgeService          interfaces.KnowledgeService
+	KnowledgeBaseService      interfaces.KnowledgeBaseService
+	TagService                interfaces.KnowledgeTagService
+	DataSourceService         interfaces.DataSourceService
+	ChunkExtractor            interfaces.TaskHandler `name:"chunkExtractor"`
+	DataTableSummary          interfaces.TaskHandler `name:"dataTableSummary"`
+	ImageMultimodal           interfaces.TaskHandler `name:"imageMultimodal"`
+	KnowledgePostProcess      interfaces.TaskHandler `name:"knowledgePostProcess"`
+	WikiIngest                interfaces.TaskHandler `name:"wikiIngest"`
+	QuestionGroupDraftService interfaces.ExamQuestionGroupDraftService
+	DeadLetterRepo            interfaces.TaskDeadLetterRepository
+	SpanTracker               service.SpanTracker
 }
 
 // defaultRedisOpTimeout is the previous hard-coded read timeout. The 100ms
@@ -192,6 +193,7 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 
 	// Register question generation handler
 	mux.HandleFunc(types.TypeQuestionGeneration, params.KnowledgeService.ProcessQuestionGeneration)
+	mux.HandleFunc(types.TypeExamQuestionGroupExtraction, params.QuestionGroupDraftService.ProcessExtractionTask)
 
 	// Register summary generation handler
 	mux.HandleFunc(types.TypeSummaryGeneration, params.KnowledgeService.ProcessSummaryGeneration)

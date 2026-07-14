@@ -9,9 +9,12 @@ import (
 )
 
 type QuestionGroupStrategyInput struct {
-	Material *types.ExamMaterial
-	Task     *types.ExamStructuringTask
-	Chunks   []*types.Chunk
+	Material              *types.ExamMaterial
+	Task                  *types.ExamStructuringTask
+	Chunks                []*types.Chunk
+	ContextChunks         []*types.Chunk
+	AnswerChunks          []*types.Chunk
+	TargetQuestionNumbers []int
 }
 
 type QuestionGroupStrategyOptions struct {
@@ -77,7 +80,11 @@ func newGaokaoEnglishReadingStrategy() ExamQuestionGroupExtractionStrategy {
 		instructions: []string{
 			"Focus on the first complete English reading passage group.",
 			"Use group_type=reading_passage and put the full passage in material_text.",
+			"Preserve standalone passage headings, section headings, and table titles in material_text exactly as they appear.",
+			"Do not omit introductory sentences before a table or timetable.",
 			"Each question must keep its own stem, all options, answer, explanation, and source_chunk_ids.",
+			"Do not leave explanation empty for objective questions; infer it from the passage and answer key when needed.",
+			"Each explanation must include a short evidence quote or precise passage reference that supports the answer.",
 			"Do not turn options into separate questions.",
 		},
 	}
@@ -96,6 +103,9 @@ func newGaokaoMathBasicStrategy() ExamQuestionGroupExtractionStrategy {
 			"Keep formulas in LaTeX when possible.",
 			"Describe diagrams, tables, formulas, and image references in the assets array.",
 			"Do not drop geometry figures or chart references even when storage_uri is unknown.",
+			"Answer-key chunks are reference-only. Never create questions from answer-only text.",
+			"Extract only question numbers whose stems appear in non-answer chunks.",
+			"For choice questions, preserve every option across adjacent chunks; omit incomplete questions instead of inventing options.",
 		},
 	}
 }
@@ -163,7 +173,7 @@ func buildQuestionGroupPrompt(input QuestionGroupStrategyInput, groupType string
 	writeQuestionGroupPromptSchema(&builder)
 	writeQuestionGroupPromptMaterial(&builder, input.Material, input.Task)
 	writeQuestionGroupPromptInstructions(&builder, instructions)
-	writeQuestionGroupPromptChunks(&builder, input.Chunks)
+	writeQuestionGroupPromptChunks(&builder, input)
 	return builder.String()
 }
 
@@ -219,7 +229,12 @@ func writeQuestionGroupPromptInstructions(builder *strings.Builder, instructions
 	}
 }
 
-func writeQuestionGroupPromptChunks(builder *strings.Builder, chunks []*types.Chunk) {
+func writeQuestionGroupPromptChunks(builder *strings.Builder, input QuestionGroupStrategyInput) {
+	if len(input.TargetQuestionNumbers) > 0 {
+		writeRoleAwareQuestionGroupPromptChunks(builder, input)
+		return
+	}
+	chunks := input.Chunks
 	builder.WriteString("\nPaper chunks:\n")
 	bodyChunks := selectQuestionExtractionBodyChunks(chunks)
 	answerChunks := selectLikelyAnswerChunks(chunks)
@@ -236,6 +251,30 @@ func writeQuestionGroupPromptChunks(builder *strings.Builder, chunks []*types.Ch
 		}
 	}
 	appendAnswerPromptChunks(builder, answerChunks, included)
+}
+
+func writeRoleAwareQuestionGroupPromptChunks(builder *strings.Builder, input QuestionGroupStrategyInput) {
+	targets := make([]string, 0, len(input.TargetQuestionNumbers))
+	for _, number := range input.TargetQuestionNumbers {
+		targets = append(targets, fmt.Sprintf("%d", number))
+	}
+	builder.WriteString("\nTarget question numbers: " + strings.Join(targets, ", ") + "\n")
+	builder.WriteString("Extract only these top-level question numbers. Use N(1), N(2), ... for subquestions.\n")
+	writeQuestionGroupChunkRole(builder, "Core question chunks", input.Chunks)
+	writeQuestionGroupChunkRole(builder, "Context-only chunks (do not create additional questions)", input.ContextChunks)
+	writeQuestionGroupChunkRole(builder, "Answer-reference chunks (answers only; never create questions from them)", input.AnswerChunks)
+}
+
+func writeQuestionGroupChunkRole(builder *strings.Builder, label string, chunks []*types.Chunk) {
+	if len(chunks) == 0 {
+		return
+	}
+	builder.WriteString("\n" + label + ":\n")
+	for _, chunk := range chunks {
+		if chunk != nil {
+			writeQuestionPromptChunk(builder, chunk)
+		}
+	}
 }
 
 func matchesAnyAlias(value string, aliases []string) bool {

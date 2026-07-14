@@ -69,6 +69,7 @@ type ExamStructuringTask struct {
 	StructuredQuestionCount int                       `json:"structured_question_count" gorm:"not null;default:0"`
 	ReviewRequired          bool                      `json:"review_required" gorm:"not null;default:true"`
 	ErrorMessage            string                    `json:"error_message" gorm:"type:text;not null;default:''"`
+	Progress                ExamStructuringProgress   `json:"progress" gorm:"type:jsonb;not null;default:'{}'"`
 	CreatedByUserID         string                    `json:"created_by_user_id" gorm:"type:varchar(36);not null;index"`
 	CreatedAt               time.Time                 `json:"created_at"`
 	UpdatedAt               time.Time                 `json:"updated_at"`

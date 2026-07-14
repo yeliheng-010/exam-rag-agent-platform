@@ -52,11 +52,15 @@ type ToolRequirement struct {
 // tools shouldn't silently break).
 var ToolCapabilityRequirements = map[string]ToolRequirement{
 	// ---- base / reasoning (no KB dependency, no file consumption) ----
-	"thinking":   {},
-	"todo_write": {},
+	"thinking":                     {},
+	"todo_write":                   {},
+	"exam_learning_diagnosis":      {},
+	"exam_class_diagnosis":         {},
+	"exam_practice_recommendation": {},
 
 	// ---- RAG / chunk retrieval (need at least one chunk-indexed KB) ----
 	"knowledge_search":      {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
+	"exam_question_context": {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
 	"grep_chunks":           {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
 	"list_knowledge_chunks": {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
 	"query_knowledge_graph": {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},

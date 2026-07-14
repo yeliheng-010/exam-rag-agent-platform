@@ -53,6 +53,10 @@ agent_type_presets:
       # token usage. Enable them manually in the tool list when needed.
       allowed_tools:
         - "knowledge_search"
+        - "exam_question_context"
+        - "exam_learning_diagnosis"
+        - "exam_class_diagnosis"
+        - "exam_practice_recommendation"
         - "grep_chunks"
         - "list_knowledge_chunks"
         - "get_document_info"
@@ -118,6 +122,10 @@ agent_type_presets:
         - "wiki_search"
         - "wiki_read_page"
         - "knowledge_search"
+        - "exam_question_context"
+        - "exam_learning_diagnosis"
+        - "exam_class_diagnosis"
+        - "exam_practice_recommendation"
         - "grep_chunks"
         - "list_knowledge_chunks"
         - "get_document_info"

@@ -44,12 +44,16 @@ export const TOOL_CAPABILITY_REQUIREMENTS: Record<string, ToolRequirement> = {
   // ---- base / reasoning (no KB dependency) ----
   thinking: {},
   todo_write: {},
+  exam_learning_diagnosis: { consumesFiles: false },
+  exam_class_diagnosis: { consumesFiles: false },
+  exam_practice_recommendation: { consumesFiles: false },
 
   // ---- RAG / chunk retrieval (need at least one chunk-indexed KB) ----
   // We use vector|keyword as the canonical "has RAG chunks" signal. FAQ KBs
   // also expose chunks, but the current UX message bucket is "RAG KB"; once
   // we add a dedicated `requiresFaqKb` i18n key we can include `faq` here.
   knowledge_search:      { anyOf: ['vector', 'keyword'], consumesFiles: true },
+  exam_question_context: { anyOf: ['vector', 'keyword'], consumesFiles: true },
   grep_chunks:           { anyOf: ['vector', 'keyword'], consumesFiles: true },
   list_knowledge_chunks: { anyOf: ['vector', 'keyword'], consumesFiles: true },
   query_knowledge_graph: { anyOf: ['vector', 'keyword'], consumesFiles: true },

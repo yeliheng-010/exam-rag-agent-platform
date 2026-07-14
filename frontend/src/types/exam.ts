@@ -10,6 +10,8 @@ export type ExamStructuringStrategy = 'manual_review'
 export type ExamTeacherApplicationStatus = 'pending' | 'approved' | 'rejected'
 export type ExamQuestionDraftStatus = 'pending_review' | 'approved' | 'rejected'
 export type ExamQuestionGroupDraftStatus = 'pending_review' | 'approved' | 'rejected'
+export type ExamStructuringPhase = 'queued' | 'preflight' | 'extracting' | 'quality_check' | 'completed' | 'failed'
+export type ExamQualitySeverity = 'error' | 'warning'
 export type QuestionGroupType = 'reading_passage' | 'math_problem' | 'single_question' | string
 export type ExamPracticeAttemptStatus = 'in_progress' | 'completed'
 export type PracticeAnswerReviewStatus = 'unreviewed' | 'reviewing' | 'mastered'
@@ -75,6 +77,8 @@ export interface ExamClassMember {
   joined_at: string
   created_at: string
   updated_at: string
+  display_id?: string
+  display_name?: string
 }
 
 export interface ExamClassAssignment {
@@ -111,6 +115,18 @@ export interface ExamClassAnalyticsAssignment {
   average_correct_rate: number
 }
 
+export interface ExamClassFrequentWrongQuestion {
+  question_id: string
+  group_id: string
+  assignment_id: string
+  question_no: string
+  stem: string
+  answer_count: number
+  wrong_count: number
+  wrong_rate: number
+  affected_student_count: number
+}
+
 export interface ExamClassAnalyticsSummary {
   class: ExamClass
   total_students: number
@@ -122,6 +138,7 @@ export interface ExamClassAnalyticsSummary {
   average_correct_rate: number
   members: ExamClassAnalyticsMember[]
   assignments: ExamClassAnalyticsAssignment[]
+  frequent_wrong_questions: ExamClassFrequentWrongQuestion[]
 }
 
 export interface ExamTeacherApplication {
@@ -206,9 +223,54 @@ export interface ExamStructuringTask {
   structured_question_count: number
   review_required: boolean
   error_message: string
+  progress: ExamStructuringProgress
   created_by_user_id: string
   created_at: string
   updated_at: string
+}
+
+export interface ExamStructuringWarning {
+  code: string
+  severity: ExamQualitySeverity
+  message: string
+  recommendation?: string
+  reference_count?: number
+}
+
+export interface ExamQuestionGroupQualityIssue {
+  code: string
+  severity: ExamQualitySeverity
+  message: string
+  question_no?: string
+}
+
+export interface ExamQuestionGroupQualityReport {
+  blocking: boolean
+  error_count: number
+  warning_count: number
+  issues: ExamQuestionGroupQualityIssue[]
+}
+
+export interface ExamStructuringQualitySummary {
+  total_drafts: number
+  drafts_with_errors: number
+  drafts_with_warnings: number
+  error_count: number
+  warning_count: number
+}
+
+export interface ExamStructuringProgress {
+  phase?: ExamStructuringPhase
+  total_batches: number
+  completed_batches: number
+  current_batch: number
+  failed_batch?: number
+  percent: number
+  message?: string
+  warnings: ExamStructuringWarning[]
+  quality_summary: ExamStructuringQualitySummary
+  started_at?: string
+  finished_at?: string
 }
 
 export interface ExamQuestionDraftOption {
@@ -293,6 +355,7 @@ export interface ExamQuestionGroupDraft {
   approved_group_id: string
   reviewed_by_user_id?: string
   reviewed_at?: string
+  quality_report: ExamQuestionGroupQualityReport
   created_at: string
   updated_at: string
 }
@@ -377,6 +440,50 @@ export interface QuestionGroupDetail {
   questions: QuestionDetail[]
 }
 
+export interface ExamRAGDiagnosticCase {
+  name: string
+  query: string
+  required_phrases: string[]
+  expected_chunk_ids: string[]
+}
+
+export interface ExamRAGDiagnosticResultItem {
+  name: string
+  query: string
+  passed: boolean
+  retrieval_passed: boolean
+  answer_passed: boolean
+  retrieval_score: number
+  answer_score: number
+  matched_chunk_ids: string[]
+  missing_chunk_ids: string[]
+  retrieved_chunk_ids: string[]
+  matched_phrases: string[]
+  missing_phrases: string[]
+  context_label: string
+  source_chunk_ids: string[]
+  error: string
+}
+
+export interface ExamRAGDiagnosticSummary {
+  total: number
+  passed: number
+  retrieval_passed: number
+  answer_passed: number
+  hit_rate: number
+  retrieval_hit_rate: number
+  answer_hit_rate: number
+  results: ExamRAGDiagnosticResultItem[]
+}
+
+export interface ExamRAGDiagnosticResult {
+  question_bank: QuestionBank
+  knowledge_base_ids: string[]
+  used_default_cases: boolean
+  summary: ExamRAGDiagnosticSummary
+  cases: ExamRAGDiagnosticCase[]
+}
+
 export interface ExamPracticeAttempt {
   id: string
   tenant_id: number
@@ -445,6 +552,46 @@ export interface QuestionGroupPracticeSummary {
   question_count: number
   last_attempt?: ExamPracticeAttempt
   assets?: QuestionGroupAsset[]
+}
+
+export type ExamPracticeRecommendationScope = 'class' | 'student'
+export type ExamPracticeRecommendationReasonCode =
+  | 'targeted_review'
+  | 'same_subject'
+  | 'same_group_type'
+  | 'same_domain'
+  | 'low_accuracy_retry'
+  | 'supplemental_practice'
+
+export interface ExamPracticeDiagnosisEvidence {
+  question_id: string
+  group_id: string
+  question_no: string
+  stem: string
+  wrong_rate: number
+  affected_student_count: number
+  review_status?: PracticeAnswerReviewStatus
+}
+
+export interface ExamPracticeRecommendationReason {
+  code: ExamPracticeRecommendationReasonCode
+  score: number
+}
+
+export interface ExamPracticeRecommendation {
+  group: QuestionGroupPracticeSummary
+  score: number
+  reasons: ExamPracticeRecommendationReason[]
+  evidence: ExamPracticeDiagnosisEvidence[]
+  assigned: boolean
+}
+
+export interface ExamPracticeRecommendationResult {
+  scope: ExamPracticeRecommendationScope
+  class?: ExamClass
+  diagnosis: ExamPracticeDiagnosisEvidence[]
+  recommendations: ExamPracticeRecommendation[]
+  warnings: string[]
 }
 
 export interface PracticeAttemptSummary {

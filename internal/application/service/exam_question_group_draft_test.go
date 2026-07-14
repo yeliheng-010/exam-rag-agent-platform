@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Tencent/WeKnora/internal/types"
@@ -124,5 +125,41 @@ func TestExamQuestionGroupDraftService_ApproveCreatesOfficialGroup(t *testing.T)
 	}
 	if repo.updatedStatus != types.ExamStructuringTaskStatusCompleted {
 		t.Fatalf("task status = %s, want completed", repo.updatedStatus)
+	}
+}
+
+func TestExamQuestionGroupDraftService_ApproveBackfillsMissingChoiceExplanation(t *testing.T) {
+	ctx := context.Background()
+	repo := newReadyQuestionGroupDraftRepo()
+	draft := newPendingQuestionGroupDraft("draft-missing-explanation")
+	draft.MaterialText = "Los Angeles Rams v Dallas Cowboys\nLos Angeles Rams v Houston Texans"
+	questions, err := draftGroupQuestions(draft)
+	if err != nil {
+		t.Fatalf("draftGroupQuestions returned error: %v", err)
+	}
+	questions[0].Explanation = ""
+	draft.QuestionsJSON = mustJSONForTest(questions)
+	repo.drafts = []*types.ExamQuestionGroupDraft{draft}
+	questionRepo := &stubQuestionGroupWriter{}
+	svc := newTestExamQuestionGroupDraftService(repo, &stubExamQuestionDraftSpace{canRead: true, canWrite: true}, nil, nil, questionRepo)
+
+	_, err = svc.ApproveDraft(ctx, 10000, "teacher-1", draft.ID)
+
+	if err != nil {
+		t.Fatalf("ApproveDraft returned error: %v", err)
+	}
+	createdQuestion := questionRepo.created[0].Questions[0]
+	if len(createdQuestion.Explanations) != 1 {
+		t.Fatalf("explanation count = %d, want 1", len(createdQuestion.Explanations))
+	}
+	explanation := createdQuestion.Explanations[0].ExplanationText
+	if !strings.Contains(explanation, "Correct answer: A") {
+		t.Fatalf("explanation should mention the correct answer, got %q", explanation)
+	}
+	if !strings.Contains(explanation, "Option A") {
+		t.Fatalf("explanation should mention the correct option, got %q", explanation)
+	}
+	if createdQuestion.Explanations[0].SourceType != "auto_baseline" {
+		t.Fatalf("source type = %q, want auto_baseline", createdQuestion.Explanations[0].SourceType)
 	}
 }

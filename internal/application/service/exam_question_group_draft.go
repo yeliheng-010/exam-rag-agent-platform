@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/Tencent/WeKnora/internal/types"
@@ -16,6 +15,7 @@ type examQuestionGroupDraftService struct {
 	spaceService interfaces.ExamSpaceService
 	chunkReader  interfaces.ExamMaterialChunkReader
 	extractor    interfaces.ExamQuestionGroupExtractor
+	taskEnqueuer interfaces.TaskEnqueuer
 }
 
 func NewExamQuestionGroupDraftService(
@@ -25,6 +25,7 @@ func NewExamQuestionGroupDraftService(
 	spaceService interfaces.ExamSpaceService,
 	chunkReader interfaces.ExamMaterialChunkReader,
 	extractor interfaces.ExamQuestionGroupExtractor,
+	taskEnqueuer interfaces.TaskEnqueuer,
 ) interfaces.ExamQuestionGroupDraftService {
 	return &examQuestionGroupDraftService{
 		draftRepo:    draftRepo,
@@ -33,58 +34,19 @@ func NewExamQuestionGroupDraftService(
 		spaceService: spaceService,
 		chunkReader:  chunkReader,
 		extractor:    extractor,
+		taskEnqueuer: taskEnqueuer,
 	}
 }
 
 func (s *examQuestionGroupDraftService) ExtractDrafts(ctx context.Context, tenantID uint64, userID string, taskID string, req *types.ExtractExamQuestionGroupDraftsRequest) (*types.ExamQuestionGroupDraftExtractionResult, error) {
-	task, material, err := s.prepareExtraction(ctx, tenantID, userID, taskID)
-	if err != nil {
-		return nil, err
-	}
 	if req == nil {
 		req = &types.ExtractExamQuestionGroupDraftsRequest{}
 	}
-	if req.Force {
-		if err := s.draftRepo.DeleteDraftsByTask(ctx, tenantID, task.ID); err != nil {
-			return nil, err
-		}
-	}
-	if _, err := s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusExtracting, -1, ""); err != nil {
-		return nil, err
-	}
-	chunks, err := s.chunkReader.ListChunksByKnowledgeID(ctx, material.KnowledgeID)
-	if err != nil {
-		_, _ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
-		return nil, err
-	}
-	if len(chunks) == 0 {
-		err = errors.New("exam material has no available chunks")
-		_, _ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
-		return nil, err
-	}
-	candidates, rawOutput, err := s.extractor.Extract(context.WithValue(ctx, types.TenantIDContextKey, tenantID), material, task, chunks)
-	if err != nil {
-		_, _ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
-		return nil, err
-	}
-	drafts, err := buildQuestionGroupDrafts(task, material, candidates, rawOutput)
-	if err != nil {
-		_, _ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
-		return nil, err
-	}
-	if err := s.draftRepo.CreateDrafts(ctx, drafts); err != nil {
-		_, _ = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusFailed, 0, err.Error())
-		return nil, err
-	}
-	task, err = s.updateTaskStatus(ctx, task, types.ExamStructuringTaskStatusReviewing, len(drafts), "")
+	task, material, err := s.prepareExtraction(ctx, tenantID, userID, taskID, req.Force)
 	if err != nil {
 		return nil, err
 	}
-	stats, err := s.draftRepo.CountDraftsByTask(ctx, tenantID, task.ID)
-	if err != nil {
-		return nil, err
-	}
-	return &types.ExamQuestionGroupDraftExtractionResult{Task: task, Drafts: drafts, Stats: stats}, nil
+	return s.runQuestionGroupExtraction(ctx, tenantID, task, material, req.Force)
 }
 
 func (s *examQuestionGroupDraftService) ListDrafts(ctx context.Context, tenantID uint64, userID string, taskID string) (*types.ListExamQuestionGroupDraftsResult, error) {
@@ -100,6 +62,7 @@ func (s *examQuestionGroupDraftService) ListDrafts(ctx context.Context, tenantID
 	if err != nil {
 		return nil, err
 	}
+	summarizeQuestionGroupQuality(drafts)
 	return &types.ListExamQuestionGroupDraftsResult{Task: task, Drafts: drafts, Stats: stats}, nil
 }
 
@@ -120,6 +83,7 @@ func (s *examQuestionGroupDraftService) UpdateDraft(ctx context.Context, tenantI
 	if err := s.draftRepo.UpdateDraft(ctx, draft); err != nil {
 		return nil, err
 	}
+	draft.QualityReport = evaluateQuestionGroupDraftQuality(draft)
 	return draft, nil
 }
 
@@ -134,6 +98,11 @@ func (s *examQuestionGroupDraftService) ApproveDraft(ctx context.Context, tenant
 	}
 	if draft.Status != types.ExamQuestionGroupDraftStatusPendingReview {
 		return nil, ErrExamInvalidRequest
+	}
+	report := evaluateQuestionGroupDraftQuality(draft)
+	draft.QualityReport = report
+	if report.Blocking {
+		return nil, ErrExamDraftQualityBlocked
 	}
 	group, err := buildQuestionGroupDetailFromDraft(draft, userID)
 	if err != nil {

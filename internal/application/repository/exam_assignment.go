@@ -50,6 +50,27 @@ func (r *examAssignmentRepository) ListAssignmentsByClass(ctx context.Context, t
 	return assignments, err
 }
 
+func (r *examAssignmentRepository) ListPublishedGroupsByClass(
+	ctx context.Context,
+	tenantID uint64,
+	classID string,
+) ([]*types.QuestionGroup, error) {
+	var groups []*types.QuestionGroup
+	err := r.db.WithContext(ctx).
+		Model(&types.QuestionGroup{}).
+		Distinct("question_groups.*").
+		Joins("JOIN exam_class_assignments ON exam_class_assignments.group_id = question_groups.id").
+		Where(
+			"exam_class_assignments.tenant_id = ? AND exam_class_assignments.class_id = ? AND exam_class_assignments.status = ? AND question_groups.tenant_id = ?",
+			tenantID,
+			classID,
+			types.ExamAssignmentStatusPublished,
+			tenantID,
+		).
+		Find(&groups).Error
+	return groups, err
+}
+
 func (r *examAssignmentRepository) ListAssignmentsByUserClasses(ctx context.Context, tenantID uint64, userID string, limit int) ([]*types.ExamClassAssignment, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50

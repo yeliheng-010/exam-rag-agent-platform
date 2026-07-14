@@ -4,10 +4,13 @@ import (
 	"context"
 
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/hibiken/asynq"
 )
 
 type ExamQuestionGroupDraftService interface {
+	StartExtraction(ctx context.Context, tenantID uint64, userID string, taskID string, force bool) (*types.ExamQuestionGroupDraftExtractionResult, error)
 	ExtractDrafts(ctx context.Context, tenantID uint64, userID string, taskID string, req *types.ExtractExamQuestionGroupDraftsRequest) (*types.ExamQuestionGroupDraftExtractionResult, error)
+	ProcessExtractionTask(ctx context.Context, task *asynq.Task) error
 	ListDrafts(ctx context.Context, tenantID uint64, userID string, taskID string) (*types.ListExamQuestionGroupDraftsResult, error)
 	UpdateDraft(ctx context.Context, tenantID uint64, userID string, draftID string, req *types.UpdateExamQuestionGroupDraftRequest) (*types.ExamQuestionGroupDraft, error)
 	ApproveDraft(ctx context.Context, tenantID uint64, userID string, draftID string) (*types.ApproveExamQuestionGroupDraftResult, error)
@@ -25,4 +28,23 @@ type ExamQuestionGroupDraftRepository interface {
 
 type ExamQuestionGroupExtractor interface {
 	Extract(ctx context.Context, material *types.ExamMaterial, task *types.ExamStructuringTask, chunks []*types.Chunk) ([]*types.ExamQuestionGroupDraftCandidate, string, error)
+}
+
+type ExamQuestionGroupBatchProgress struct {
+	Total     int
+	Current   int
+	Completed int
+}
+
+type ExamQuestionGroupBatchObserver func(progress ExamQuestionGroupBatchProgress) error
+
+type ExamQuestionGroupProgressExtractor interface {
+	ExamQuestionGroupExtractor
+	ExtractWithProgress(
+		ctx context.Context,
+		material *types.ExamMaterial,
+		task *types.ExamStructuringTask,
+		chunks []*types.Chunk,
+		observer ExamQuestionGroupBatchObserver,
+	) ([]*types.ExamQuestionGroupDraftCandidate, string, error)
 }

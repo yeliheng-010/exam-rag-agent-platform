@@ -20,6 +20,7 @@ type stubQuestionGroupExtractor struct {
 	candidates []*types.ExamQuestionGroupDraftCandidate
 	rawOutput  string
 	err        error
+	onExtract  func()
 }
 
 type stubQuestionGroupWriter struct {
@@ -70,7 +71,7 @@ func newTestExamQuestionGroupDraftService(
 	if questionRepo == nil {
 		questionRepo = &stubQuestionGroupWriter{}
 	}
-	return NewExamQuestionGroupDraftService(repo, repo, questionRepo, space, chunks, extractor).(*examQuestionGroupDraftService)
+	return NewExamQuestionGroupDraftService(repo, repo, questionRepo, space, chunks, extractor, nil).(*examQuestionGroupDraftService)
 }
 
 func newReadingGroupCandidate() *types.ExamQuestionGroupDraftCandidate {
@@ -256,6 +257,9 @@ func (r *stubExamQuestionGroupDraftRepo) UpdateDraft(_ context.Context, draft *t
 }
 
 func (e *stubQuestionGroupExtractor) Extract(context.Context, *types.ExamMaterial, *types.ExamStructuringTask, []*types.Chunk) ([]*types.ExamQuestionGroupDraftCandidate, string, error) {
+	if e.onExtract != nil {
+		e.onExtract()
+	}
 	return e.candidates, e.rawOutput, e.err
 }
 
@@ -304,6 +308,10 @@ func (w *stubQuestionGroupWriter) GetQuestionGroupDetailByIDAndTenant(_ context.
 			return detail, nil
 		}
 	}
+	return nil, repository.ErrQuestionNotFound
+}
+
+func (w *stubQuestionGroupWriter) FindQuestionGroupDetailByChunkIDs(context.Context, uint64, []string) (*types.QuestionGroupDetail, error) {
 	return nil, repository.ErrQuestionNotFound
 }
 

@@ -215,7 +215,7 @@ func buildQuestionDetailFromGroupCandidate(draft *types.ExamQuestionGroupDraft, 
 		},
 		Options:      buildQuestionOptions(questionID, candidate.Options),
 		Answers:      buildQuestionAnswers(questionID, answer, now),
-		Explanations: buildQuestionExplanations(questionID, candidate.Explanation, now),
+		Explanations: buildQuestionExplanationsFromContext(questionID, candidate.Explanation, answer, candidate.Options, draft.MaterialText, now),
 		ChunkRefs:    buildQuestionChunkRefs(questionID, candidate.SourceChunkIDs, candidate.Confidence, now),
 	}, nil
 }

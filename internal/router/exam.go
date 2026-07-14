@@ -12,8 +12,10 @@ func RegisterExamRoutes(
 	teacherApplicationHandler *handler.ExamTeacherApplicationHandler,
 	classHandler *handler.ExamClassHandler,
 	analyticsHandler *handler.ExamAnalyticsHandler,
+	interventionHandler *handler.ExamInterventionHandler,
 	assignmentHandler *handler.ExamAssignmentHandler,
 	questionHandler *handler.ExamQuestionHandler,
+	ragDiagnosticHandler *handler.ExamRAGDiagnosticHandler,
 	practiceHandler *handler.ExamPracticeHandler,
 	questionDraftHandler *handler.ExamQuestionDraftHandler,
 	questionGroupDraftHandler *handler.ExamQuestionGroupDraftHandler,
@@ -40,6 +42,7 @@ func RegisterExamRoutes(
 		exam.POST("/classes/join", g.Viewer(), classHandler.RequestJoinClass)
 		exam.GET("/classes/:class_id", g.Viewer(), classHandler.GetClass)
 		exam.GET("/classes/:class_id/analytics", g.Viewer(), analyticsHandler.GetClassAnalytics)
+		exam.GET("/classes/:class_id/practice-recommendations", g.Viewer(), interventionHandler.GetClassRecommendations)
 		exam.GET("/classes/:class_id/members", g.Viewer(), classHandler.ListClassMembers)
 		exam.POST("/classes/:class_id/members/:user_id/approve", g.Viewer(), classHandler.ApproveClassMember)
 		exam.POST("/classes/:class_id/members/:user_id/reject", g.Viewer(), classHandler.RejectClassMember)
@@ -54,8 +57,10 @@ func RegisterExamRoutes(
 		exam.GET("/question-banks/:bank_id", g.Contributor(), questionHandler.GetQuestionBank)
 		exam.GET("/question-banks/:bank_id/questions", g.Viewer(), questionHandler.ListQuestionDetails)
 		exam.GET("/question-banks/:bank_id/question-groups", g.Viewer(), questionHandler.ListQuestionGroupDetails)
+		exam.POST("/question-banks/:bank_id/rag-diagnostics", g.Contributor(), ragDiagnosticHandler.EvaluateQuestionBank)
 
 		exam.GET("/practice/question-groups", g.Viewer(), practiceHandler.ListQuestionGroups)
+		exam.GET("/practice/recommendations", g.Viewer(), interventionHandler.GetStudentRecommendations)
 		exam.GET("/practice/question-groups/:group_id", g.Viewer(), practiceHandler.GetQuestionGroup)
 		exam.POST("/practice/question-groups/:group_id/attempts", g.Viewer(), practiceHandler.CreateAttempt)
 		exam.GET("/practice/attempts", g.Viewer(), practiceHandler.ListAttempts)

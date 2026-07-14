@@ -1,7 +1,7 @@
 <template>
-    <div class="aside_box" :class="{ 'aside_box--collapsed': uiStore.sidebarCollapsed }">
+    <div class="aside_box" :class="{ 'aside_box--collapsed': effectiveSidebarCollapsed }">
         <!-- 展开时：Logo + 搜索/折叠按钮同行 -->
-        <div class="logo_row" v-if="!uiStore.sidebarCollapsed">
+        <div class="logo_row" v-if="!effectiveSidebarCollapsed">
             <div class="logo_box" @click="router.push('/platform/learning')" style="cursor: pointer;">
                 <img class="logo" src="@/assets/img/weknora.png" alt="">
                 <sup v-if="isLiteEdition" class="lite-badge">Lite</sup>
@@ -30,7 +30,7 @@
             </div>
         </div>
         <!-- 折叠时：展开按钮 -->
-        <t-tooltip v-else :content="t('menu.expandSidebar')" placement="right">
+        <t-tooltip v-else-if="!isNarrowViewport" :content="t('menu.expandSidebar')" placement="right">
             <div class="menu_item sidebar-toggle-item" @click="uiStore.toggleSidebar">
                 <div class="menu_item-box">
                     <div class="menu_icon">
@@ -50,16 +50,16 @@
         </t-tooltip>
 
         <!-- 租户选择器：仅在用户可切换租户时显示 -->
-        <TenantSelector v-if="canAccessAllTenants && !uiStore.sidebarCollapsed" />
+        <TenantSelector v-if="canAccessAllTenants && !effectiveSidebarCollapsed" />
 
         <!-- 折叠时右侧拖拽展开手柄 -->
-        <div v-if="uiStore.sidebarCollapsed" class="sidebar-drag-handle" @mousedown="onDragHandleMouseDown" />
+        <div v-if="effectiveSidebarCollapsed && !isNarrowViewport" class="sidebar-drag-handle" @mousedown="onDragHandleMouseDown" />
 
         <!-- 上半部分：新对话吸顶 + 知识库/智能体/共享空间/历史会话随滚动一起滚走 -->
         <div class="menu_top" ref="scrollContainer" @scroll="handleScroll">
             <!-- 全局搜索入口：点击打开命令面板（⌘K）。展开态移至顶部 logo_row 的图标按钮；
                  折叠态在此处保留为图标项 + 深色 tooltip。 -->
-            <div class="menu_box menu_box--cmdk" v-if="uiStore.sidebarCollapsed">
+            <div class="menu_box menu_box--cmdk" v-if="effectiveSidebarCollapsed">
                 <t-tooltip placement="right">
                     <template #content>
                         <span class="cmdk-tip">
@@ -76,9 +76,9 @@
                     </div>
                 </t-tooltip>
             </div>
-            <div class="menu_box" :class="{ 'menu_box--sticky': item.children && !uiStore.sidebarCollapsed }"
+            <div class="menu_box" :class="{ 'menu_box--sticky': item.children && !effectiveSidebarCollapsed }"
                 v-for="(item, index) in topMenuItems" :key="index">
-                <t-tooltip :content="item.title" placement="right" :disabled="!uiStore.sidebarCollapsed">
+                <t-tooltip :content="item.title" placement="right" :disabled="!effectiveSidebarCollapsed">
                     <div @click="handleMenuClick(item.path)" @mouseenter="mouseenteMenu(item.path)"
                         @mouseleave="mouseleaveMenu(item.path)" :data-guide="`nav-${item.path}`"
                         :class="['menu_item', item.childrenPath && item.childrenPath == currentpath ? 'menu_item_c_active' : isMenuItemActive(item.path) ? 'menu_item_active' : '']">
@@ -88,7 +88,7 @@
                                     :src="getImgSrc(item.icon == 'zhishiku' ? knowledgeIcon : item.icon == 'agent' ? agentIcon : item.icon == 'integration' ? integrationIcon : item.icon == 'organization' ? organizationIcon : item.icon == 'user' ? userIcon : item.icon == 'logout' ? logoutIcon : item.icon == 'setting' ? settingIcon : prefixIcon)"
                                     alt="">
                             </div>
-                            <template v-if="!uiStore.sidebarCollapsed">
+                            <template v-if="!effectiveSidebarCollapsed">
                                 <span class="menu_title" :title="item.title">{{ item.title }}</span>
                                 <span v-if="item.path === 'organizations' && orgStore.totalPendingJoinRequestCount > 0"
                                     class="menu-pending-badge"
@@ -110,7 +110,7 @@
             </div>
 
             <!-- 历史会话：按来源筛选后统一按日期分组展示 -->
-            <div class="submenu" v-if="!uiStore.sidebarCollapsed"
+            <div class="submenu" v-if="!effectiveSidebarCollapsed"
                 :class="{ 'submenu--scope-fallback': showSessionScopeFallback }">
                 <div v-if="showSessionScopeFallback" class="session-list-scope-fallback">
                     <SessionSourceFilter inline :emphasized="sessionScopeFilterPinned" :sources="sessionSourceOptions"
@@ -178,7 +178,7 @@
             </div>
 
             <!-- 批量管理底部操作条 -->
-            <div v-if="batchMode && !uiStore.sidebarCollapsed" class="batch-inline-footer">
+            <div v-if="batchMode && !effectiveSidebarCollapsed" class="batch-inline-footer">
                 <div class="batch-footer-left">
                     <t-checkbox :checked="isAllBatchSelected" :indeterminate="isBatchIndeterminate"
                         @change="toggleBatchSelectAll">
@@ -298,6 +298,14 @@ const authStore = useAuthStore();
 const orgStore = useOrganizationStore();
 const uiStore = useUIStore();
 const commandPaletteStore = useCommandPaletteStore();
+const MOBILE_LAYOUT_QUERY = '(max-width: 720px)';
+const isNarrowViewport = ref(typeof window !== 'undefined' && window.matchMedia(MOBILE_LAYOUT_QUERY).matches);
+const effectiveSidebarCollapsed = computed(() => uiStore.sidebarCollapsed || isNarrowViewport.value);
+let mobileLayoutQuery: MediaQueryList | null = null;
+
+const handleMobileLayoutChange = (event: MediaQueryListEvent) => {
+    isNarrowViewport.value = event.matches;
+};
 
 // Platform-aware label for the ⌘K hint. navigator.platform is deprecated but
 // the alternatives (userAgentData.platform) aren't universally available yet;
@@ -1008,6 +1016,10 @@ const handleSessionTitleUpdated = (event: Event) => {
 };
 
 onMounted(async () => {
+    mobileLayoutQuery = window.matchMedia(MOBILE_LAYOUT_QUERY);
+    isNarrowViewport.value = mobileLayoutQuery.matches;
+    mobileLayoutQuery.addEventListener('change', handleMobileLayoutChange);
+
     const routeName = typeof route.name === 'string' ? route.name : (route.name ? String(route.name) : '')
     currentpath.value = routeName;
     if (route.params.chatid) {
@@ -1040,6 +1052,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    mobileLayoutQuery?.removeEventListener('change', handleMobileLayoutChange);
     window.removeEventListener('session-title-updated', handleSessionTitleUpdated);
 });
 

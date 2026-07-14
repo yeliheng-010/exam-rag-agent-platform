@@ -114,16 +114,17 @@ func (e *SyncTaskExecutor) Enqueue(task *asynq.Task, opts ...asynq.Option) (*asy
 type SyncTaskParams struct {
 	dig.In
 
-	Executor             *SyncTaskExecutor
-	KnowledgeService     interfaces.KnowledgeService
-	KnowledgeBaseService interfaces.KnowledgeBaseService
-	TagService           interfaces.KnowledgeTagService
-	DataSourceService    interfaces.DataSourceService
-	ChunkExtractor       interfaces.TaskHandler `name:"chunkExtractor"`
-	DataTableSummary     interfaces.TaskHandler `name:"dataTableSummary"`
-	ImageMultimodal      interfaces.TaskHandler `name:"imageMultimodal"`
-	KnowledgePostProcess interfaces.TaskHandler `name:"knowledgePostProcess"`
-	WikiIngest           interfaces.TaskHandler `name:"wikiIngest"`
+	Executor                  *SyncTaskExecutor
+	KnowledgeService          interfaces.KnowledgeService
+	KnowledgeBaseService      interfaces.KnowledgeBaseService
+	TagService                interfaces.KnowledgeTagService
+	DataSourceService         interfaces.DataSourceService
+	ChunkExtractor            interfaces.TaskHandler `name:"chunkExtractor"`
+	DataTableSummary          interfaces.TaskHandler `name:"dataTableSummary"`
+	ImageMultimodal           interfaces.TaskHandler `name:"imageMultimodal"`
+	KnowledgePostProcess      interfaces.TaskHandler `name:"knowledgePostProcess"`
+	WikiIngest                interfaces.TaskHandler `name:"wikiIngest"`
+	QuestionGroupDraftService interfaces.ExamQuestionGroupDraftService
 }
 
 // RegisterSyncHandlers registers all task handlers on the SyncTaskExecutor.
@@ -135,6 +136,7 @@ func RegisterSyncHandlers(params SyncTaskParams) {
 	params.Executor.RegisterHandler(types.TypeManualProcess, params.KnowledgeService.ProcessManualUpdate)
 	params.Executor.RegisterHandler(types.TypeFAQImport, params.KnowledgeService.ProcessFAQImport)
 	params.Executor.RegisterHandler(types.TypeQuestionGeneration, params.KnowledgeService.ProcessQuestionGeneration)
+	params.Executor.RegisterHandler(types.TypeExamQuestionGroupExtraction, params.QuestionGroupDraftService.ProcessExtractionTask)
 	params.Executor.RegisterHandler(types.TypeSummaryGeneration, params.KnowledgeService.ProcessSummaryGeneration)
 	params.Executor.RegisterHandler(types.TypeKBClone, params.KnowledgeService.ProcessKBClone)
 	params.Executor.RegisterHandler(types.TypeKnowledgeMove, params.KnowledgeService.ProcessKnowledgeMove)

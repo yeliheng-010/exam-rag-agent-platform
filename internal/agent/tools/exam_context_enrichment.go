@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/Tencent/WeKnora/internal/examrag"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/searchutil"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -14,7 +15,7 @@ func (t *KnowledgeSearchTool) appendExamContextBundles(
 	queries []string,
 	results []*searchResultWithMeta,
 ) []*searchResultWithMeta {
-	if t == nil || t.chunkService == nil || len(results) == 0 {
+	if t == nil || len(results) == 0 {
 		return results
 	}
 
@@ -37,23 +38,63 @@ func (t *KnowledgeSearchTool) appendExamContextBundles(
 			continue
 		}
 
+		bundle, err := t.structuredExamQuestionContextBundle(ctx, tenantID, query, seed)
+		if err != nil {
+			logger.Warnf(ctx, "[Tool][KnowledgeSearch] Failed to build structured exam context, knowledge=%s chunk=%s: %v",
+				seed.KnowledgeID, seed.ID, err)
+		}
+		if bundle != nil {
+			enriched := buildToolExamContextResult(seed, bundle, query)
+			out = upsertToolExamContextResult(out, enriched)
+			logger.Infof(ctx, "[Tool][KnowledgeSearch] Structured exam context enriched: knowledge=%s label=%s sources=%d",
+				seed.KnowledgeID, bundle.Label, len(bundle.SourceChunkIDs))
+			break
+		}
+
+		if t.chunkService == nil {
+			continue
+		}
 		chunks, err := t.chunkService.GetRepository().ListChunksByKnowledgeID(ctx, tenantID, seed.KnowledgeID)
 		if err != nil {
 			logger.Warnf(ctx, "[Tool][KnowledgeSearch] Failed to list chunks for exam context, knowledge=%s: %v", seed.KnowledgeID, err)
 			continue
 		}
-		bundle := searchutil.BuildExamQuestionContextBundle(query, chunks)
-		if bundle == nil {
+		fallbackBundle := searchutil.BuildExamQuestionContextBundle(query, chunks)
+		if fallbackBundle == nil {
 			continue
 		}
 
-		enriched := buildToolExamContextResult(seed, bundle, query)
+		enriched := buildToolExamContextResult(seed, fallbackBundle, query)
 		out = upsertToolExamContextResult(out, enriched)
 		logger.Infof(ctx, "[Tool][KnowledgeSearch] Exam context enriched: knowledge=%s label=%s body=%d answer=%d",
-			seed.KnowledgeID, bundle.Label, len(bundle.BodyChunks), len(bundle.AnswerChunks))
+			seed.KnowledgeID, fallbackBundle.Label, len(fallbackBundle.BodyChunks), len(fallbackBundle.AnswerChunks))
 		break
 	}
 	return out
+}
+
+func (t *KnowledgeSearchTool) structuredExamQuestionContextBundle(
+	ctx context.Context,
+	tenantID uint64,
+	query string,
+	seed *searchResultWithMeta,
+) (*searchutil.ExamQuestionContextBundle, error) {
+	if t == nil || t.questionRepo == nil || seed == nil || seed.SearchResult == nil || tenantID == 0 {
+		return nil, nil
+	}
+	resolved, err := examrag.NewExamQuestionContextResolver(examrag.ExamQuestionContextResolverConfig{
+		QuestionRepo:         t.questionRepo,
+		KnowledgeBaseService: t.knowledgeBaseService,
+		SearchTargets:        t.searchTargets,
+	}).Resolve(ctx, examrag.ExamQuestionContextResolveRequest{
+		Query:    query,
+		TenantID: tenantID,
+		ChunkIDs: toolExamContextCandidateChunkIDs(seed),
+	})
+	if err != nil || resolved == nil {
+		return nil, err
+	}
+	return resolved.Bundle, nil
 }
 
 func buildToolExamContextResult(
@@ -61,27 +102,30 @@ func buildToolExamContextResult(
 	bundle *searchutil.ExamQuestionContextBundle,
 	query string,
 ) *searchResultWithMeta {
-	if seed == nil || seed.SearchResult == nil || bundle == nil || len(bundle.BodyChunks) == 0 {
+	if seed == nil || seed.SearchResult == nil || bundle == nil {
 		return seed
 	}
 
-	primary := bundle.BodyChunks[0]
 	base := *seed.SearchResult
-	base.ID = primary.ID
 	base.Content = bundle.Content
-	base.ChunkIndex = primary.ChunkIndex
-	base.StartAt = primary.StartAt
-	base.EndAt = examToolBundleEndAt(bundle)
-	base.Seq = primary.ChunkIndex
 	base.Score = 1.0
 	base.MatchType = types.MatchTypeDirectLoad
 	base.ChunkType = string(types.ChunkTypeText)
-	base.ParentChunkID = primary.ParentChunkID
-	base.ImageInfo = primary.ImageInfo
-	base.SubChunkID = examToolBundleSourceIDs(bundle, primary.ID)
+	if len(bundle.BodyChunks) > 0 && bundle.BodyChunks[0] != nil {
+		primary := bundle.BodyChunks[0]
+		base.ID = primary.ID
+		base.ChunkIndex = primary.ChunkIndex
+		base.StartAt = primary.StartAt
+		base.EndAt = examToolBundleEndAt(bundle)
+		base.Seq = primary.ChunkIndex
+		base.ParentChunkID = primary.ParentChunkID
+		base.ImageInfo = primary.ImageInfo
+	}
+	base.SubChunkID = examToolBundleSourceIDs(bundle, base.ID)
 	base.Metadata = cloneToolSearchMetadata(seed.Metadata)
 	base.Metadata["exam_context_enriched"] = "true"
 	base.Metadata["exam_passage_label"] = bundle.Label
+	base.Metadata["exam_context_mode"] = examToolContextBundleMode(bundle)
 
 	return &searchResultWithMeta{
 		SearchResult:      &base,
@@ -105,6 +149,13 @@ func examToolBundleEndAt(bundle *searchutil.ExamQuestionContextBundle) int {
 func examToolBundleSourceIDs(bundle *searchutil.ExamQuestionContextBundle, primaryID string) []string {
 	seen := map[string]bool{primaryID: true}
 	out := make([]string, 0, len(bundle.BodyChunks)+len(bundle.AnswerChunks))
+	for _, chunkID := range bundle.SourceChunkIDs {
+		if chunkID == "" || seen[chunkID] {
+			continue
+		}
+		seen[chunkID] = true
+		out = append(out, chunkID)
+	}
 	add := func(chunks []*types.Chunk) {
 		for _, chunk := range chunks {
 			if chunk == nil || chunk.ID == "" || seen[chunk.ID] {
@@ -117,6 +168,25 @@ func examToolBundleSourceIDs(bundle *searchutil.ExamQuestionContextBundle, prima
 	add(bundle.BodyChunks)
 	add(bundle.AnswerChunks)
 	return out
+}
+
+func toolExamContextCandidateChunkIDs(seed *searchResultWithMeta) []string {
+	if seed == nil || seed.SearchResult == nil {
+		return nil
+	}
+	out := make([]string, 0, 1+len(seed.SubChunkID))
+	if seed.ID != "" {
+		out = append(out, seed.ID)
+	}
+	out = append(out, seed.SubChunkID...)
+	return out
+}
+
+func examToolContextBundleMode(bundle *searchutil.ExamQuestionContextBundle) string {
+	if bundle != nil && len(bundle.BodyChunks) == 0 && len(bundle.SourceChunkIDs) > 0 {
+		return "structured"
+	}
+	return "chunk"
 }
 
 func upsertToolExamContextResult(results []*searchResultWithMeta, enriched *searchResultWithMeta) []*searchResultWithMeta {

@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
@@ -207,6 +209,92 @@ func (r *examQuestionRepository) GetQuestionGroupDetailByIDAndTenant(ctx context
 		return nil, err
 	}
 	return detail, nil
+}
+
+func (r *examQuestionRepository) FindQuestionGroupDetailByChunkIDs(ctx context.Context, tenantID uint64, chunkIDs []string) (*types.QuestionGroupDetail, error) {
+	chunkIDs = uniqueNonEmptyStrings(chunkIDs)
+	if len(chunkIDs) == 0 {
+		return nil, nil
+	}
+
+	var row struct {
+		GroupID string
+	}
+	err := r.db.WithContext(ctx).
+		Table("question_chunk_refs AS refs").
+		Select("questions.group_id").
+		Joins("JOIN questions ON questions.id = refs.question_id").
+		Joins("JOIN question_groups ON question_groups.id = questions.group_id").
+		Where("questions.tenant_id = ?", tenantID).
+		Where("refs.chunk_id IN ?", chunkIDs).
+		Where("questions.group_id IS NOT NULL AND questions.group_id <> ''").
+		Where("questions.status <> ? AND question_groups.status <> ?", "deleted", "deleted").
+		Order("refs.confidence DESC, questions.order_in_group ASC, refs.created_at ASC").
+		Limit(1).
+		Scan(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	if row.GroupID == "" {
+		groupID, err := r.findQuestionGroupIDBySourceChunkIDs(ctx, tenantID, chunkIDs)
+		if err != nil || groupID == "" {
+			return nil, err
+		}
+		row.GroupID = groupID
+	}
+	return r.GetQuestionGroupDetailByIDAndTenant(ctx, tenantID, row.GroupID)
+}
+
+func (r *examQuestionRepository) findQuestionGroupIDBySourceChunkIDs(
+	ctx context.Context,
+	tenantID uint64,
+	chunkIDs []string,
+) (string, error) {
+	whereSQL, args := sourceChunkIDsContainsAnySQL(r.db.Dialector.Name(), chunkIDs)
+	if whereSQL == "" {
+		return "", nil
+	}
+
+	var row struct {
+		GroupID string
+	}
+	err := r.db.WithContext(ctx).
+		Table("question_groups").
+		Select("id AS group_id").
+		Where("tenant_id = ?", tenantID).
+		Where("status <> ?", "deleted").
+		Where(whereSQL, args...).
+		Order("sort_order ASC, created_at DESC").
+		Limit(1).
+		Scan(&row).Error
+	return row.GroupID, err
+}
+
+func sourceChunkIDsContainsAnySQL(dialect string, chunkIDs []string) (string, []interface{}) {
+	chunkIDs = uniqueNonEmptyStrings(chunkIDs)
+	if len(chunkIDs) == 0 {
+		return "", nil
+	}
+
+	clauses := make([]string, 0, len(chunkIDs))
+	args := make([]interface{}, 0, len(chunkIDs))
+	for _, chunkID := range chunkIDs {
+		if dialect == "postgres" {
+			payload, err := json.Marshal([]string{chunkID})
+			if err != nil {
+				continue
+			}
+			clauses = append(clauses, "source_chunk_ids @> ?::jsonb")
+			args = append(args, string(payload))
+			continue
+		}
+		clauses = append(clauses, "source_chunk_ids LIKE ?")
+		args = append(args, `%"`+chunkID+`"%`)
+	}
+	if len(clauses) == 0 {
+		return "", nil
+	}
+	return "(" + strings.Join(clauses, " OR ") + ")", args
 }
 
 func (r *examQuestionRepository) ListQuestionGroupPracticeSummaries(
@@ -456,6 +544,19 @@ func (r *examQuestionRepository) loadQuestionGroupsChildren(ctx context.Context,
 		return r.loadQuestionChildren(ctx, questionIDs, byQuestionID)
 	}
 	return nil
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	seen := make(map[string]bool, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }
 
 func (r *examQuestionRepository) loadQuestionChildren(ctx context.Context, questionIDs []string, byID map[string]*types.QuestionDetail) error {

@@ -23,6 +23,16 @@ type OllamaChat struct {
 	ollamaService *ollama.OllamaService
 }
 
+const minimumOllamaContextWindow = 8192
+
+func ollamaContextWindow(maxTokens int) int {
+	contextWindow := maxTokens * 2
+	if contextWindow < minimumOllamaContextWindow {
+		return minimumOllamaContextWindow
+	}
+	return contextWindow
+}
+
 // NewOllamaChat 创建 Ollama 聊天实例
 func NewOllamaChat(config *ChatConfig, ollamaService *ollama.OllamaService) (*OllamaChat, error) {
 	return &OllamaChat{
@@ -99,6 +109,7 @@ func (c *OllamaChat) buildChatRequest(messages []Message, opts *ChatOptions, isS
 		}
 		if opts.MaxTokens > 0 {
 			chatReq.Options["num_predict"] = opts.MaxTokens
+			chatReq.Options["num_ctx"] = ollamaContextWindow(opts.MaxTokens)
 		}
 		if opts.Thinking != nil {
 			chatReq.Think = &ollamaapi.ThinkValue{

@@ -11,31 +11,32 @@ const (
 )
 
 type ExamQuestionGroupDraft struct {
-	ID               string                       `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID         uint64                       `json:"tenant_id" gorm:"not null;index"`
-	SpaceID          string                       `json:"space_id" gorm:"type:varchar(36);not null;index"`
-	TaskID           string                       `json:"task_id" gorm:"type:varchar(36);not null;index"`
-	MaterialID       string                       `json:"material_id" gorm:"type:varchar(36);not null;index"`
-	QuestionBankID   string                       `json:"question_bank_id" gorm:"type:varchar(36);not null;index"`
-	DomainID         string                       `json:"domain_id" gorm:"type:varchar(36);not null;index"`
-	SubjectID        *string                      `json:"subject_id,omitempty" gorm:"type:varchar(36);index"`
-	GroupType        string                       `json:"group_type" gorm:"type:varchar(64);not null"`
-	Title            string                       `json:"title" gorm:"type:varchar(255);not null;default:''"`
-	MaterialText     string                       `json:"material_text" gorm:"type:text;not null;default:''"`
-	MaterialFormat   string                       `json:"material_format" gorm:"type:varchar(32);not null;default:'plain_text'"`
-	QuestionsJSON    JSON                         `json:"questions_json" gorm:"type:jsonb;not null"`
-	AssetsJSON       JSON                         `json:"assets_json" gorm:"type:jsonb;not null"`
-	SourceChunkIDs   JSON                         `json:"source_chunk_ids" gorm:"type:jsonb;not null"`
-	StrategyCode     string                       `json:"strategy_code" gorm:"type:varchar(64);not null;default:''"`
-	Confidence       float64                      `json:"confidence" gorm:"type:numeric(5,4);not null;default:0"`
-	Status           ExamQuestionGroupDraftStatus `json:"status" gorm:"type:varchar(32);not null;default:'pending_review'"`
-	RawModelOutput   string                       `json:"raw_model_output" gorm:"type:text;not null;default:''"`
-	ErrorMessage     string                       `json:"error_message" gorm:"type:text;not null;default:''"`
-	ApprovedGroupID  string                       `json:"approved_group_id" gorm:"type:varchar(36);not null;default:''"`
-	ReviewedByUserID string                       `json:"reviewed_by_user_id" gorm:"type:varchar(36);not null;default:''"`
-	ReviewedAt       *time.Time                   `json:"reviewed_at,omitempty"`
-	CreatedAt        time.Time                    `json:"created_at"`
-	UpdatedAt        time.Time                    `json:"updated_at"`
+	ID               string                         `json:"id" gorm:"type:varchar(36);primaryKey"`
+	TenantID         uint64                         `json:"tenant_id" gorm:"not null;index"`
+	SpaceID          string                         `json:"space_id" gorm:"type:varchar(36);not null;index"`
+	TaskID           string                         `json:"task_id" gorm:"type:varchar(36);not null;index"`
+	MaterialID       string                         `json:"material_id" gorm:"type:varchar(36);not null;index"`
+	QuestionBankID   string                         `json:"question_bank_id" gorm:"type:varchar(36);not null;index"`
+	DomainID         string                         `json:"domain_id" gorm:"type:varchar(36);not null;index"`
+	SubjectID        *string                        `json:"subject_id,omitempty" gorm:"type:varchar(36);index"`
+	GroupType        string                         `json:"group_type" gorm:"type:varchar(64);not null"`
+	Title            string                         `json:"title" gorm:"type:varchar(255);not null;default:''"`
+	MaterialText     string                         `json:"material_text" gorm:"type:text;not null;default:''"`
+	MaterialFormat   string                         `json:"material_format" gorm:"type:varchar(32);not null;default:'plain_text'"`
+	QuestionsJSON    JSON                           `json:"questions_json" gorm:"type:jsonb;not null"`
+	AssetsJSON       JSON                           `json:"assets_json" gorm:"type:jsonb;not null"`
+	SourceChunkIDs   JSON                           `json:"source_chunk_ids" gorm:"type:jsonb;not null"`
+	StrategyCode     string                         `json:"strategy_code" gorm:"type:varchar(64);not null;default:''"`
+	Confidence       float64                        `json:"confidence" gorm:"type:numeric(5,4);not null;default:0"`
+	Status           ExamQuestionGroupDraftStatus   `json:"status" gorm:"type:varchar(32);not null;default:'pending_review'"`
+	RawModelOutput   string                         `json:"raw_model_output" gorm:"type:text;not null;default:''"`
+	ErrorMessage     string                         `json:"error_message" gorm:"type:text;not null;default:''"`
+	ApprovedGroupID  string                         `json:"approved_group_id" gorm:"type:varchar(36);not null;default:''"`
+	ReviewedByUserID string                         `json:"reviewed_by_user_id" gorm:"type:varchar(36);not null;default:''"`
+	ReviewedAt       *time.Time                     `json:"reviewed_at,omitempty"`
+	QualityReport    ExamQuestionGroupQualityReport `json:"quality_report" gorm:"-"`
+	CreatedAt        time.Time                      `json:"created_at"`
+	UpdatedAt        time.Time                      `json:"updated_at"`
 }
 
 func (ExamQuestionGroupDraft) TableName() string {

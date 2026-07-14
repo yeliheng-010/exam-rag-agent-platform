@@ -27,13 +27,13 @@ func (h *ExamQuestionGroupDraftHandler) ExtractDrafts(c *gin.Context) {
 		c.Error(apperrors.NewValidationError("Invalid request parameters").WithDetails(err.Error()))
 		return
 	}
-	result, err := h.service.ExtractDrafts(ctx, tenantID, userID, c.Param("task_id"), &req)
+	result, err := h.service.StartExtraction(ctx, tenantID, userID, c.Param("task_id"), req.Force)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to extract exam question group drafts: %v", err)
 		writeExamError(c, err, "Failed to extract exam question group drafts")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+	c.JSON(http.StatusAccepted, gin.H{"success": true, "data": result})
 }
 
 func (h *ExamQuestionGroupDraftHandler) ListDrafts(c *gin.Context) {

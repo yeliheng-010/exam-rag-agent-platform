@@ -13,9 +13,10 @@ import (
 )
 
 var (
-	ErrExamNotFound         = errors.New("exam resource not found")
-	ErrExamPermissionDenied = errors.New("exam permission denied")
-	ErrExamInvalidRequest   = errors.New("invalid exam request")
+	ErrExamNotFound            = errors.New("exam resource not found")
+	ErrExamPermissionDenied    = errors.New("exam permission denied")
+	ErrExamInvalidRequest      = errors.New("invalid exam request")
+	ErrExamDraftQualityBlocked = errors.New("exam draft has blocking quality issues")
 )
 
 type examSpaceService struct {

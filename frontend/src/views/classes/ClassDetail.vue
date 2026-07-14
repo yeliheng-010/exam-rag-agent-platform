@@ -68,6 +68,12 @@
                 :pagination="{ pageSize: 8, total: members.length }"
                 size="small"
               >
+                <template #member="{ row }">
+                  <div class="resource-name-cell">
+                    <strong>{{ memberDisplayName(row) }}</strong>
+                    <span>{{ memberDisplayId(row) }}</span>
+                  </div>
+                </template>
                 <template #role="{ row }">
                   <t-tag variant="light" :theme="roleTheme(row.role)">{{ roleLabel(row.role) }}</t-tag>
                 </template>
@@ -221,6 +227,9 @@
                       {{ taskStatusLabel(row.status) }}
                     </t-tag>
                     <div v-if="row.error_message" class="task-error">{{ row.error_message }}</div>
+                    <div v-else-if="row.status === 'extracting'" class="task-error">
+                      {{ row.progress?.message || '后台抽取中' }} · {{ row.progress?.percent || 0 }}%
+                    </div>
                   </template>
                   <template #created_at="{ row }">
                     {{ formatDate(row.created_at) }}
@@ -237,7 +246,7 @@
                         {{ row.status === 'failed' ? '重新抽取题组' : '开始题组抽取' }}
                       </t-button>
                       <t-button
-                        v-if="canManageResources && ['reviewing', 'completed'].includes(row.status)"
+                        v-if="canManageResources && ['extracting', 'reviewing', 'completed'].includes(row.status)"
                         size="small"
                         variant="outline"
                         @click="router.push(`/platform/question-group-drafts/${row.id}`)"
@@ -325,10 +334,13 @@
                 <h3>班级练习分析</h3>
                 <p>基于班级已发布练习任务和学生最新作答记录，汇总完成率、正确率与学生参与情况。</p>
               </div>
-              <t-button v-if="canViewAnalytics" variant="outline" :loading="analyticsLoading" @click="loadClassAnalytics">
-                <template #icon><t-icon name="refresh" /></template>
-                刷新
-              </t-button>
+              <div v-if="canViewAnalytics" class="panel-actions">
+                <ClassPracticeRecommendations :class-id="currentClassId" @publish="prefillRecommendedAssignment" />
+                <t-button variant="outline" :loading="analyticsLoading" @click="loadClassAnalytics">
+                  <template #icon><t-icon name="refresh" /></template>
+                  刷新
+                </t-button>
+              </div>
             </div>
             <t-alert
               v-if="!canViewAnalytics"
@@ -376,8 +388,8 @@
                   >
                     <template #student="{ row }">
                       <div class="resource-name-cell">
-                        <strong>{{ row.member.user_id }}</strong>
-                        <span>{{ roleLabel(row.member.role) }}</span>
+                        <strong>{{ memberDisplayName(row.member) }}</strong>
+                        <span>{{ memberDisplayId(row.member) }} · {{ roleLabel(row.member.role) }}</span>
                       </div>
                     </template>
                     <template #progress="{ row }">
@@ -615,12 +627,12 @@
     <t-dialog
       v-model:visible="assignmentVisible"
       header="发布练习任务"
-      width="720px"
+      width="min(720px, calc(100vw - 16px))"
       :confirm-btn="{ content: '发布', loading: creatingAssignment }"
       @confirm="submitCreateAssignment"
     >
-      <t-form ref="assignmentFormRef" :data="assignmentForm" :rules="assignmentRules" label-align="top">
-        <t-form-item label="练习题组" name="group_id">
+      <t-form ref="assignmentFormRef" class="assignment-form" :data="assignmentForm" :rules="assignmentRules" label-align="top">
+        <t-form-item class="assignment-group-control" label="练习题组" name="group_id">
           <t-select
             v-model="assignmentForm.group_id"
             :loading="assignmentGroupsLoading"
@@ -695,6 +707,12 @@
             :pagination="{ pageSize: 8, total: assignmentProgressRows.length }"
             size="small"
           >
+            <template #student="{ row }">
+              <div class="resource-name-cell">
+                <strong>{{ row.display_name }}</strong>
+                <span>{{ row.display_id }}</span>
+              </div>
+            </template>
             <template #status="{ row }">
               <t-tag variant="light" :theme="assignmentProgressStatusTheme(row.status)">
                 {{ assignmentProgressStatusLabel(row.status) }}
@@ -735,10 +753,13 @@ import { listPracticeQuestionGroups } from '@/api/exam/practice'
 import { listKnowledgeBases, listKnowledgeFiles } from '@/api/knowledge-base'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
+import ClassPracticeRecommendations from './ClassPracticeRecommendations.vue'
+import { memberDisplayId, memberDisplayName } from './memberDisplay'
 import type {
   ExamClass,
   ExamClassAnalyticsAssignment,
   ExamClassAnalyticsSummary,
+  ExamPracticeRecommendation,
   ExamAssignmentProgressStatus,
   ExamAssignmentProgressSummary,
   ExamAssignmentSummary,
@@ -768,6 +789,8 @@ interface KnowledgeFileItem {
 
 interface AssignmentProgressRow {
   user_id: string
+  display_id: string
+  display_name: string
   status: ExamAssignmentProgressStatus
   answered_text: string
   correct_text: string
@@ -825,6 +848,7 @@ const canReviewMembers = computed(() => authStore.hasRole('contributor'))
 const canManageResources = computed(() => authStore.hasRole('contributor'))
 const canManageAssignments = computed(() => authStore.hasRole('contributor'))
 const canViewAnalytics = computed(() => authStore.hasRole('contributor'))
+const currentClassId = computed(() => String(route.params.classId || ''))
 const hasImportableAssignmentGroups = computed(() => {
   const classSpaceId = classInfo.value?.space_id
   return assignmentGroups.value.some((item) => item.group?.space_id && item.group.space_id !== classSpaceId)
@@ -846,6 +870,8 @@ const assignmentProgressRows = computed<AssignmentProgressRow[]>(() => {
     const attempt = item.attempt
     return {
       user_id: item.member.user_id,
+      display_id: memberDisplayId(item.member),
+      display_name: memberDisplayName(item.member),
       status: item.status,
       answered_text: attempt ? `${attempt.answered_count}/${attempt.question_count}` : '-',
       correct_text: attempt ? `${attempt.correct_count}/${attempt.question_count}` : '-',
@@ -903,7 +929,7 @@ const futureTabs = [
 ]
 
 const memberColumns = [
-  { colKey: 'user_id', title: '用户 ID', ellipsis: true },
+  { colKey: 'member', title: '姓名', cell: 'member', ellipsis: true },
   { colKey: 'role', title: '班级角色', cell: 'role', width: 120 },
   { colKey: 'status', title: '状态', cell: 'status', width: 120 },
   { colKey: 'created_at', title: '申请时间', cell: 'created_at', width: 160 },
@@ -938,7 +964,7 @@ const taskColumns = [
 ]
 
 const assignmentProgressColumns = [
-  { colKey: 'user_id', title: '学生 ID', ellipsis: true },
+  { colKey: 'student', title: '学生', cell: 'student', ellipsis: true },
   { colKey: 'status', title: '状态', cell: 'status', width: 110 },
   { colKey: 'answered_text', title: '答题数', width: 100 },
   { colKey: 'correct_text', title: '正确数', width: 100 },
@@ -1341,6 +1367,20 @@ const openAssignmentDialog = async () => {
   await loadAssignmentGroups()
 }
 
+const prefillRecommendedAssignment = async (recommendation: ExamPracticeRecommendation) => {
+  if (!canManageAssignments.value || !recommendation.group?.group?.id) return
+  await loadAssignmentGroups()
+  const groupID = recommendation.group.group.id
+  if (!assignmentGroups.value.some(item => item.group.id === groupID)) {
+    assignmentGroups.value.unshift(recommendation.group)
+  }
+  assignmentForm.value.group_id = groupID
+  assignmentForm.value.title = recommendation.group.group.title || '推荐练习'
+  assignmentForm.value.instructions = '根据班级学习诊断推荐，请确认题组内容和截止时间后发布。'
+  assignmentForm.value.due_at = ''
+  assignmentVisible.value = true
+}
+
 const submitCreateAssignment = async () => {
   const classId = String(route.params.classId || '')
   if (!classId) return
@@ -1404,8 +1444,7 @@ const extractTask = async (task: ExamStructuringTask) => {
   extractingTaskId.value = task.id
   try {
     await extractQuestionGroupDrafts(task.id, task.status === 'failed')
-    MessagePlugin.success('题组抽取完成，已生成待校对草稿')
-    await loadResourceTab()
+    MessagePlugin.success('题组抽取任务已启动')
     router.push(`/platform/question-group-drafts/${task.id}`)
   } catch (error: any) {
     MessagePlugin.error(error?.message || '题组抽取失败')
@@ -1755,6 +1794,19 @@ onMounted(async () => {
   color: var(--td-error-color);
   font-size: 12px;
   line-height: 18px;
+}
+
+.assignment-form {
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.assignment-group-control {
+  :deep(.t-form__controls-content) {
+    flex-direction: column;
+    gap: 8px;
+  }
 }
 
 .assignment-list {

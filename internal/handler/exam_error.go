@@ -11,6 +11,8 @@ import (
 
 func writeExamError(c *gin.Context, err error, fallback string) {
 	switch {
+	case errors.Is(err, service.ErrExamDraftQualityBlocked):
+		c.Error(apperrors.NewValidationError("Draft has blocking quality issues").WithDetails(err.Error()))
 	case errors.Is(err, service.ErrExamInvalidRequest):
 		c.Error(apperrors.NewValidationError("Invalid request parameters"))
 	case errors.Is(err, service.ErrExamPermissionDenied):

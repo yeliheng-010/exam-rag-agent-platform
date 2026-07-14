@@ -59,6 +59,9 @@ type ExamClassMember struct {
 	JoinedAt  time.Time             `json:"joined_at"`
 	CreatedAt time.Time             `json:"created_at"`
 	UpdatedAt time.Time             `json:"updated_at"`
+
+	DisplayID   string `json:"display_id,omitempty" gorm:"-"`
+	DisplayName string `json:"display_name,omitempty" gorm:"-"`
 }
 
 func (ExamClassMember) TableName() string {

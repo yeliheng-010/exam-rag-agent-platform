@@ -117,6 +117,22 @@ func (r *examPracticeRepository) ListAnswersByAttempt(ctx context.Context, tenan
 	return answers, err
 }
 
+func (r *examPracticeRepository) ListAnswersByAttempts(
+	ctx context.Context,
+	tenantID uint64,
+	attemptIDs []string,
+) ([]*types.ExamPracticeAnswer, error) {
+	if len(attemptIDs) == 0 {
+		return []*types.ExamPracticeAnswer{}, nil
+	}
+	var answers []*types.ExamPracticeAnswer
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND attempt_id IN ?", tenantID, attemptIDs).
+		Order("answered_at ASC").
+		Find(&answers).Error
+	return answers, err
+}
+
 func (r *examPracticeRepository) ListLatestAttemptsByGroups(
 	ctx context.Context,
 	tenantID uint64,

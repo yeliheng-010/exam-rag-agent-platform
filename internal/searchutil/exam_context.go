@@ -31,10 +31,11 @@ var examReadingAnswerRanges = map[string]struct {
 // ExamQuestionContextBundle is a compact synthetic retrieval result that keeps
 // a passage body and its distant answer section together for exam-paper RAG.
 type ExamQuestionContextBundle struct {
-	Label        string
-	Content      string
-	BodyChunks   []*types.Chunk
-	AnswerChunks []*types.Chunk
+	Label          string
+	Content        string
+	BodyChunks     []*types.Chunk
+	AnswerChunks   []*types.Chunk
+	SourceChunkIDs []string
 }
 
 // ShouldEnrichExamQuestionContext returns true for exam-paper questions where

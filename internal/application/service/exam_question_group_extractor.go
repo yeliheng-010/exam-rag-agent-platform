@@ -14,6 +14,8 @@ import (
 
 const examQuestionGroupExtractionSystemPrompt = `You are an exam paper structuring assistant. Extract real question groups, not isolated options. Return JSON only.`
 
+var errNoValidQuestionGroupDrafts = errors.New("model returned no valid question group drafts")
+
 type examQuestionGroupExtractor struct {
 	modelService interfaces.ModelService
 	registry     *QuestionGroupStrategyRegistry
@@ -27,18 +29,20 @@ func NewExamQuestionGroupExtractor(modelService interfaces.ModelService) interfa
 }
 
 func (e *examQuestionGroupExtractor) Extract(ctx context.Context, material *types.ExamMaterial, task *types.ExamStructuringTask, chunks []*types.Chunk) ([]*types.ExamQuestionGroupDraftCandidate, string, error) {
+	return e.ExtractWithProgress(ctx, material, task, chunks, nil)
+}
+
+func (e *examQuestionGroupExtractor) ExtractWithProgress(
+	ctx context.Context,
+	material *types.ExamMaterial,
+	task *types.ExamStructuringTask,
+	chunks []*types.Chunk,
+	observer interfaces.ExamQuestionGroupBatchObserver,
+) ([]*types.ExamQuestionGroupDraftCandidate, string, error) {
 	if e == nil || e.modelService == nil {
 		return nil, "", errors.New("exam question group extractor model service is not configured")
 	}
 	strategy := e.strategy(material, task)
-	prompt, _, err := strategy.BuildPrompt(QuestionGroupStrategyInput{
-		Material: material,
-		Task:     task,
-		Chunks:   chunks,
-	})
-	if err != nil {
-		return nil, "", err
-	}
 	modelID, err := e.resolveChatModelID(ctx)
 	if err != nil {
 		return nil, "", err
@@ -47,22 +51,7 @@ func (e *examQuestionGroupExtractor) Extract(ctx context.Context, material *type
 	if err != nil {
 		return nil, "", err
 	}
-	raw, err := callQuestionGroupExtractionModel(ctx, chatModel, prompt)
-	if err != nil {
-		return nil, raw, err
-	}
-	candidates, err := parseQuestionGroupDraftCandidates(raw)
-	if err != nil {
-		return nil, raw, err
-	}
-	for _, candidate := range candidates {
-		candidate.StrategyCode = strategy.Code()
-		candidate.RawModelOutput = raw
-		if err := strategy.Validate(candidate); err != nil {
-			return nil, raw, err
-		}
-	}
-	return candidates, raw, nil
+	return e.extractBatches(ctx, chatModel, strategy, material, task, chunks, observer)
 }
 
 func (e *examQuestionGroupExtractor) strategy(material *types.ExamMaterial, task *types.ExamStructuringTask) ExamQuestionGroupExtractionStrategy {
@@ -98,15 +87,16 @@ func (e *examQuestionGroupExtractor) resolveChatModelID(ctx context.Context) (st
 	return fallback, nil
 }
 
-func callQuestionGroupExtractionModel(ctx context.Context, chatModel chat.Chat, prompt string) (string, error) {
+func callQuestionGroupExtractionModel(ctx context.Context, chatModel chat.Chat, prompt string, maxTokens int) (string, error) {
 	thinking := false
 	response, err := chatModel.Chat(ctx, []chat.Message{
 		{Role: "system", Content: examQuestionGroupExtractionSystemPrompt},
 		{Role: "user", Content: prompt},
 	}, &chat.ChatOptions{
 		Temperature: 0.1,
-		MaxTokens:   8192,
+		MaxTokens:   maxTokens,
 		Thinking:    &thinking,
+		Format:      json.RawMessage(`"json"`),
 	})
 	if err != nil {
 		return "", fmt.Errorf("extract exam question groups: %w", err)
@@ -134,15 +124,20 @@ func parseQuestionGroupDraftCandidates(raw string) ([]*types.ExamQuestionGroupDr
 
 func validateQuestionGroupDraftCandidates(candidates []*types.ExamQuestionGroupDraftCandidate) ([]*types.ExamQuestionGroupDraftCandidate, error) {
 	valid := make([]*types.ExamQuestionGroupDraftCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
+	rejected := make([]string, 0)
+	for index, candidate := range candidates {
 		normalizeQuestionGroupCandidate(candidate)
 		if err := validateQuestionGroupCandidate(candidate, false); err != nil {
+			rejected = append(rejected, fmt.Sprintf("candidate %d: %v", index+1, err))
 			continue
 		}
 		valid = append(valid, candidate)
 	}
 	if len(valid) == 0 {
-		return nil, errors.New("model returned no valid question group drafts")
+		if len(rejected) == 0 {
+			return nil, errNoValidQuestionGroupDrafts
+		}
+		return nil, fmt.Errorf("%w: %s", errNoValidQuestionGroupDrafts, strings.Join(rejected, "; "))
 	}
 	return valid, nil
 }
@@ -258,9 +253,6 @@ func validateQuestionGroupCandidate(candidate *types.ExamQuestionGroupDraftCandi
 	for _, question := range candidate.Questions {
 		if strings.TrimSpace(question.Stem) == "" {
 			return errors.New("question stem is required")
-		}
-		if isChoiceQuestion(question.QuestionTypeCode) && len(question.Options) < 2 {
-			return errors.New("choice question must contain at least two options")
 		}
 	}
 	return nil

@@ -76,6 +76,10 @@ builtin_agents:
       retrieve_kb_only_when_mentioned: false
       allowed_tools:
         - "knowledge_search"
+        - "exam_question_context"
+        - "exam_learning_diagnosis"
+        - "exam_class_diagnosis"
+        - "exam_practice_recommendation"
         - "grep_chunks"
         - "list_knowledge_chunks"
         - "query_knowledge_graph"

@@ -19,6 +19,7 @@ type PluginSearch struct {
 	knowledgeBaseService  interfaces.KnowledgeBaseService
 	knowledgeService      interfaces.KnowledgeService
 	chunkService          interfaces.ChunkService
+	questionRepo          interfaces.ExamQuestionRepository
 	config                *config.Config
 	webSearchService      interfaces.WebSearchService
 	tenantService         interfaces.TenantService
@@ -31,6 +32,7 @@ func NewPluginSearch(eventManager *EventManager,
 	knowledgeBaseService interfaces.KnowledgeBaseService,
 	knowledgeService interfaces.KnowledgeService,
 	chunkService interfaces.ChunkService,
+	questionRepo interfaces.ExamQuestionRepository,
 	config *config.Config,
 	webSearchService interfaces.WebSearchService,
 	tenantService interfaces.TenantService,
@@ -42,6 +44,7 @@ func NewPluginSearch(eventManager *EventManager,
 		knowledgeBaseService:  knowledgeBaseService,
 		knowledgeService:      knowledgeService,
 		chunkService:          chunkService,
+		questionRepo:          questionRepo,
 		config:                config,
 		webSearchService:      webSearchService,
 		tenantService:         tenantService,

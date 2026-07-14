@@ -15,14 +15,34 @@
           <template #icon><t-icon name="refresh" /></template>
           刷新
         </t-button>
-        <t-button theme="primary" :loading="extracting" @click="extractDrafts(false)">
+        <t-button theme="primary" :loading="extracting" :disabled="extracting" @click="extractDrafts(false)">
           <template #icon><t-icon name="scan" /></template>
           开始抽取
         </t-button>
-        <t-button variant="outline" :loading="extracting" @click="extractDrafts(true)">
+        <t-button variant="outline" :loading="extracting" :disabled="extracting" @click="extractDrafts(true)">
           重新抽取
         </t-button>
       </t-space>
+    </div>
+
+    <section v-if="data?.task.status === 'extracting'" class="task-progress-band">
+      <div class="task-progress-copy">
+        <strong>{{ data.task.progress?.message || '正在准备题组抽取' }}</strong>
+        <span v-if="data.task.progress?.total_batches">
+          {{ data.task.progress.completed_batches }} / {{ data.task.progress.total_batches }} 批
+        </span>
+      </div>
+      <t-progress :percentage="extractionPercent" size="small" />
+    </section>
+
+    <div v-if="extractionWarnings.length" class="preflight-warnings">
+      <div v-for="warning in extractionWarnings" :key="warning.code" class="preflight-warning">
+        <t-icon name="error-circle" />
+        <div>
+          <strong>{{ warning.message }}</strong>
+          <span>{{ warning.recommendation }}</span>
+        </div>
+      </div>
     </div>
 
     <t-loading :loading="loading">
@@ -37,6 +57,12 @@
           >
             <span>{{ draft.title || draft.group_type }}</span>
             <small>{{ draft.questions_json?.length || 0 }} 题</small>
+            <span v-if="draft.quality_report?.error_count" class="quality-count error">
+              {{ draft.quality_report.error_count }} 错误
+            </span>
+            <span v-else-if="draft.quality_report?.warning_count" class="quality-count warning">
+              {{ draft.quality_report.warning_count }} 提醒
+            </span>
             <t-tag size="small" variant="light" :theme="groupDraftStatusTheme(draft.status)">
               {{ groupDraftStatusLabel(draft.status) }}
             </t-tag>
@@ -52,6 +78,19 @@
             <t-tag variant="light" :theme="groupDraftStatusTheme(selectedDraft.status)">
               {{ groupDraftStatusLabel(selectedDraft.status) }}
             </t-tag>
+          </div>
+
+          <div v-if="selectedQualityReport?.issues?.length" class="quality-report">
+            <div class="quality-report-title">
+              <strong>质量检查</strong>
+              <span>{{ selectedQualityReport.error_count }} 个错误，{{ selectedQualityReport.warning_count }} 个提醒</span>
+            </div>
+            <ul>
+              <li v-for="issue in selectedQualityReport.issues" :key="`${issue.code}-${issue.question_no}`" :class="issue.severity">
+                <t-icon :name="issue.severity === 'error' ? 'close-circle' : 'error-circle'" />
+                <span>{{ issue.question_no ? `${issue.question_no}：` : '' }}{{ issue.message }}</span>
+              </li>
+            </ul>
           </div>
 
           <t-form :data="form" label-align="top">
@@ -154,7 +193,7 @@
           <div class="action-row">
             <t-space>
               <t-button theme="primary" :loading="saving" :disabled="!canEditSelected" @click="saveDraft">保存</t-button>
-              <t-button theme="success" :loading="approving" :disabled="!canEditSelected" @click="approveDraft">确认入库</t-button>
+              <t-button theme="success" :loading="approving" :disabled="!canApproveSelected" @click="approveDraft">确认入库</t-button>
               <t-button theme="danger" variant="outline" :loading="rejecting" :disabled="!canEditSelected" @click="rejectDraft">驳回</t-button>
             </t-space>
           </div>
@@ -189,6 +228,10 @@ const {
   assetText,
   headerText,
   canEditSelected,
+  canApproveSelected,
+  selectedQualityReport,
+  extractionPercent,
+  extractionWarnings,
   loadDrafts,
   extractDrafts,
   selectDraft,

@@ -20,6 +20,12 @@ type examClassRepository struct {
 	db *gorm.DB
 }
 
+type examClassMemberListRow struct {
+	types.ExamClassMember `gorm:"embedded"`
+	DisplayName           string `gorm:"column:display_name"`
+	UserRegisteredAt      string `gorm:"column:user_registered_at"`
+}
+
 func NewExamClassRepository(db *gorm.DB) interfaces.ExamClassRepository {
 	return &examClassRepository{db: db}
 }
@@ -117,14 +123,81 @@ func (r *examClassRepository) GetAnyMember(ctx context.Context, classID string, 
 }
 
 func (r *examClassRepository) ListMembers(ctx context.Context, classID string, tenantID uint64, statuses []types.ExamClassMemberStatus) ([]*types.ExamClassMember, error) {
-	var members []*types.ExamClassMember
+	var rows []examClassMemberListRow
 	q := r.db.WithContext(ctx).
-		Where("class_id = ? AND tenant_id = ?", classID, tenantID)
+		Table("exam_class_members").
+		Select(`
+			exam_class_members.*,
+			COALESCE(NULLIF(users.username, ''), NULLIF(users.email, ''), exam_class_members.user_id) AS display_name,
+			COALESCE(users.created_at, exam_class_members.created_at) AS user_registered_at
+		`).
+		Joins("LEFT JOIN users ON users.id = exam_class_members.user_id").
+		Where("exam_class_members.class_id = ? AND exam_class_members.tenant_id = ?", classID, tenantID)
 	if len(statuses) > 0 {
-		q = q.Where("status IN ?", statuses)
+		q = q.Where("exam_class_members.status IN ?", statuses)
 	}
-	err := q.Order("created_at ASC").Find(&members).Error
-	return members, err
+	err := q.
+		Order("COALESCE(users.created_at, exam_class_members.created_at) ASC").
+		Order("exam_class_members.created_at ASC").
+		Order("exam_class_members.user_id ASC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	usedDisplayIDs := make(map[string]bool, len(rows))
+	members := make([]*types.ExamClassMember, 0, len(rows))
+	for _, row := range rows {
+		member := row.ExamClassMember
+		member.DisplayName = strings.TrimSpace(row.DisplayName)
+		if member.DisplayName == "" {
+			member.DisplayName = member.UserID
+		}
+		registeredAt := parseExamClassMemberDisplayTime(row.UserRegisteredAt)
+		member.DisplayID = nextExamClassMemberDisplayID(registeredAt, member.CreatedAt, usedDisplayIDs)
+		members = append(members, &member)
+	}
+	return members, nil
+}
+
+func parseExamClassMemberDisplayTime(value string) time.Time {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}
+	}
+	layouts := []string{
+		time.RFC3339Nano,
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05-07:00",
+		"2006-01-02 15:04:05Z07:00",
+		"2006-01-02 15:04:05",
+	}
+	for _, layout := range layouts {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed
+		}
+	}
+	return time.Time{}
+}
+
+func nextExamClassMemberDisplayID(base time.Time, fallback time.Time, used map[string]bool) string {
+	if base.IsZero() {
+		base = fallback
+	}
+	if base.IsZero() {
+		base = time.Now()
+	}
+	for {
+		id := base.Format("20060102150405")
+		if !used[id] {
+			used[id] = true
+			return id
+		}
+		base = base.Add(time.Second)
+	}
 }
 
 func (r *examClassRepository) UpdateMemberStatus(ctx context.Context, classID string, tenantID uint64, userID string, status types.ExamClassMemberStatus) (*types.ExamClassMember, error) {

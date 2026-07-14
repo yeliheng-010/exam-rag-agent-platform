@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,6 +88,85 @@ func TestExamClassAnalyticsRequiresClassWriteRole(t *testing.T) {
 	}
 }
 
+func TestExamClassAnalyticsAggregatesFrequentWrongQuestionsFromLatestAttempts(t *testing.T) {
+	ctx := context.Background()
+	classRepo := newFakeExamClassRepo()
+	assignRepo := newStubExamAssignmentRepo(classRepo)
+	practiceRepo := newStubPracticeRepo()
+	class := seedExamClass(classRepo, "class-wrong", 10000, "teacher-1", "WRONGCODE")
+	seedExamClassMember(classRepo, class.ID, 10000, "teacher-1", types.ExamClassRoleTeacher, types.ExamClassMemberStatusActive)
+	seedExamClassMember(classRepo, class.ID, 10000, "student-1", types.ExamClassRoleStudent, types.ExamClassMemberStatusActive)
+	seedExamClassMember(classRepo, class.ID, 10000, "student-2", types.ExamClassRoleStudent, types.ExamClassMemberStatusActive)
+	now := time.Now()
+	assignment := seedAnalyticsAssignment(assignRepo, class, "assignment-wrong", "group-reading-a", now.Add(-time.Hour))
+	oldAttempt := seedAnalyticsAttemptWithID(practiceRepo, assignment, "attempt-old", "student-1", 3, 0, true, now.Add(-50*time.Minute))
+	latestFirst := seedAnalyticsAttemptWithID(practiceRepo, assignment, "attempt-latest-1", "student-1", 3, 2, true, now.Add(-30*time.Minute))
+	latestSecond := seedAnalyticsAttemptWithID(practiceRepo, assignment, "attempt-latest-2", "student-2", 3, 2, true, now.Add(-20*time.Minute))
+	seedAnalyticsAnswer(practiceRepo, oldAttempt, "question-old", "20", "Old attempt question", false)
+	seedAnalyticsAnswer(practiceRepo, latestFirst, "question-21", "21", "Which team will play the most games?", false)
+	seedAnalyticsAnswer(practiceRepo, latestFirst, "question-22", "22", "Which hotel is nearest?", true)
+	seedAnalyticsAnswer(practiceRepo, latestSecond, "question-21", "21", "Which team will play the most games?", false)
+	seedAnalyticsAnswer(practiceRepo, latestSecond, "question-22", "22", "Which hotel is nearest?", true)
+	svc := NewExamAnalyticsService(classRepo, assignRepo, practiceRepo)
+
+	analytics, err := svc.GetClassAnalytics(ctx, 10000, "teacher-1", class.ID)
+
+	if err != nil {
+		t.Fatalf("GetClassAnalytics returned error: %v", err)
+	}
+	if len(analytics.FrequentWrongQuestions) != 1 {
+		t.Fatalf("frequent wrong count = %d, want 1: %#v", len(analytics.FrequentWrongQuestions), analytics.FrequentWrongQuestions)
+	}
+	wrong := analytics.FrequentWrongQuestions[0]
+	if wrong.QuestionID != "question-21" || wrong.GroupID != assignment.GroupID || wrong.AnswerCount != 2 || wrong.WrongCount != 2 || wrong.AffectedStudentCount != 2 {
+		t.Fatalf("frequent wrong = %#v, want question-21 with 2/2 answers and 2 students", wrong)
+	}
+	if wrong.WrongRate != 1 || !strings.Contains(wrong.Stem, "most games") {
+		t.Fatalf("frequent wrong rate/stem = %#v", wrong)
+	}
+}
+
+func TestExamAnalyticsListAnalyzableClassesFiltersStudentMembership(t *testing.T) {
+	ctx := context.Background()
+	classRepo := newFakeExamClassRepo()
+	teacherClass := seedExamClass(classRepo, "class-teacher", 10000, "teacher-1", "TEACHER")
+	assistantClass := seedExamClass(classRepo, "class-assistant", 10000, "owner-2", "ASSIST")
+	studentClass := seedExamClass(classRepo, "class-student", 10000, "owner-3", "STUDENT")
+	seedExamClassMember(classRepo, teacherClass.ID, 10000, "teacher-1", types.ExamClassRoleTeacher, types.ExamClassMemberStatusActive)
+	seedExamClassMember(classRepo, assistantClass.ID, 10000, "teacher-1", types.ExamClassRoleAssistant, types.ExamClassMemberStatusActive)
+	seedExamClassMember(classRepo, studentClass.ID, 10000, "teacher-1", types.ExamClassRoleStudent, types.ExamClassMemberStatusActive)
+	svc := NewExamAnalyticsService(classRepo, newStubExamAssignmentRepo(classRepo), newStubPracticeRepo())
+
+	classes, err := svc.ListAnalyzableClasses(ctx, 10000, "teacher-1")
+
+	if err != nil {
+		t.Fatalf("ListAnalyzableClasses returned error: %v", err)
+	}
+	if len(classes) != 2 {
+		t.Fatalf("analyzable classes = %#v, want teacher and assistant classes", classes)
+	}
+	for _, class := range classes {
+		if class.ID == studentClass.ID {
+			t.Fatalf("student membership must not be analyzable: %#v", class)
+		}
+	}
+}
+
+func TestAggregateFrequentWrongQuestionsSortsQuestionNumbersDescendingNaturally(t *testing.T) {
+	attemptUsers := map[string]analyticsAttemptContext{"attempt-1": {UserID: "student-1"}}
+	answers := []*types.ExamPracticeAnswer{
+		{AttemptID: "attempt-1", QuestionID: "question-2", QuestionNo: "2", IsCorrect: false},
+		{AttemptID: "attempt-1", QuestionID: "question-3", QuestionNo: "3", IsCorrect: false},
+		{AttemptID: "attempt-1", QuestionID: "question-10", QuestionNo: "10", IsCorrect: false},
+	}
+
+	items := aggregateFrequentWrongQuestions(answers, attemptUsers)
+
+	if len(items) != 3 || items[0].QuestionNo != "10" || items[1].QuestionNo != "3" || items[2].QuestionNo != "2" {
+		t.Fatalf("question order = %#v, want 10 then 3 then 2", items)
+	}
+}
+
 func seedAnalyticsAssignment(repo *stubExamAssignmentRepo, class *types.ExamClass, id string, groupID string, createdAt time.Time) *types.ExamClassAssignment {
 	assignment := &types.ExamClassAssignment{
 		ID:              id,
@@ -106,6 +186,10 @@ func seedAnalyticsAssignment(repo *stubExamAssignmentRepo, class *types.ExamClas
 }
 
 func seedAnalyticsAttempt(repo *stubPracticeRepo, assignment *types.ExamClassAssignment, userID string, questionCount int, correctCount int, completed bool, createdAt time.Time) {
+	seedAnalyticsAttemptWithID(repo, assignment, assignment.ID+"-"+userID, userID, questionCount, correctCount, completed, createdAt)
+}
+
+func seedAnalyticsAttemptWithID(repo *stubPracticeRepo, assignment *types.ExamClassAssignment, attemptID string, userID string, questionCount int, correctCount int, completed bool, createdAt time.Time) *types.ExamPracticeAttempt {
 	assignmentID := assignment.ID
 	status := types.ExamPracticeAttemptStatusInProgress
 	var completedAt *time.Time
@@ -114,8 +198,8 @@ func seedAnalyticsAttempt(repo *stubPracticeRepo, assignment *types.ExamClassAss
 		doneAt := createdAt.Add(15 * time.Minute)
 		completedAt = &doneAt
 	}
-	repo.attempts = append(repo.attempts, &types.ExamPracticeAttempt{
-		ID:             assignment.ID + "-" + userID,
+	attempt := &types.ExamPracticeAttempt{
+		ID:             attemptID,
 		TenantID:       assignment.TenantID,
 		UserID:         userID,
 		SpaceID:        assignment.SpaceID,
@@ -130,6 +214,24 @@ func seedAnalyticsAttempt(repo *stubPracticeRepo, assignment *types.ExamClassAss
 		CompletedAt:    completedAt,
 		CreatedAt:      createdAt,
 		UpdatedAt:      createdAt,
+	}
+	repo.attempts = append(repo.attempts, attempt)
+	return attempt
+}
+
+func seedAnalyticsAnswer(repo *stubPracticeRepo, attempt *types.ExamPracticeAttempt, questionID string, questionNo string, stem string, correct bool) {
+	repo.answers = append(repo.answers, &types.ExamPracticeAnswer{
+		ID:         attempt.ID + "-" + questionID,
+		TenantID:   attempt.TenantID,
+		AttemptID:  attempt.ID,
+		QuestionID: questionID,
+		QuestionNo: questionNo,
+		IsCorrect:  correct,
+		QuestionSnapshot: types.JSONMap{
+			"question_no": questionNo,
+			"stem":        stem,
+		},
+		AnsweredAt: attempt.UpdatedAt,
 	})
 }
 
