@@ -36,13 +36,13 @@
 
 ## 任务 1：检索 Trace
 
-- [ ] 编写失败测试，构造向量与关键词候选，断言 trace 保留原始分数、各自排名、RRF 排名和最终 chunk。
-- [ ] 运行 knowledgebase search 定向测试，确认因 trace 类型和 recorder 缺失失败。
-- [ ] 新增 SearchTrace、SearchTraceCandidate、SearchTraceParameters 和 fusion method 类型。
-- [ ] 新增 context recorder；无 recorder 时所有记录函数为 no-op。
-- [ ] 在 HybridSearch 中记录 embedding 模型、向量维度、向量候选、关键词候选、融合候选、最终 chunk 和耗时。
-- [ ] 增加 HybridSearchWithTrace 可选方法，内部仍调用原 HybridSearch。
-- [ ] 运行定向测试确认普通 HybridSearch 与 trace 路径都通过。
+- [x] 编写失败测试，构造向量与关键词候选，断言 trace 保留原始分数、各自排名、RRF 排名和最终 chunk。
+- [x] 运行 knowledgebase search 定向测试，确认因 trace 类型和 recorder 缺失失败。
+- [x] 新增 SearchTrace、SearchTraceCandidate、SearchTraceParameters 和 fusion method 类型。
+- [x] 新增 context recorder；无 recorder 时所有记录函数为 no-op。
+- [x] 在 HybridSearch 中记录 embedding 模型、向量维度、向量候选、关键词候选、融合候选、最终 chunk 和耗时。
+- [x] 增加 HybridSearchWithTrace 可选方法，内部仍调用原 HybridSearch。
+- [x] 运行定向测试确认普通 HybridSearch 与 trace 路径都通过。
 
 验证命令：
 
@@ -50,13 +50,13 @@
 
 ## 任务 2：结构化解析 Trace 与指标
 
-- [ ] 编写 resolver 失败测试：成功回链返回 structured_question_group、group ID、trace 和耗时；无题组返回 none。
-- [ ] 编写指标失败测试：expected chunks 计算 Recall@K/MRR；无 expected chunks 不进入分母；统计结构化解析率和平均耗时。
-- [ ] 运行 internal/examrag 与 internal/searchutil 定向测试确认失败。
-- [ ] 扩展 ExamQuestionContextResolveResult 和 EvalResolver，传递 resolver metadata。
-- [ ] 扩展评测结果与汇总类型，保持现有字段兼容。
-- [ ] 实现确定性指标并补零案例、错误案例边界。
-- [ ] 运行全部 examrag/searchutil 测试确认通过。
+- [x] 编写 resolver 失败测试：成功回链返回 structured_question_group、group ID、trace 和耗时；无题组返回 none。
+- [x] 编写指标失败测试：expected chunks 计算 Recall@K/MRR；无 expected chunks 不进入分母；统计结构化解析率和平均耗时。
+- [x] 运行 internal/examrag 与 internal/searchutil 定向测试确认失败。
+- [x] 扩展 ExamQuestionContextResolveResult 和 EvalResolver，传递 resolver metadata。
+- [x] 扩展评测结果与汇总类型，保持现有字段兼容。
+- [x] 实现确定性指标并补零案例、错误案例边界。
+- [x] 运行全部 examrag/searchutil 测试确认通过。
 
 验证命令：
 
@@ -64,11 +64,11 @@
 
 ## 任务 3：评测运行持久化
 
-- [ ] 编写 repository 失败测试：创建运行、按 tenant/bank 列表、按 tenant/bank/run 读取、跨租户和跨题库不可见。
-- [ ] 编写迁移 000080，创建 JSONB 快照表和 tenant/bank/time 索引。
-- [ ] 新增运行状态、进度、请求快照、结果快照和列表 DTO。
-- [ ] 新增 repository 接口和 GORM 实现；所有查询显式包含 tenant_id 与 question_bank_id。
-- [ ] 运行 repository 测试确认通过。
+- [x] 编写 repository 失败测试：创建运行、按 tenant/bank 列表、按 tenant/bank/run 读取、跨租户和跨题库不可见。
+- [x] 编写迁移 000080，创建 JSONB 快照表和 tenant/bank/time 索引。
+- [x] 新增运行状态、进度、请求快照、结果快照和列表 DTO。
+- [x] 新增 repository 接口和 GORM 实现；所有查询显式包含 tenant_id 与 question_bank_id。
+- [x] 运行 repository 测试确认通过。
 
 验证命令：
 
@@ -76,13 +76,13 @@
 
 ## 任务 4：异步 Service、Worker 与 API
 
-- [ ] 编写 service 失败测试：Contributor 创建返回 queued；权限和 KB 范围复用现有诊断校验；列表与详情保持 bank scope。
-- [ ] 编写 worker 失败测试：queued 进入 running/completed；案例级失败继续；整体失败保存错误；终态重入幂等跳过。
-- [ ] 编写 handler/router 失败测试：POST、GET list、GET detail 使用 Contributor；POST 返回 HTTP 202。
-- [ ] 新增 ExamRAGEvaluationService，复用 ExamRAGDiagnosticService 的题库、KB 和默认案例解析能力。
-- [ ] 新增 exam:rag_evaluation_run payload 和 question queue worker，并注册 Redis/Lite 两种执行器。
-- [ ] 新增 handler、路由和 container 注入。
-- [ ] 运行 service、handler、router 和任务注册测试。
+- [x] 编写 service 失败测试：Contributor 创建返回 queued；权限和 KB 范围复用现有诊断校验；列表与详情保持 bank scope。
+- [x] 编写 worker 失败测试：queued 进入 running/completed；案例级失败继续；整体失败保存错误；终态重入幂等跳过。
+- [x] 编写 handler/router 失败测试：POST、GET list、GET detail 使用 Contributor；POST 返回 HTTP 202。
+- [x] 新增 ExamRAGEvaluationService，复用 ExamRAGDiagnosticService 的题库、KB 和默认案例解析能力。
+- [x] 新增 exam:rag_evaluation_run payload 和 question queue worker，并注册 Redis/Lite 两种执行器。
+- [x] 新增 handler、路由和 container 注入。
+- [x] 运行 service、handler、router 和任务注册测试。
 
 验证命令：
 
@@ -90,14 +90,14 @@
 
 ## 任务 5：题库内观测页面
 
-- [ ] 编写前端失败测试：API、二级路由、题库入口、运行轮询、指标带、历史选择和 trace 阶段存在。
-- [ ] 编写 view model 失败测试：状态归一化、指标格式、两次运行配置差异、候选排名展示。
-- [ ] 运行 Node 定向测试确认失败。
-- [ ] 新增前端类型、API 和 ragEvaluationViewModel。
-- [ ] 新增 QuestionBankRAGObservability 页面，覆盖 loading、empty、queued/running、failed、completed。
-- [ ] 桌面使用紧凑表格，移动端使用平铺条目；长 chunk ID 可换行和复制。
-- [ ] 在 QuestionBankDetail 增加摘要入口并注册二级路由，不新增一级菜单。
-- [ ] 运行定向测试、前端全量测试和 build-only。
+- [x] 编写前端失败测试：API、二级路由、题库入口、运行轮询、指标带、历史选择和 trace 阶段存在。
+- [x] 编写 view model 失败测试：状态归一化、指标格式、两次运行配置差异、候选排名展示。
+- [x] 运行 Node 定向测试确认失败。
+- [x] 新增前端类型、API 和 ragEvaluationViewModel。
+- [x] 新增 QuestionBankRAGObservability 页面，覆盖 loading、empty、queued/running、failed、completed。
+- [x] 桌面使用紧凑表格，移动端使用平铺条目；长 chunk ID 可换行和复制。
+- [x] 在 QuestionBankDetail 增加摘要入口并注册二级路由，不新增一级菜单。
+- [x] 运行定向测试、前端全量测试和 build-only。
 
 验证命令：
 
@@ -107,16 +107,23 @@
 
 ## 任务 6：集成审查与真实验收
 
-- [ ] 运行 gofmt 和迁移静态检查。
-- [ ] 运行 Go 相关包测试与 go vet。
-- [ ] 重建 app/frontend，确认迁移到 000080 且五个容器健康。
-- [ ] 对正式英语题库运行默认评测并在页面展开 vector、keyword、RRF、final 和结构化题组。
-- [ ] 修改 MatchCount 后重跑，验证历史和双运行配置对比。
-- [ ] 对数学题库运行默认评测。
-- [ ] 用非 Contributor 验证创建和读取均被拒绝。
-- [ ] 刷新页面确认运行历史和详情可恢复。
-- [ ] 请求独立代码审查，修复 Critical/Important 问题。
-- [ ] 运行 git diff --check 和最终工作区检查。
+- [x] 运行 gofmt 和迁移静态检查。
+- [x] 运行 Go 相关包测试与 go vet。
+- [x] 重建 app/frontend，确认迁移到 000080 且五个容器健康。
+- [x] 对正式英语题库运行默认评测并在页面展开 vector、keyword、RRF、final 和结构化题组。
+- [x] 修改 MatchCount 后重跑，验证历史和双运行配置对比。
+- [x] 对数学题库运行默认评测。
+- [x] 用非 Contributor 验证创建和读取均被拒绝。
+- [x] 刷新页面确认运行历史和详情可恢复。
+- [x] 请求独立代码审查；上游审查通道三次中断，随后完成本地逐文件审查并修复空结果崩溃、轮询竞态和历史快照过大问题。
+- [x] 运行 git diff --check 和最终工作区检查。
+
+真实验收记录：
+
+- 英语题库默认运行 4/4 完成，结构化解析率 100%，TopK 8/12 历史可对比；存量材料仍缺少 `Upcoming Football Events`。
+- 数学题库默认运行 4/4 完成，结构化解析率 100%，3 个知识库均保存 vector、keyword、RRF 和 final trace。
+- 列表 API 仅返回指标级快照，4 条英语历史约 7 KB；详情 API 保留完整案例和四阶段 trace。
+- 390px 与 1440px 视口均无横向溢出；移动端长案例名与状态标签不重叠。
 
 最终验证命令：
 

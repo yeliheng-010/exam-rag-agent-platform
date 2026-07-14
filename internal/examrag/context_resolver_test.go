@@ -43,9 +43,19 @@ func (r *stubContextResolverQuestionRepo) GetQuestionGroupDetailByIDAndTenant(
 type stubContextResolverKBService struct {
 	interfaces.KnowledgeBaseService
 	results   []*types.SearchResult
+	trace     *types.SearchTrace
 	gotKBID   string
 	gotParams types.SearchParams
 	calls     int
+}
+
+func (s *stubContextResolverKBService) HybridSearchWithTrace(
+	ctx context.Context,
+	kbID string,
+	params types.SearchParams,
+) ([]*types.SearchResult, *types.SearchTrace, error) {
+	results, err := s.HybridSearch(ctx, kbID, params)
+	return results, s.trace, err
 }
 
 func (s *stubContextResolverKBService) HybridSearch(
@@ -64,6 +74,10 @@ func TestResolverResolveQuerySearchesChunksAndBuildsStructuredContext(t *testing
 
 	repo := &stubContextResolverQuestionRepo{detail: newResolverStructuredReadingGroup()}
 	kbService := &stubContextResolverKBService{
+		trace: &types.SearchTrace{
+			KnowledgeBaseID: "kb-1",
+			FusionMethod:    types.SearchTraceFusionRRF,
+		},
 		results: []*types.SearchResult{
 			{ID: "chunk-21", SubChunkID: []string{"sub-21", "chunk-21"}},
 			{ID: "chunk-22", SubChunkID: []string{"sub-22"}},
@@ -123,6 +137,18 @@ func TestResolverResolveQuerySearchesChunksAndBuildsStructuredContext(t *testing
 	if got := strings.Join(result.SourceChunkIDs, ","); got != "chunk-a1,chunk-21" {
 		t.Fatalf("source chunk IDs = %q", got)
 	}
+	if result.ContextSource != types.ExamRAGContextSourceStructuredQuestionGroup {
+		t.Fatalf("context source = %q", result.ContextSource)
+	}
+	if result.GroupID != "group-reading-a" {
+		t.Fatalf("group ID = %q", result.GroupID)
+	}
+	if len(result.SearchTraces) != 1 || result.SearchTraces[0].FusionMethod != types.SearchTraceFusionRRF {
+		t.Fatalf("search traces = %#v", result.SearchTraces)
+	}
+	if result.DurationMS < 0 {
+		t.Fatalf("duration = %d", result.DurationMS)
+	}
 	if !strings.Contains(result.Bundle.Content, "B. Los Angeles Rams") {
 		t.Fatalf("missing structured answer context:\n%s", result.Bundle.Content)
 	}
@@ -146,18 +172,45 @@ func TestResolverEvalResolverUsesProductionRetrievalPath(t *testing.T) {
 	})
 
 	evalResolver := resolver.EvalResolver(10000, []string{"kb-1"})
-	bundle, retrievedChunkIDs, err := evalResolver(context.Background(), "first reading question 21 answer")
+	resolution, err := evalResolver(context.Background(), "first reading question 21 answer")
 	if err != nil {
 		t.Fatalf("EvalResolver returned error: %v", err)
 	}
+	bundle := resolution.Bundle
 	if bundle == nil || !strings.Contains(bundle.Content, "SoFi Stadium is the go-to destination.") {
 		t.Fatalf("expected structured bundle, got %#v", bundle)
 	}
-	if got := strings.Join(retrievedChunkIDs, ","); got != "chunk-21,sub-21" {
+	if got := strings.Join(resolution.RetrievedChunkIDs, ","); got != "chunk-21,sub-21" {
 		t.Fatalf("retrieved chunk IDs = %q", got)
 	}
 	if got := strings.Join(repo.gotChunkIDs, ","); got != "chunk-21,sub-21" {
 		t.Fatalf("repo chunk IDs = %q", got)
+	}
+}
+
+func TestResolverResolveReportsNoStructuredContext(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewExamQuestionContextResolver(ExamQuestionContextResolverConfig{
+		QuestionRepo:         &stubContextResolverQuestionRepo{},
+		KnowledgeBaseService: &stubContextResolverKBService{results: []*types.SearchResult{{ID: "chunk-404"}}},
+		SearchTargets: types.SearchTargets{
+			{Type: types.SearchTargetTypeKnowledgeBase, KnowledgeBaseID: "kb-1", TenantID: 10000},
+		},
+	})
+
+	result, err := resolver.Resolve(context.Background(), ExamQuestionContextResolveRequest{
+		Query:            "missing question group",
+		KnowledgeBaseIDs: []string{"kb-1"},
+	})
+	if err != nil {
+		t.Fatalf("Resolve returned error: %v", err)
+	}
+	if result.ContextSource != types.ExamRAGContextSourceNone {
+		t.Fatalf("context source = %q", result.ContextSource)
+	}
+	if result.Bundle != nil || result.GroupID != "" {
+		t.Fatalf("unexpected structured result = %#v", result)
 	}
 }
 

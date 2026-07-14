@@ -462,6 +462,12 @@ export interface ExamRAGDiagnosticResultItem {
   missing_phrases: string[]
   context_label: string
   source_chunk_ids: string[]
+	 candidate_chunk_ids: string[]
+	 context_source: 'none' | 'structured_question_group'
+	 group_id: string
+	 search_traces: SearchTrace[]
+	 duration_ms: number
+	 reciprocal_rank: number
   error: string
 }
 
@@ -473,15 +479,87 @@ export interface ExamRAGDiagnosticSummary {
   hit_rate: number
   retrieval_hit_rate: number
   answer_hit_rate: number
+	 recall_at_k: number
+	 mean_reciprocal_rank: number
+	 ranked_case_count: number
+	 structured_resolution_rate: number
+	 structured_resolved: number
+	 average_duration_ms: number
+	 failed_case_count: number
   results: ExamRAGDiagnosticResultItem[]
 }
 
 export interface ExamRAGDiagnosticResult {
-  question_bank: QuestionBank
+	question_bank: QuestionBank | null
   knowledge_base_ids: string[]
   used_default_cases: boolean
   summary: ExamRAGDiagnosticSummary
   cases: ExamRAGDiagnosticCase[]
+}
+
+export interface SearchTraceCandidate {
+	chunk_id: string
+	score: number
+	rank: number
+	vector_rank?: number
+	keyword_rank?: number
+}
+
+export interface SearchTraceParameters {
+	match_count: number
+	vector_threshold: number
+	keyword_threshold: number
+	vector_enabled: boolean
+	keyword_enabled: boolean
+	rrf_k: number
+	rrf_vector_weight: number
+	rrf_keyword_weight: number
+}
+
+export interface SearchTrace {
+	query: string
+	knowledge_base_id: string
+	knowledge_base_ids: string[]
+	parameters: SearchTraceParameters
+	embedding_model_id: string
+	embedding_dimensions: number
+	vector_candidates: SearchTraceCandidate[]
+	keyword_candidates: SearchTraceCandidate[]
+	fusion_method: 'none' | 'rrf' | 'vector_only' | 'keyword_only'
+	fusion_candidates: SearchTraceCandidate[]
+	final_chunks: SearchTraceCandidate[]
+	duration_ms: number
+}
+
+export type ExamRAGEvaluationRunStatus = 'queued' | 'running' | 'completed' | 'failed'
+
+export interface RunExamRAGEvaluationPayload {
+	knowledge_base_ids?: string[]
+	cases?: ExamRAGDiagnosticCase[]
+	match_count?: number
+	vector_threshold?: number
+	keyword_threshold?: number
+}
+
+export interface ExamRAGEvaluationProgress {
+	completed_cases: number
+	total_cases: number
+}
+
+export interface ExamRAGEvaluationRun {
+	id: string
+	tenant_id: number
+	question_bank_id: string
+	created_by: string
+	status: ExamRAGEvaluationRunStatus
+	progress: ExamRAGEvaluationProgress
+	request_snapshot: Required<RunExamRAGEvaluationPayload>
+	result_snapshot?: ExamRAGDiagnosticResult
+	error_message: string
+	started_at?: string
+	completed_at?: string
+	created_at: string
+	updated_at: string
 }
 
 export interface ExamPracticeAttempt {

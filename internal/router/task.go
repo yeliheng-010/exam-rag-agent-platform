@@ -34,6 +34,7 @@ type AsynqTaskParams struct {
 	KnowledgePostProcess      interfaces.TaskHandler `name:"knowledgePostProcess"`
 	WikiIngest                interfaces.TaskHandler `name:"wikiIngest"`
 	QuestionGroupDraftService interfaces.ExamQuestionGroupDraftService
+	RAGEvaluationService      interfaces.ExamRAGEvaluationService
 	DeadLetterRepo            interfaces.TaskDeadLetterRepository
 	SpanTracker               service.SpanTracker
 }
@@ -194,6 +195,7 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	// Register question generation handler
 	mux.HandleFunc(types.TypeQuestionGeneration, params.KnowledgeService.ProcessQuestionGeneration)
 	mux.HandleFunc(types.TypeExamQuestionGroupExtraction, params.QuestionGroupDraftService.ProcessExtractionTask)
+	mux.HandleFunc(types.TypeExamRAGEvaluationRun, params.RAGEvaluationService.ProcessRunTask)
 
 	// Register summary generation handler
 	mux.HandleFunc(types.TypeSummaryGeneration, params.KnowledgeService.ProcessSummaryGeneration)

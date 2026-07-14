@@ -135,6 +135,12 @@ const router = createRouter({
           meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
         },
         {
+          path: "question-banks/:bankId/rag-observability",
+          name: "questionBankRAGObservability",
+          component: () => import("../views/question-bank/QuestionBankRAGObservability.vue"),
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
+        },
+        {
           path: "structuring-tasks/:taskId/review",
           name: "questionDraftReview",
           component: () => import("../views/question-draft/QuestionDraftReview.vue"),

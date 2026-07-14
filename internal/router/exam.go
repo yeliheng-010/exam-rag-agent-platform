@@ -16,6 +16,7 @@ func RegisterExamRoutes(
 	assignmentHandler *handler.ExamAssignmentHandler,
 	questionHandler *handler.ExamQuestionHandler,
 	ragDiagnosticHandler *handler.ExamRAGDiagnosticHandler,
+	ragEvaluationHandler *handler.ExamRAGEvaluationHandler,
 	practiceHandler *handler.ExamPracticeHandler,
 	questionDraftHandler *handler.ExamQuestionDraftHandler,
 	questionGroupDraftHandler *handler.ExamQuestionGroupDraftHandler,
@@ -58,6 +59,9 @@ func RegisterExamRoutes(
 		exam.GET("/question-banks/:bank_id/questions", g.Viewer(), questionHandler.ListQuestionDetails)
 		exam.GET("/question-banks/:bank_id/question-groups", g.Viewer(), questionHandler.ListQuestionGroupDetails)
 		exam.POST("/question-banks/:bank_id/rag-diagnostics", g.Contributor(), ragDiagnosticHandler.EvaluateQuestionBank)
+		exam.POST("/question-banks/:bank_id/rag-evaluation-runs", g.Contributor(), ragEvaluationHandler.CreateRun)
+		exam.GET("/question-banks/:bank_id/rag-evaluation-runs", g.Contributor(), ragEvaluationHandler.ListRuns)
+		exam.GET("/question-banks/:bank_id/rag-evaluation-runs/:run_id", g.Contributor(), ragEvaluationHandler.GetRun)
 
 		exam.GET("/practice/question-groups", g.Viewer(), practiceHandler.ListQuestionGroups)
 		exam.GET("/practice/recommendations", g.Viewer(), interventionHandler.GetStudentRecommendations)

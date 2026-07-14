@@ -42,6 +42,7 @@ const (
 	TypeDataSourceSync              = "datasource:sync"        // 数据源同步任务
 	TypeWikiIngest                  = "wiki:ingest"            // Wiki 页面同步任务
 	TypeExamQuestionGroupExtraction = "exam:question_group_extract"
+	TypeExamRAGEvaluationRun        = "exam:rag_evaluation_run"
 )
 
 type ExamQuestionGroupExtractionPayload struct {
@@ -50,6 +51,10 @@ type ExamQuestionGroupExtractionPayload struct {
 	UserID   string `json:"user_id"`
 	TaskID   string `json:"task_id"`
 	Force    bool   `json:"force"`
+}
+
+type ExamRAGEvaluationTaskPayload struct {
+	RunID string `json:"run_id"`
 }
 
 // ExtractChunkPayload represents the extract chunk task payload

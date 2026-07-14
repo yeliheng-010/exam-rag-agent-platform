@@ -7,6 +7,13 @@ import (
 )
 
 type ExamRAGDiagnosticService interface {
+	PrepareQuestionBank(
+		ctx context.Context,
+		tenantID uint64,
+		userID string,
+		bankID string,
+		req *types.RunExamRAGDiagnosticRequest,
+	) (*types.ExamRAGDiagnosticPreparation, error)
 	EvaluateQuestionBank(
 		ctx context.Context,
 		tenantID uint64,

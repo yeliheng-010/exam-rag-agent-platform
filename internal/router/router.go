@@ -87,6 +87,7 @@ type RouterParams struct {
 	ExamAssignmentHandler         *handler.ExamAssignmentHandler
 	ExamQuestionHandler           *handler.ExamQuestionHandler
 	ExamRAGDiagnosticHandler      *handler.ExamRAGDiagnosticHandler
+	ExamRAGEvaluationHandler      *handler.ExamRAGEvaluationHandler
 	ExamPracticeHandler           *handler.ExamPracticeHandler
 	ExamQuestionDraftHandler      *handler.ExamQuestionDraftHandler
 	ExamQuestionGroupDraftHandler *handler.ExamQuestionGroupDraftHandler
@@ -240,7 +241,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, rbacGuards)
 		RegisterSkillRoutes(v1, params.SkillHandler, rbacGuards)
 		RegisterOrganizationRoutes(v1, params.OrganizationHandler, rbacGuards)
-		RegisterExamRoutes(v1, params.ExamDomainHandler, params.ExamSpaceHandler, params.ExamTeacherApplicationHandler, params.ExamClassHandler, params.ExamAnalyticsHandler, params.ExamInterventionHandler, params.ExamAssignmentHandler, params.ExamQuestionHandler, params.ExamRAGDiagnosticHandler, params.ExamPracticeHandler, params.ExamQuestionDraftHandler, params.ExamQuestionGroupDraftHandler, params.ExamResourceHandler, params.ExamMaterialHandler, rbacGuards)
+		RegisterExamRoutes(v1, params.ExamDomainHandler, params.ExamSpaceHandler, params.ExamTeacherApplicationHandler, params.ExamClassHandler, params.ExamAnalyticsHandler, params.ExamInterventionHandler, params.ExamAssignmentHandler, params.ExamQuestionHandler, params.ExamRAGDiagnosticHandler, params.ExamRAGEvaluationHandler, params.ExamPracticeHandler, params.ExamQuestionDraftHandler, params.ExamQuestionGroupDraftHandler, params.ExamResourceHandler, params.ExamMaterialHandler, rbacGuards)
 		RegisterBillingRoutes(v1, params.BillingHandler, rbacGuards)
 		RegisterIMChannelRoutes(v1, params.IMHandler, rbacGuards)
 		RegisterEmbedChannelRoutes(v1, params.EmbedChannelHandler, rbacGuards)

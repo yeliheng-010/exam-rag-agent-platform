@@ -133,6 +133,14 @@ type KnowledgeBaseService interface {
 	ProcessKBDelete(ctx context.Context, t *asynq.Task) error
 }
 
+type KnowledgeBaseSearchTraceService interface {
+	HybridSearchWithTrace(
+		ctx context.Context,
+		id string,
+		params types.SearchParams,
+	) ([]*types.SearchResult, *types.SearchTrace, error)
+}
+
 // KnowledgeBaseRepository defines the knowledge base repository interface
 // Responsible for knowledge base data persistence and retrieval,
 // serving as a bridge between the service layer and data storage

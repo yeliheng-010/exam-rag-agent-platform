@@ -323,6 +323,10 @@
                 </div>
               </div>
             </t-loading>
+            <t-button class="rag-observability-entry" variant="outline" block @click="openRAGEvaluationCenter">
+              <template #icon><t-icon name="chart-bubble" /></template>
+              进入评测中心
+            </t-button>
           </section>
         </aside>
       </div>
@@ -585,6 +589,10 @@ const formatDateTime = (value?: string) => {
 const openLatestReviewTask = () => {
   if (!latestReviewTask.value) return
   router.push(`/platform/question-group-drafts/${latestReviewTask.value.id}`)
+}
+
+const openRAGEvaluationCenter = () => {
+  router.push(`/platform/question-banks/${String(route.params.bankId || '')}/rag-observability`)
 }
 
 const loadReviewEntry = async (bankId: string, spaceId: string) => {

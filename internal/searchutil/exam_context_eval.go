@@ -38,10 +38,21 @@ type ExamContextRetrievalEvalCase struct {
 	ExpectedChunkIDs []string
 }
 
+type ExamContextResolution struct {
+	Bundle            *ExamQuestionContextBundle
+	RetrievedChunkIDs []string
+	CandidateChunkIDs []string
+	SourceChunkIDs    []string
+	ContextSource     types.ExamRAGContextSource
+	GroupID           string
+	SearchTraces      []*types.SearchTrace
+	DurationMS        int64
+}
+
 type ExamContextBundleResolver func(
 	ctx context.Context,
 	query string,
-) (*ExamQuestionContextBundle, []string, error)
+) (*ExamContextResolution, error)
 
 type ExamContextRetrievalEvalResult struct {
 	Name              string
@@ -58,18 +69,31 @@ type ExamContextRetrievalEvalResult struct {
 	MissingPhrases    []string
 	ContextLabel      string
 	SourceChunkIDs    []string
+	CandidateChunkIDs []string
+	ContextSource     types.ExamRAGContextSource
+	GroupID           string
+	SearchTraces      []*types.SearchTrace
+	DurationMS        int64
+	ReciprocalRank    float64
 	Error             string
 }
 
 type ExamContextRetrievalEvalSummary struct {
-	Total            int
-	Passed           int
-	RetrievalPassed  int
-	AnswerPassed     int
-	HitRate          float64
-	RetrievalHitRate float64
-	AnswerHitRate    float64
-	Results          []ExamContextRetrievalEvalResult
+	Total                    int
+	Passed                   int
+	RetrievalPassed          int
+	AnswerPassed             int
+	HitRate                  float64
+	RetrievalHitRate         float64
+	AnswerHitRate            float64
+	RecallAtK                float64
+	MeanReciprocalRank       float64
+	RankedCaseCount          int
+	StructuredResolutionRate float64
+	StructuredResolved       int
+	AverageDurationMS        float64
+	FailedCaseCount          int
+	Results                  []ExamContextRetrievalEvalResult
 }
 
 func EvaluateStructuredExamQuestionContext(
@@ -100,6 +124,9 @@ func EvaluateExamContextRetrieval(
 ) ExamContextRetrievalEvalSummary {
 	results := make([]ExamContextRetrievalEvalResult, 0, len(cases))
 	var passed, retrievalPassed, answerPassed int
+	var recallSum, reciprocalRankSum float64
+	var rankedCaseCount, structuredResolved, failedCaseCount int
+	var totalDurationMS int64
 	for _, evalCase := range cases {
 		result := evaluateExamContextRetrievalCase(ctx, evalCase, resolver)
 		if result.Passed {
@@ -111,18 +138,37 @@ func EvaluateExamContextRetrieval(
 		if result.AnswerPassed {
 			answerPassed++
 		}
+		if len(cleanEvalPhrases(evalCase.ExpectedChunkIDs)) > 0 {
+			rankedCaseCount++
+			recallSum += result.RetrievalScore
+			reciprocalRankSum += result.ReciprocalRank
+		}
+		if result.ContextSource == types.ExamRAGContextSourceStructuredQuestionGroup {
+			structuredResolved++
+		}
+		if result.Error != "" {
+			failedCaseCount++
+		}
+		totalDurationMS += result.DurationMS
 		results = append(results, result)
 	}
 	total := len(cases)
 	return ExamContextRetrievalEvalSummary{
-		Total:            total,
-		Passed:           passed,
-		RetrievalPassed:  retrievalPassed,
-		AnswerPassed:     answerPassed,
-		HitRate:          examEvalHitRate(passed, total),
-		RetrievalHitRate: examEvalHitRate(retrievalPassed, total),
-		AnswerHitRate:    examEvalHitRate(answerPassed, total),
-		Results:          results,
+		Total:                    total,
+		Passed:                   passed,
+		RetrievalPassed:          retrievalPassed,
+		AnswerPassed:             answerPassed,
+		HitRate:                  examEvalHitRate(passed, total),
+		RetrievalHitRate:         examEvalHitRate(retrievalPassed, total),
+		AnswerHitRate:            examEvalHitRate(answerPassed, total),
+		RecallAtK:                examEvalAverage(recallSum, rankedCaseCount),
+		MeanReciprocalRank:       examEvalAverage(reciprocalRankSum, rankedCaseCount),
+		RankedCaseCount:          rankedCaseCount,
+		StructuredResolutionRate: examEvalHitRate(structuredResolved, total),
+		StructuredResolved:       structuredResolved,
+		AverageDurationMS:        examEvalAverage(float64(totalDurationMS), total),
+		FailedCaseCount:          failedCaseCount,
+		Results:                  results,
 	}
 }
 
@@ -141,28 +187,43 @@ func evaluateExamContextRetrievalCase(
 		result.MissingPhrases = cleanEvalPhrases(evalCase.RequiredPhrases)
 		return result
 	}
-	bundle, retrievedChunkIDs, err := resolver(ctx, evalCase.Query)
-	result.RetrievedChunkIDs = cleanEvalPhrases(retrievedChunkIDs)
+	resolution, err := resolver(ctx, evalCase.Query)
 	if err != nil {
 		result.Error = err.Error()
 		result.MissingChunkIDs = missingEvalItems(evalCase.ExpectedChunkIDs, result.RetrievedChunkIDs)
 		result.MissingPhrases = cleanEvalPhrases(evalCase.RequiredPhrases)
 		return result
 	}
+	if resolution == nil {
+		result.MissingChunkIDs = cleanEvalPhrases(evalCase.ExpectedChunkIDs)
+		result.MissingPhrases = cleanEvalPhrases(evalCase.RequiredPhrases)
+		return result
+	}
+	result.RetrievedChunkIDs = cleanEvalPhrases(resolution.RetrievedChunkIDs)
+	result.CandidateChunkIDs = cleanEvalPhrases(resolution.CandidateChunkIDs)
+	result.ContextSource = resolution.ContextSource
+	result.GroupID = resolution.GroupID
+	result.SearchTraces = append([]*types.SearchTrace{}, resolution.SearchTraces...)
+	result.DurationMS = resolution.DurationMS
 
 	result.MatchedChunkIDs, result.MissingChunkIDs = matchEvalItems(
 		result.RetrievedChunkIDs,
 		evalCase.ExpectedChunkIDs,
 	)
 	result.RetrievalScore = examEvalScore(len(result.MatchedChunkIDs), len(cleanEvalPhrases(evalCase.ExpectedChunkIDs)))
+	result.ReciprocalRank = examEvalReciprocalRank(result.RetrievedChunkIDs, evalCase.ExpectedChunkIDs)
 	result.RetrievalPassed = len(result.MissingChunkIDs) == 0
 
+	bundle := resolution.Bundle
 	if bundle == nil {
 		result.MissingPhrases = cleanEvalPhrases(evalCase.RequiredPhrases)
 		return result
 	}
 	result.ContextLabel = bundle.Label
-	result.SourceChunkIDs = append([]string{}, bundle.SourceChunkIDs...)
+	result.SourceChunkIDs = cleanEvalPhrases(resolution.SourceChunkIDs)
+	if len(result.SourceChunkIDs) == 0 {
+		result.SourceChunkIDs = append([]string{}, bundle.SourceChunkIDs...)
+	}
 	result.MatchedPhrases, result.MissingPhrases = matchExamEvalPhrases(
 		bundle.Content,
 		evalCase.RequiredPhrases,
@@ -255,4 +316,27 @@ func examEvalHitRate(passed int, total int) float64 {
 		return 0
 	}
 	return float64(passed) / float64(total)
+}
+
+func examEvalAverage(total float64, count int) float64 {
+	if count == 0 {
+		return 0
+	}
+	return total / float64(count)
+}
+
+func examEvalReciprocalRank(retrieved []string, expected []string) float64 {
+	expectedSet := make(map[string]bool)
+	for _, chunkID := range cleanEvalPhrases(expected) {
+		expectedSet[chunkID] = true
+	}
+	if len(expectedSet) == 0 {
+		return 0
+	}
+	for index, chunkID := range cleanEvalPhrases(retrieved) {
+		if expectedSet[chunkID] {
+			return 1 / float64(index+1)
+		}
+	}
+	return 0
 }

@@ -34,17 +34,20 @@ func fuseOrDeduplicate(ctx context.Context, vectorResults, keywordResults []*typ
 	if len(keywordResults) == 0 {
 		// Vector-only: keep original embedding scores (important for FAQ)
 		result := deduplicateByScore(vectorResults)
+		recordSearchTraceFusion(ctx, types.SearchTraceFusionVectorOnly, result, vectorResults, keywordResults, retrievalCfg)
 		logger.Infof(ctx, "Result count after deduplication: %d", len(result))
 		return result
 	}
 	if len(vectorResults) == 0 {
 		// Keyword-only: keep original scores (important for FAQ)
 		result := deduplicateByScore(keywordResults)
+		recordSearchTraceFusion(ctx, types.SearchTraceFusionKeywordOnly, result, vectorResults, keywordResults, retrievalCfg)
 		logger.Infof(ctx, "Result count after deduplication: %d", len(result))
 		return result
 	}
 	// Hybrid: use RRF fusion to merge vector + keyword results
 	result := fuseWithRRF(ctx, vectorResults, keywordResults, retrievalCfg)
+	recordSearchTraceFusion(ctx, types.SearchTraceFusionRRF, result, vectorResults, keywordResults, retrievalCfg)
 	logger.Infof(ctx, "Result count after RRF fusion: %d", len(result))
 	return result
 }

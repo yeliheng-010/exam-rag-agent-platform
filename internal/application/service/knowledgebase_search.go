@@ -170,6 +170,7 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 		}
 		params.QueryEmbedding = emb
 	}
+	recordSearchTraceConfiguration(ctx, kb, searchKBIDs, params)
 
 	// Group KBs by (storeID, owner tenant), resolve the bound engine for
 	// each group, and build the per-group base RetrieveParams once.
@@ -203,9 +204,9 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 			"group_count":            len(groups),
 		},
 		Metadata: map[string]interface{}{
-			"primary_kb_id":      kb.ID,
-			"primary_kb_type":    string(kb.Type),
-			"embedding_model_id": kb.EmbeddingModelID,
+			"primary_kb_id":       kb.ID,
+			"primary_kb_type":     string(kb.Type),
+			"embedding_model_id":  kb.EmbeddingModelID,
 			"has_query_embedding": len(params.QueryEmbedding) > 0,
 		},
 	})
@@ -221,6 +222,7 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 
 	// Separate and fuse retrieval results.
 	vectorResults, keywordResults := classifyRetrievalResults(ctx, retrieveResults)
+	recordSearchTraceCandidates(ctx, vectorResults, keywordResults)
 	if len(vectorResults) == 0 && len(keywordResults) == 0 {
 		logger.Info(ctx, "No search results found")
 		return nil, nil
@@ -251,7 +253,24 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 		deduplicatedChunks = deduplicatedChunks[:params.MatchCount]
 	}
 
-	return s.processSearchResults(ctx, deduplicatedChunks, params.SkipContextEnrichment)
+	results, err := s.processSearchResults(ctx, deduplicatedChunks, params.SkipContextEnrichment)
+	if err == nil {
+		recordFinalSearchTraceResults(ctx, results)
+	}
+	return results, err
+}
+
+func (s *knowledgeBaseService) HybridSearchWithTrace(
+	ctx context.Context,
+	id string,
+	params types.SearchParams,
+) ([]*types.SearchResult, *types.SearchTrace, error) {
+	traceCtx, recorder := withSearchTrace(ctx, types.SearchTrace{
+		Query:           params.QueryText,
+		KnowledgeBaseID: id,
+	})
+	results, err := s.HybridSearch(traceCtx, id, params)
+	return results, recorder.finish(), err
 }
 
 // pickPrimary returns the KB whose ID matches id, or nil if id is not in

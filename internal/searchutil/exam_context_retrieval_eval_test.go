@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/Tencent/WeKnora/internal/types"
 )
 
 func TestEvaluateExamContextRetrievalReportsRetrievalAndAnswerHits(t *testing.T) {
@@ -29,12 +31,22 @@ func TestEvaluateExamContextRetrievalReportsRetrievalAndAnswerHits(t *testing.T)
 		},
 	}
 
-	summary := EvaluateExamContextRetrieval(context.Background(), cases, func(_ context.Context, query string) (*ExamQuestionContextBundle, []string, error) {
+	summary := EvaluateExamContextRetrieval(context.Background(), cases, func(_ context.Context, query string) (*ExamContextResolution, error) {
 		bundle := BuildStructuredExamQuestionContextBundle(query, detail)
 		if strings.Contains(query, "22") {
-			return bundle, []string{"chunk-22", "chunk-a1"}, nil
+			return &ExamContextResolution{
+				Bundle:            bundle,
+				RetrievedChunkIDs: []string{"chunk-22", "chunk-a1"},
+				ContextSource:     types.ExamRAGContextSourceStructuredQuestionGroup,
+				DurationMS:        20,
+			}, nil
 		}
-		return bundle, []string{"chunk-21", "chunk-a1"}, nil
+		return &ExamContextResolution{
+			Bundle:            bundle,
+			RetrievedChunkIDs: []string{"chunk-21", "chunk-a1"},
+			ContextSource:     types.ExamRAGContextSourceStructuredQuestionGroup,
+			DurationMS:        10,
+		}, nil
 	})
 
 	if summary.Total != 2 {
@@ -48,6 +60,15 @@ func TestEvaluateExamContextRetrievalReportsRetrievalAndAnswerHits(t *testing.T)
 	}
 	if got := strings.Join(summary.Results[0].RetrievedChunkIDs, ","); got != "chunk-21,chunk-a1" {
 		t.Fatalf("retrieved chunks = %q", got)
+	}
+	if summary.RecallAtK != 1 || summary.MeanReciprocalRank != 1 {
+		t.Fatalf("rank metrics = %.2f %.2f", summary.RecallAtK, summary.MeanReciprocalRank)
+	}
+	if summary.RankedCaseCount != 2 || summary.StructuredResolutionRate != 1 {
+		t.Fatalf("structured metrics = %#v", summary)
+	}
+	if summary.AverageDurationMS != 15 {
+		t.Fatalf("average duration = %.2f", summary.AverageDurationMS)
 	}
 }
 
@@ -63,8 +84,12 @@ func TestEvaluateExamContextRetrievalReportsMissesSeparately(t *testing.T) {
 			},
 			ExpectedChunkIDs: []string{"chunk-21", "chunk-999"},
 		},
-	}, func(ctx context.Context, query string) (*ExamQuestionContextBundle, []string, error) {
-		return BuildStructuredExamQuestionContextBundle(query, newGaokaoEnglishReadingEvalGroup()), []string{"chunk-21"}, nil
+	}, func(ctx context.Context, query string) (*ExamContextResolution, error) {
+		return &ExamContextResolution{
+			Bundle:            BuildStructuredExamQuestionContextBundle(query, newGaokaoEnglishReadingEvalGroup()),
+			RetrievedChunkIDs: []string{"chunk-21"},
+			ContextSource:     types.ExamRAGContextSourceStructuredQuestionGroup,
+		}, nil
 	})
 
 	if summary.Total != 1 || summary.Passed != 0 {
@@ -85,5 +110,42 @@ func TestEvaluateExamContextRetrievalReportsMissesSeparately(t *testing.T) {
 	}
 	if got := strings.Join(result.MissingPhrases, ","); got != "not in context" {
 		t.Fatalf("missing phrases = %q", got)
+	}
+}
+
+func TestEvaluateExamContextRetrievalExcludesUnrankedCasesFromRankMetrics(t *testing.T) {
+	t.Parallel()
+
+	summary := EvaluateExamContextRetrieval(context.Background(), []ExamContextRetrievalEvalCase{
+		{
+			ExamContextEvalCase: ExamContextEvalCase{
+				Name:            "answer_only",
+				Query:           "answer only",
+				RequiredPhrases: []string{"Answer"},
+			},
+		},
+		{
+			ExamContextEvalCase: ExamContextEvalCase{
+				Name:            "ranked",
+				Query:           "ranked",
+				RequiredPhrases: []string{"Answer"},
+			},
+			ExpectedChunkIDs: []string{"chunk-2"},
+		},
+	}, func(_ context.Context, query string) (*ExamContextResolution, error) {
+		return &ExamContextResolution{
+			Bundle: &ExamQuestionContextBundle{
+				Content: "Answer",
+			},
+			RetrievedChunkIDs: []string{"chunk-1", "chunk-2"},
+			ContextSource:     types.ExamRAGContextSourceStructuredQuestionGroup,
+		}, nil
+	})
+
+	if summary.RankedCaseCount != 1 {
+		t.Fatalf("ranked cases = %d", summary.RankedCaseCount)
+	}
+	if summary.RecallAtK != 1 || summary.MeanReciprocalRank != 0.5 {
+		t.Fatalf("rank metrics = %.2f %.2f", summary.RecallAtK, summary.MeanReciprocalRank)
 	}
 }

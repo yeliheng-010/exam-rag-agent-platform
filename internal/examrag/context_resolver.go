@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Tencent/WeKnora/internal/searchutil"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -21,8 +22,8 @@ type ExamQuestionContextResolverConfig struct {
 	KnowledgeBaseService interfaces.KnowledgeBaseService
 	SearchTargets        types.SearchTargets
 	MatchCount           int
-	VectorThreshold      float64
-	KeywordThreshold     float64
+	VectorThreshold      *float64
+	KeywordThreshold     *float64
 }
 
 type ExamQuestionContextResolver struct {
@@ -50,6 +51,9 @@ type ExamQuestionContextResolveResult struct {
 	RetrievedChunkIDs []string
 	CandidateChunkIDs []string
 	SourceChunkIDs    []string
+	ContextSource     types.ExamRAGContextSource
+	SearchTraces      []*types.SearchTrace
+	DurationMS        int64
 }
 
 func NewExamQuestionContextResolver(cfg ExamQuestionContextResolverConfig) *ExamQuestionContextResolver {
@@ -57,13 +61,13 @@ func NewExamQuestionContextResolver(cfg ExamQuestionContextResolverConfig) *Exam
 	if matchCount <= 0 {
 		matchCount = DefaultQuestionContextMatchCount
 	}
-	vectorThreshold := cfg.VectorThreshold
-	if vectorThreshold <= 0 {
-		vectorThreshold = DefaultQuestionContextVectorThreshold
+	vectorThreshold := DefaultQuestionContextVectorThreshold
+	if cfg.VectorThreshold != nil {
+		vectorThreshold = *cfg.VectorThreshold
 	}
-	keywordThreshold := cfg.KeywordThreshold
-	if keywordThreshold <= 0 {
-		keywordThreshold = DefaultQuestionContextKeywordThreshold
+	keywordThreshold := DefaultQuestionContextKeywordThreshold
+	if cfg.KeywordThreshold != nil {
+		keywordThreshold = *cfg.KeywordThreshold
 	}
 
 	return &ExamQuestionContextResolver{
@@ -80,6 +84,7 @@ func (r *ExamQuestionContextResolver) Resolve(
 	ctx context.Context,
 	req ExamQuestionContextResolveRequest,
 ) (*ExamQuestionContextResolveResult, error) {
+	startedAt := time.Now()
 	if r == nil {
 		return nil, fmt.Errorf("exam question context resolver is not configured")
 	}
@@ -100,11 +105,11 @@ func (r *ExamQuestionContextResolver) Resolve(
 	}
 
 	result := &ExamQuestionContextResolveResult{
-		TenantID: tenantID,
-		GroupID:  groupID,
+		TenantID:      tenantID,
+		ContextSource: types.ExamRAGContextSourceNone,
 	}
 	if groupID == "" && len(chunkIDs) == 0 {
-		chunkIDs, err = r.searchChunkIDsForQuery(ctx, query, req.KnowledgeBaseIDs, tenantID)
+		chunkIDs, result.SearchTraces, err = r.searchChunkIDsForQuery(ctx, query, req.KnowledgeBaseIDs, tenantID)
 		if err != nil {
 			return nil, err
 		}
@@ -120,17 +125,21 @@ func (r *ExamQuestionContextResolver) Resolve(
 		return nil, err
 	}
 	if detail == nil || detail.Group == nil {
+		result.DurationMS = time.Since(startedAt).Milliseconds()
 		return result, nil
 	}
 
 	bundle := searchutil.BuildStructuredExamQuestionContextBundle(query, detail)
 	if bundle == nil {
+		result.DurationMS = time.Since(startedAt).Milliseconds()
 		return result, nil
 	}
 	result.Detail = detail
 	result.Bundle = bundle
 	result.GroupID = detail.Group.ID
 	result.SourceChunkIDs = append([]string{}, bundle.SourceChunkIDs...)
+	result.ContextSource = types.ExamRAGContextSourceStructuredQuestionGroup
+	result.DurationMS = time.Since(startedAt).Milliseconds()
 	return result, nil
 }
 
@@ -138,16 +147,25 @@ func (r *ExamQuestionContextResolver) EvalResolver(
 	tenantID uint64,
 	knowledgeBaseIDs []string,
 ) searchutil.ExamContextBundleResolver {
-	return func(ctx context.Context, query string) (*searchutil.ExamQuestionContextBundle, []string, error) {
+	return func(ctx context.Context, query string) (*searchutil.ExamContextResolution, error) {
 		result, err := r.Resolve(ctx, ExamQuestionContextResolveRequest{
 			Query:            query,
 			TenantID:         tenantID,
 			KnowledgeBaseIDs: knowledgeBaseIDs,
 		})
 		if result == nil {
-			return nil, nil, err
+			return nil, err
 		}
-		return result.Bundle, result.RetrievedChunkIDs, err
+		return &searchutil.ExamContextResolution{
+			Bundle:            result.Bundle,
+			RetrievedChunkIDs: append([]string{}, result.RetrievedChunkIDs...),
+			CandidateChunkIDs: append([]string{}, result.CandidateChunkIDs...),
+			SourceChunkIDs:    append([]string{}, result.SourceChunkIDs...),
+			ContextSource:     result.ContextSource,
+			GroupID:           result.GroupID,
+			SearchTraces:      append([]*types.SearchTrace{}, result.SearchTraces...),
+			DurationMS:        result.DurationMS,
+		}, err
 	}
 }
 
@@ -171,21 +189,23 @@ func (r *ExamQuestionContextResolver) searchChunkIDsForQuery(
 	query string,
 	kbIDs []string,
 	tenantID uint64,
-) ([]string, error) {
+) ([]string, []*types.SearchTrace, error) {
 	if r.knowledgeBaseService == nil {
-		return nil, fmt.Errorf("knowledge base service is not configured")
+		return nil, nil, fmt.Errorf("knowledge base service is not configured")
 	}
 
 	targets, err := r.selectSearchTargets(kbIDs, tenantID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(targets) == 0 {
-		return nil, fmt.Errorf("no accessible knowledge bases available for exam question context search")
+		return nil, nil, fmt.Errorf("no accessible knowledge bases available for exam question context search")
 	}
 
 	seen := make(map[string]bool)
 	chunkIDs := make([]string, 0, r.matchCount)
+	traces := make([]*types.SearchTrace, 0, len(targets))
+	traceService, traceEnabled := r.knowledgeBaseService.(interfaces.KnowledgeBaseSearchTraceService)
 	for _, target := range targets {
 		if target == nil || strings.TrimSpace(target.KnowledgeBaseID) == "" {
 			continue
@@ -198,9 +218,18 @@ func (r *ExamQuestionContextResolver) searchChunkIDsForQuery(
 			KnowledgeIDs:     CleanIDs(target.KnowledgeIDs),
 			TagIDs:           CleanIDs(target.TagIDs),
 		}
-		results, err := r.knowledgeBaseService.HybridSearch(ctx, target.KnowledgeBaseID, params)
+		var results []*types.SearchResult
+		var trace *types.SearchTrace
+		if traceEnabled {
+			results, trace, err = traceService.HybridSearchWithTrace(ctx, target.KnowledgeBaseID, params)
+		} else {
+			results, err = r.knowledgeBaseService.HybridSearch(ctx, target.KnowledgeBaseID, params)
+		}
 		if err != nil {
-			return nil, fmt.Errorf("failed to search knowledge base %s: %w", target.KnowledgeBaseID, err)
+			return nil, nil, fmt.Errorf("failed to search knowledge base %s: %w", target.KnowledgeBaseID, err)
+		}
+		if trace != nil {
+			traces = append(traces, trace)
 		}
 		for _, result := range results {
 			if result == nil {
@@ -212,7 +241,7 @@ func (r *ExamQuestionContextResolver) searchChunkIDsForQuery(
 			}
 		}
 	}
-	return chunkIDs, nil
+	return chunkIDs, traces, nil
 }
 
 func (r *ExamQuestionContextResolver) selectSearchTargets(

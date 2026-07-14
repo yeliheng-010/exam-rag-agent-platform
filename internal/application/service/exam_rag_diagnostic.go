@@ -40,6 +40,44 @@ func (s *examRAGDiagnosticService) EvaluateQuestionBank(
 	bankID string,
 	req *types.RunExamRAGDiagnosticRequest,
 ) (*types.ExamRAGDiagnosticResult, error) {
+	preparation, err := s.PrepareQuestionBank(ctx, tenantID, userID, bankID, req)
+	if err != nil {
+		return nil, err
+	}
+	targets, err := s.buildSearchTargets(ctx, tenantID, preparation.Request.KnowledgeBaseIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	resolver := examrag.NewExamQuestionContextResolver(examrag.ExamQuestionContextResolverConfig{
+		QuestionRepo:         s.questionRepo,
+		KnowledgeBaseService: s.kbService,
+		SearchTargets:        targets,
+		MatchCount:           preparation.Request.MatchCount,
+		VectorThreshold:      preparation.Request.VectorThreshold,
+		KeywordThreshold:     preparation.Request.KeywordThreshold,
+	})
+	summary := resolver.EvaluateRetrieval(ctx, examrag.ExamQuestionContextEvalRequest{
+		TenantID:         tenantID,
+		KnowledgeBaseIDs: preparation.Request.KnowledgeBaseIDs,
+		Cases:            toExamRAGDiagnosticEvalCases(preparation.Request.Cases),
+	})
+	return &types.ExamRAGDiagnosticResult{
+		QuestionBank:     preparation.QuestionBank,
+		KnowledgeBaseIDs: preparation.Request.KnowledgeBaseIDs,
+		UsedDefaultCases: preparation.UsedDefaultCases,
+		Summary:          toExamRAGDiagnosticSummary(summary),
+		Cases:            preparation.Request.Cases,
+	}, nil
+}
+
+func (s *examRAGDiagnosticService) PrepareQuestionBank(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	bankID string,
+	req *types.RunExamRAGDiagnosticRequest,
+) (*types.ExamRAGDiagnosticPreparation, error) {
 	if req == nil {
 		req = &types.RunExamRAGDiagnosticRequest{}
 	}
@@ -55,28 +93,52 @@ func (s *examRAGDiagnosticService) EvaluateQuestionBank(
 	if err != nil {
 		return nil, err
 	}
-	targets, err := s.buildSearchTargets(ctx, tenantID, kbIDs)
+	if _, err := s.buildSearchTargets(ctx, tenantID, kbIDs); err != nil {
+		return nil, err
+	}
+	normalized, err := normalizeExamRAGDiagnosticRequest(req, kbIDs, cases)
 	if err != nil {
 		return nil, err
 	}
-
-	resolver := examrag.NewExamQuestionContextResolver(examrag.ExamQuestionContextResolverConfig{
-		QuestionRepo:         s.questionRepo,
-		KnowledgeBaseService: s.kbService,
-		SearchTargets:        targets,
-	})
-	summary := resolver.EvaluateRetrieval(ctx, examrag.ExamQuestionContextEvalRequest{
-		TenantID:         tenantID,
-		KnowledgeBaseIDs: kbIDs,
-		Cases:            toExamRAGDiagnosticEvalCases(cases),
-	})
-	return &types.ExamRAGDiagnosticResult{
-		QuestionBank:     bank,
-		KnowledgeBaseIDs: kbIDs,
-		UsedDefaultCases: usedDefaultCases,
-		Summary:          toExamRAGDiagnosticSummary(summary),
-		Cases:            cases,
+	return &types.ExamRAGDiagnosticPreparation{
+		QuestionBank: bank, Request: normalized, UsedDefaultCases: usedDefaultCases,
 	}, nil
+}
+
+func normalizeExamRAGDiagnosticRequest(
+	req *types.RunExamRAGDiagnosticRequest,
+	kbIDs []string,
+	cases []types.ExamRAGDiagnosticCase,
+) (types.RunExamRAGDiagnosticRequest, error) {
+	matchCount := req.MatchCount
+	if matchCount == 0 {
+		matchCount = examrag.DefaultQuestionContextMatchCount
+	}
+	if matchCount < 1 || matchCount > 50 {
+		return types.RunExamRAGDiagnosticRequest{}, ErrExamInvalidRequest
+	}
+	vector, err := normalizeExamRAGThreshold(req.VectorThreshold, examrag.DefaultQuestionContextVectorThreshold)
+	if err != nil {
+		return types.RunExamRAGDiagnosticRequest{}, err
+	}
+	keyword, err := normalizeExamRAGThreshold(req.KeywordThreshold, examrag.DefaultQuestionContextKeywordThreshold)
+	if err != nil {
+		return types.RunExamRAGDiagnosticRequest{}, err
+	}
+	return types.RunExamRAGDiagnosticRequest{
+		KnowledgeBaseIDs: kbIDs, Cases: cases, MatchCount: matchCount,
+		VectorThreshold: &vector, KeywordThreshold: &keyword,
+	}, nil
+}
+
+func normalizeExamRAGThreshold(value *float64, fallback float64) (float64, error) {
+	if value == nil {
+		return fallback, nil
+	}
+	if *value < 0 || *value > 1 {
+		return 0, ErrExamInvalidRequest
+	}
+	return *value, nil
 }
 
 func (s *examRAGDiagnosticService) resolveKnowledgeBaseIDs(
@@ -244,18 +306,31 @@ func toExamRAGDiagnosticSummary(summary examrag.ExamContextRetrievalEvalSummary)
 			MissingPhrases:    copyDiagnosticStrings(item.MissingPhrases),
 			ContextLabel:      item.ContextLabel,
 			SourceChunkIDs:    copyDiagnosticStrings(item.SourceChunkIDs),
+			CandidateChunkIDs: copyDiagnosticStrings(item.CandidateChunkIDs),
+			ContextSource:     item.ContextSource,
+			GroupID:           item.GroupID,
+			SearchTraces:      append([]*types.SearchTrace{}, item.SearchTraces...),
+			DurationMS:        item.DurationMS,
+			ReciprocalRank:    item.ReciprocalRank,
 			Error:             item.Error,
 		})
 	}
 	return types.ExamRAGDiagnosticSummary{
-		Total:            summary.Total,
-		Passed:           summary.Passed,
-		RetrievalPassed:  summary.RetrievalPassed,
-		AnswerPassed:     summary.AnswerPassed,
-		HitRate:          summary.HitRate,
-		RetrievalHitRate: summary.RetrievalHitRate,
-		AnswerHitRate:    summary.AnswerHitRate,
-		Results:          results,
+		Total:                    summary.Total,
+		Passed:                   summary.Passed,
+		RetrievalPassed:          summary.RetrievalPassed,
+		AnswerPassed:             summary.AnswerPassed,
+		HitRate:                  summary.HitRate,
+		RetrievalHitRate:         summary.RetrievalHitRate,
+		AnswerHitRate:            summary.AnswerHitRate,
+		RecallAtK:                summary.RecallAtK,
+		MeanReciprocalRank:       summary.MeanReciprocalRank,
+		RankedCaseCount:          summary.RankedCaseCount,
+		StructuredResolutionRate: summary.StructuredResolutionRate,
+		StructuredResolved:       summary.StructuredResolved,
+		AverageDurationMS:        summary.AverageDurationMS,
+		FailedCaseCount:          summary.FailedCaseCount,
+		Results:                  results,
 	}
 }
 
