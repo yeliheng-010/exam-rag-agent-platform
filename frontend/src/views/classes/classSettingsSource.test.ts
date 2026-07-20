@@ -58,6 +58,7 @@ test('settings panel supports owner commands and read-only roles', () => {
   assert.match(panel, /v-else/)
   assert.match(panel, /submitting/)
   assert.match(panel, /formSnapshot/)
+  assert.match(panel, /archiveDialogOpen/)
 })
 
 test('settings panel uses a single-column mobile layout', () => {

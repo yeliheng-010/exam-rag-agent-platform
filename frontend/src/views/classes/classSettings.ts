@@ -35,3 +35,14 @@ export function buildClassSettingsPayload(payload: UpdateExamClassPayload): Upda
     member_limit: payload.member_limit,
   }
 }
+
+export function isValidClassSettingsPayload(payload: UpdateExamClassPayload): boolean {
+  const nameLength = [...payload.name.trim()].length
+  const descriptionLength = [...payload.description.trim()].length
+  return nameLength >= 1 &&
+    nameLength <= 255 &&
+    descriptionLength <= 2000 &&
+    Number.isInteger(payload.member_limit) &&
+    payload.member_limit >= 0 &&
+    payload.member_limit <= 1000
+}

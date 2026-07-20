@@ -45,7 +45,7 @@
         <t-button
           theme="primary"
           :loading="submitting"
-          :disabled="isArchived || commandSubmitting || !hasChanges"
+          :disabled="isArchived || commandSubmitting || !canSubmit"
           @click="submitSettings"
         >
           <template #icon><t-icon name="save" /></template>
@@ -89,7 +89,7 @@
           theme="primary"
           variant="outline"
           :loading="commandSubmitting"
-          :disabled="submitting"
+          :disabled="submitting || archiveDialogOpen"
           @click="restoreClass"
         >
           <template #icon><t-icon name="rollback" /></template>
@@ -121,6 +121,7 @@ import {
   buildClassSettingsPayload,
   canManageClassSettings,
   isArchivedExamClass,
+  isValidClassSettingsPayload,
 } from './classSettings'
 
 const props = defineProps<{
@@ -135,12 +136,14 @@ const emit = defineEmits<{
 const formRef = ref<FormInstanceFunctions>()
 const submitting = ref(false)
 const commandSubmitting = ref(false)
+const archiveDialogOpen = ref(false)
 const form = ref<UpdateExamClassPayload>({ name: '', description: '', member_limit: 0 })
 const formSnapshot = ref('')
 const canManage = computed(() => canManageClassSettings(props.classInfo, props.currentUserId))
 const isArchived = computed(() => isArchivedExamClass(props.classInfo))
 const normalizedPayload = computed(() => buildClassSettingsPayload(form.value))
 const hasChanges = computed(() => JSON.stringify(normalizedPayload.value) !== formSnapshot.value)
+const canSubmit = computed(() => hasChanges.value && isValidClassSettingsPayload(normalizedPayload.value))
 
 const rules: Record<string, FormRule[]> = {
   name: [{ required: true, message: '请输入班级名称', type: 'error' }],
@@ -168,7 +171,7 @@ const submitSettings = async () => {
   const result = await formRef.value?.validate()
   if (result !== true) return
   const payload = normalizedPayload.value
-  if (!payload.name || [...payload.name].length > 255 || [...payload.description].length > 2000) {
+  if (!isValidClassSettingsPayload(payload)) {
     MessagePlugin.error('班级信息长度不符合要求')
     return
   }
@@ -199,18 +202,24 @@ const restoreClass = async () => {
 }
 
 const confirmArchive = () => {
-  if (commandSubmitting.value || submitting.value || !canManage.value || isArchived.value) return
+  if (archiveDialogOpen.value || commandSubmitting.value || submitting.value || !canManage.value || isArchived.value) return
+  archiveDialogOpen.value = true
   const dialog = DialogPlugin.confirm({
     header: '归档班级',
     body: '归档后将停止新的加入、资料、练习任务与催交操作，历史数据保留。',
     confirmBtn: { content: '确认归档', theme: 'danger' },
     theme: 'warning',
+    onClose: () => {
+      archiveDialogOpen.value = false
+    },
     onConfirm: async () => {
+      if (commandSubmitting.value) return
       commandSubmitting.value = true
       try {
         const response = await archiveExamClass(props.classInfo.id)
         publishUpdate(response.data)
         MessagePlugin.success('班级已归档')
+        archiveDialogOpen.value = false
         dialog.destroy()
       } catch (error: any) {
         MessagePlugin.error(error?.message || '归档班级失败')

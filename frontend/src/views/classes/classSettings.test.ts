@@ -6,6 +6,7 @@ import {
   canManageClassSettings,
   classSettingsCommand,
   isArchivedExamClass,
+  isValidClassSettingsPayload,
 } from './classSettings.ts'
 
 const activeClass = {
@@ -46,4 +47,13 @@ test('builds a normalized settings payload', () => {
       member_limit: 0,
     },
   )
+})
+
+test('rejects missing or non-integer member limits', () => {
+  assert.equal(isValidClassSettingsPayload({ name: '班级', description: '', member_limit: 0 }), true)
+  assert.equal(isValidClassSettingsPayload({ name: '班级', description: '', member_limit: 1000 }), true)
+  assert.equal(isValidClassSettingsPayload({ name: '班级', description: '', member_limit: undefined as unknown as number }), false)
+  assert.equal(isValidClassSettingsPayload({ name: '班级', description: '', member_limit: 1.5 }), false)
+  assert.equal(isValidClassSettingsPayload({ name: '班级', description: '', member_limit: -1 }), false)
+  assert.equal(isValidClassSettingsPayload({ name: '班级', description: '', member_limit: 1001 }), false)
 })
