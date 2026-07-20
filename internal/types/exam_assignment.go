@@ -7,6 +7,7 @@ type ExamAssignmentProgressStatus string
 
 const (
 	ExamAssignmentStatusPublished ExamAssignmentStatus = "published"
+	ExamAssignmentStatusWithdrawn ExamAssignmentStatus = "withdrawn"
 	ExamAssignmentStatusArchived  ExamAssignmentStatus = "archived"
 
 	ExamAssignmentProgressStatusNotStarted ExamAssignmentProgressStatus = "not_started"
@@ -37,6 +38,12 @@ func (ExamClassAssignment) TableName() string {
 type CreateExamAssignmentRequest struct {
 	GroupID      string     `json:"group_id" binding:"required"`
 	Title        string     `json:"title" binding:"omitempty,max=255"`
+	Instructions string     `json:"instructions" binding:"omitempty,max=2000"`
+	DueAt        *time.Time `json:"due_at"`
+}
+
+type UpdateExamAssignmentRequest struct {
+	Title        string     `json:"title" binding:"required,max=255"`
 	Instructions string     `json:"instructions" binding:"omitempty,max=2000"`
 	DueAt        *time.Time `json:"due_at"`
 }

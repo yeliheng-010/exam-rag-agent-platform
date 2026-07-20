@@ -3,13 +3,17 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	"gorm.io/gorm"
 )
 
-var ErrExamClassAssignmentNotFound = errors.New("exam class assignment not found")
+var (
+	ErrExamClassAssignmentNotFound      = errors.New("exam class assignment not found")
+	ErrExamClassAssignmentStateConflict = errors.New("exam class assignment state conflict")
+)
 
 type examAssignmentRepository struct {
 	db *gorm.DB
@@ -37,17 +41,80 @@ func (r *examAssignmentRepository) GetAssignmentByIDAndTenant(ctx context.Contex
 	return &assignment, nil
 }
 
-func (r *examAssignmentRepository) ListAssignmentsByClass(ctx context.Context, tenantID uint64, classID string, limit int) ([]*types.ExamClassAssignment, error) {
+func (r *examAssignmentRepository) ListAssignmentsByClass(
+	ctx context.Context,
+	tenantID uint64,
+	classID string,
+	statuses []types.ExamAssignmentStatus,
+	limit int,
+) ([]*types.ExamClassAssignment, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
+	if len(statuses) == 0 {
+		return []*types.ExamClassAssignment{}, nil
+	}
 	var assignments []*types.ExamClassAssignment
 	err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND class_id = ? AND status = ?", tenantID, classID, types.ExamAssignmentStatusPublished).
+		Where("tenant_id = ? AND class_id = ? AND status IN ?", tenantID, classID, statuses).
 		Order("created_at DESC").
 		Limit(limit).
 		Find(&assignments).Error
 	return assignments, err
+}
+
+func (r *examAssignmentRepository) UpdateAssignmentMetadata(
+	ctx context.Context,
+	tenantID uint64,
+	classID string,
+	assignmentID string,
+	allowed []types.ExamAssignmentStatus,
+	title string,
+	instructions string,
+	dueAt *time.Time,
+	updatedAt time.Time,
+) error {
+	if len(allowed) == 0 {
+		return ErrExamClassAssignmentStateConflict
+	}
+	result := r.db.WithContext(ctx).
+		Model(&types.ExamClassAssignment{}).
+		Where("tenant_id = ? AND class_id = ? AND id = ? AND status IN ?", tenantID, classID, assignmentID, allowed).
+		Updates(map[string]any{
+			"title":        title,
+			"instructions": instructions,
+			"due_at":       dueAt,
+			"updated_at":   updatedAt,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrExamClassAssignmentStateConflict
+	}
+	return nil
+}
+
+func (r *examAssignmentRepository) TransitionAssignmentStatus(
+	ctx context.Context,
+	tenantID uint64,
+	classID string,
+	assignmentID string,
+	expected types.ExamAssignmentStatus,
+	next types.ExamAssignmentStatus,
+	updatedAt time.Time,
+) error {
+	result := r.db.WithContext(ctx).
+		Model(&types.ExamClassAssignment{}).
+		Where("tenant_id = ? AND class_id = ? AND id = ? AND status = ?", tenantID, classID, assignmentID, expected).
+		Updates(map[string]any{"status": next, "updated_at": updatedAt})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrExamClassAssignmentStateConflict
+	}
+	return nil
 }
 
 func (r *examAssignmentRepository) ListPublishedGroupsByClass(

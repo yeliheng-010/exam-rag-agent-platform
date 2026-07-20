@@ -12,6 +12,98 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestExamAssignmentRepositoryFiltersLifecycleStatuses(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:exam-assignment-lifecycle?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&types.ExamClassAssignment{}))
+	repo := &examAssignmentRepository{db: db}
+	ctx := context.Background()
+	now := time.Now().UTC()
+	require.NoError(t, db.Create(testExamAssignment("published-1", "group-1", types.ExamAssignmentStatusPublished, now)).Error)
+	require.NoError(t, db.Create(testExamAssignment("withdrawn-1", "group-2", types.ExamAssignmentStatusWithdrawn, now.Add(time.Minute))).Error)
+	require.NoError(t, db.Create(testExamAssignment("archived-1", "group-3", types.ExamAssignmentStatusArchived, now.Add(2*time.Minute))).Error)
+
+	items, err := repo.ListAssignmentsByClass(ctx, 10000, "class-1", []types.ExamAssignmentStatus{
+		types.ExamAssignmentStatusPublished,
+		types.ExamAssignmentStatusWithdrawn,
+	}, 50)
+
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+	require.Equal(t, "withdrawn-1", items[0].ID)
+	require.Equal(t, "published-1", items[1].ID)
+}
+
+func TestExamAssignmentRepositoryTransitionRequiresExpectedStatus(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:exam-assignment-transition?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&types.ExamClassAssignment{}))
+	repo := &examAssignmentRepository{db: db}
+	ctx := context.Background()
+	require.NoError(t, db.Create(testExamAssignment(
+		"assignment-1", "group-1", types.ExamAssignmentStatusPublished, time.Now().UTC(),
+	)).Error)
+
+	err = repo.TransitionAssignmentStatus(
+		ctx,
+		10000,
+		"class-1",
+		"assignment-1",
+		types.ExamAssignmentStatusWithdrawn,
+		types.ExamAssignmentStatusPublished,
+		time.Now().UTC(),
+	)
+
+	require.ErrorIs(t, err, ErrExamClassAssignmentStateConflict)
+	stored, err := repo.GetAssignmentByIDAndTenant(ctx, 10000, "assignment-1")
+	require.NoError(t, err)
+	require.Equal(t, types.ExamAssignmentStatusPublished, stored.Status)
+}
+
+func TestExamAssignmentRepositoryUpdatesMetadataOnlyInAllowedState(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:exam-assignment-metadata?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&types.ExamClassAssignment{}))
+	repo := &examAssignmentRepository{db: db}
+	ctx := context.Background()
+	now := time.Now().UTC()
+	require.NoError(t, db.Create(testExamAssignment(
+		"assignment-1", "group-1", types.ExamAssignmentStatusPublished, now,
+	)).Error)
+	dueAt := now.Add(48 * time.Hour)
+
+	err = repo.UpdateAssignmentMetadata(
+		ctx,
+		10000,
+		"class-1",
+		"assignment-1",
+		[]types.ExamAssignmentStatus{types.ExamAssignmentStatusPublished},
+		"Updated title",
+		"Updated instructions",
+		&dueAt,
+		now.Add(time.Minute),
+	)
+	require.NoError(t, err)
+	stored, err := repo.GetAssignmentByIDAndTenant(ctx, 10000, "assignment-1")
+	require.NoError(t, err)
+	require.Equal(t, "Updated title", stored.Title)
+	require.Equal(t, "Updated instructions", stored.Instructions)
+	require.WithinDuration(t, dueAt, *stored.DueAt, time.Second)
+
+	err = repo.UpdateAssignmentMetadata(
+		ctx,
+		10000,
+		"class-1",
+		"assignment-1",
+		[]types.ExamAssignmentStatus{types.ExamAssignmentStatusWithdrawn},
+		"Rejected title",
+		"Rejected instructions",
+		nil,
+		now.Add(2*time.Minute),
+	)
+	require.ErrorIs(t, err, ErrExamClassAssignmentStateConflict)
+}
+
 func TestExamAssignmentRepositoryListsPublishedCandidateGroupsWithoutHistoryLimit(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:exam-assignment?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
