@@ -60,6 +60,25 @@ func TestExamAssignmentRepositoryTransitionRequiresExpectedStatus(t *testing.T) 
 	require.Equal(t, types.ExamAssignmentStatusPublished, stored.Status)
 }
 
+func TestExamAssignmentRepositoryRepublishRejectsExpiredDueAtAtomically(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:exam-assignment-expired-republish?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&types.ExamClassAssignment{}))
+	repo := &examAssignmentRepository{db: db}
+	now := time.Now().UTC()
+	assignment := testExamAssignment("assignment-1", "group-1", types.ExamAssignmentStatusWithdrawn, now)
+	pastDueAt := now.Add(-time.Minute)
+	assignment.DueAt = &pastDueAt
+	require.NoError(t, db.Create(assignment).Error)
+
+	err = repo.TransitionAssignmentStatus(
+		context.Background(), 10000, "class-1", assignment.ID,
+		types.ExamAssignmentStatusWithdrawn, types.ExamAssignmentStatusPublished, now,
+	)
+
+	require.ErrorIs(t, err, ErrExamClassAssignmentStateConflict)
+}
+
 func TestExamAssignmentRepositoryUpdatesMetadataOnlyInAllowedState(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:exam-assignment-metadata?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
@@ -101,6 +120,26 @@ func TestExamAssignmentRepositoryUpdatesMetadataOnlyInAllowedState(t *testing.T)
 		nil,
 		now.Add(2*time.Minute),
 	)
+	require.ErrorIs(t, err, ErrExamClassAssignmentStateConflict)
+}
+
+func TestExamAssignmentRepositoryUpdateRejectsExpiredPublishedAtomically(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:exam-assignment-expired-update?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&types.ExamClassAssignment{}))
+	repo := &examAssignmentRepository{db: db}
+	now := time.Now().UTC()
+	assignment := testExamAssignment("assignment-1", "group-1", types.ExamAssignmentStatusPublished, now)
+	pastDueAt := now.Add(-time.Minute)
+	assignment.DueAt = &pastDueAt
+	require.NoError(t, db.Create(assignment).Error)
+
+	err = repo.UpdateAssignmentMetadata(
+		context.Background(), 10000, "class-1", assignment.ID,
+		[]types.ExamAssignmentStatus{types.ExamAssignmentStatusPublished},
+		"Rejected title", "", nil, now,
+	)
+
 	require.ErrorIs(t, err, ErrExamClassAssignmentStateConflict)
 }
 

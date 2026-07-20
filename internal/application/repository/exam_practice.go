@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
@@ -12,6 +13,7 @@ import (
 
 var ErrExamPracticeAttemptNotFound = errors.New("exam practice attempt not found")
 var ErrExamPracticeAnswerNotFound = errors.New("exam practice answer not found")
+var ErrExamAssignmentAttemptClosed = errors.New("exam assignment attempt creation closed")
 
 type examPracticeRepository struct {
 	db *gorm.DB
@@ -23,6 +25,36 @@ func NewExamPracticeRepository(db *gorm.DB) interfaces.ExamPracticeRepository {
 
 func (r *examPracticeRepository) CreateAttempt(ctx context.Context, attempt *types.ExamPracticeAttempt) error {
 	return r.db.WithContext(ctx).Create(attempt).Error
+}
+
+func (r *examPracticeRepository) CreateAssignmentAttemptIfOpen(
+	ctx context.Context,
+	attempt *types.ExamPracticeAttempt,
+	now time.Time,
+) error {
+	if attempt == nil || attempt.AssignmentID == nil || *attempt.AssignmentID == "" {
+		return ErrExamAssignmentAttemptClosed
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var assignment types.ExamClassAssignment
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("id").
+			Where(
+				"id = ? AND tenant_id = ? AND status = ? AND (due_at IS NULL OR due_at > ?)",
+				*attempt.AssignmentID,
+				attempt.TenantID,
+				types.ExamAssignmentStatusPublished,
+				now,
+			).
+			First(&assignment).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrExamAssignmentAttemptClosed
+		}
+		if err != nil {
+			return err
+		}
+		return tx.Create(attempt).Error
+	})
 }
 
 func (r *examPracticeRepository) GetAttemptByIDAndTenant(ctx context.Context, tenantID uint64, attemptID string) (*types.ExamPracticeAttempt, error) {

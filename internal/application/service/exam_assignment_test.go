@@ -188,6 +188,19 @@ func TestExamAssignmentAttemptStoresAssignmentID(t *testing.T) {
 	}
 }
 
+func TestExamAssignmentAttemptMapsAtomicClosureToStateConflict(t *testing.T) {
+	fixture := newAssignmentLifecycleFixture(t)
+	fixture.practiceRepo.assignmentAttemptErr = repository.ErrExamAssignmentAttemptClosed
+
+	result, err := fixture.svc.CreateAssignmentAttempt(
+		context.Background(), 10000, "student-1", "assignment-1",
+	)
+
+	require.Nil(t, result)
+	require.ErrorIs(t, err, ErrExamStateConflict)
+	require.Empty(t, fixture.practiceRepo.attempts)
+}
+
 func TestExamAssignmentListMineRequiresActiveClassMember(t *testing.T) {
 	ctx := context.Background()
 	classRepo := newFakeExamClassRepo()

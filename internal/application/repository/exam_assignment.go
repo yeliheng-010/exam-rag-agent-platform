@@ -77,15 +77,18 @@ func (r *examAssignmentRepository) UpdateAssignmentMetadata(
 	if len(allowed) == 0 {
 		return ErrExamClassAssignmentStateConflict
 	}
-	result := r.db.WithContext(ctx).
+	query := r.db.WithContext(ctx).
 		Model(&types.ExamClassAssignment{}).
-		Where("tenant_id = ? AND class_id = ? AND id = ? AND status IN ?", tenantID, classID, assignmentID, allowed).
-		Updates(map[string]any{
-			"title":        title,
-			"instructions": instructions,
-			"due_at":       dueAt,
-			"updated_at":   updatedAt,
-		})
+		Where("tenant_id = ? AND class_id = ? AND id = ? AND status IN ?", tenantID, classID, assignmentID, allowed)
+	if len(allowed) == 1 && allowed[0] == types.ExamAssignmentStatusPublished {
+		query = query.Where("(due_at IS NULL OR due_at > ?)", updatedAt)
+	}
+	result := query.Updates(map[string]any{
+		"title":        title,
+		"instructions": instructions,
+		"due_at":       dueAt,
+		"updated_at":   updatedAt,
+	})
 	if result.Error != nil {
 		return result.Error
 	}
@@ -104,10 +107,13 @@ func (r *examAssignmentRepository) TransitionAssignmentStatus(
 	next types.ExamAssignmentStatus,
 	updatedAt time.Time,
 ) error {
-	result := r.db.WithContext(ctx).
+	query := r.db.WithContext(ctx).
 		Model(&types.ExamClassAssignment{}).
-		Where("tenant_id = ? AND class_id = ? AND id = ? AND status = ?", tenantID, classID, assignmentID, expected).
-		Updates(map[string]any{"status": next, "updated_at": updatedAt})
+		Where("tenant_id = ? AND class_id = ? AND id = ? AND status = ?", tenantID, classID, assignmentID, expected)
+	if expected == types.ExamAssignmentStatusWithdrawn && next == types.ExamAssignmentStatusPublished {
+		query = query.Where("(due_at IS NULL OR due_at > ?)", updatedAt)
+	}
+	result := query.Updates(map[string]any{"status": next, "updated_at": updatedAt})
 	if result.Error != nil {
 		return result.Error
 	}

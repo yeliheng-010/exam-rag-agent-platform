@@ -233,7 +233,10 @@ func (s *examAssignmentService) CreateAssignmentAttempt(
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
-	if err := s.practiceRepo.CreateAttempt(ctx, attempt); err != nil {
+	if err := s.practiceRepo.CreateAssignmentAttemptIfOpen(ctx, attempt, now); err != nil {
+		if errors.Is(err, repository.ErrExamAssignmentAttemptClosed) {
+			return nil, ErrExamStateConflict
+		}
 		return nil, err
 	}
 	return &types.CreatePracticeAttemptResult{

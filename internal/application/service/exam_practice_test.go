@@ -453,8 +453,9 @@ func newPracticeGroupDetail() *types.QuestionGroupDetail {
 }
 
 type stubPracticeRepo struct {
-	attempts []*types.ExamPracticeAttempt
-	answers  []*types.ExamPracticeAnswer
+	attempts             []*types.ExamPracticeAttempt
+	answers              []*types.ExamPracticeAnswer
+	assignmentAttemptErr error
 }
 
 func newStubPracticeRepo() *stubPracticeRepo {
@@ -462,6 +463,18 @@ func newStubPracticeRepo() *stubPracticeRepo {
 }
 
 func (r *stubPracticeRepo) CreateAttempt(_ context.Context, attempt *types.ExamPracticeAttempt) error {
+	r.attempts = append(r.attempts, clonePracticeAttempt(attempt))
+	return nil
+}
+
+func (r *stubPracticeRepo) CreateAssignmentAttemptIfOpen(
+	_ context.Context,
+	attempt *types.ExamPracticeAttempt,
+	_ time.Time,
+) error {
+	if r.assignmentAttemptErr != nil {
+		return r.assignmentAttemptErr
+	}
 	r.attempts = append(r.attempts, clonePracticeAttempt(attempt))
 	return nil
 }

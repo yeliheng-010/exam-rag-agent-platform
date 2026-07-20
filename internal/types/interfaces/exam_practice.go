@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"time"
 
 	"github.com/Tencent/WeKnora/internal/types"
 )
@@ -21,6 +22,7 @@ type ExamPracticeService interface {
 
 type ExamPracticeRepository interface {
 	CreateAttempt(ctx context.Context, attempt *types.ExamPracticeAttempt) error
+	CreateAssignmentAttemptIfOpen(ctx context.Context, attempt *types.ExamPracticeAttempt, now time.Time) error
 	GetAttemptByIDAndTenant(ctx context.Context, tenantID uint64, attemptID string) (*types.ExamPracticeAttempt, error)
 	UpdateAttempt(ctx context.Context, attempt *types.ExamPracticeAttempt) error
 	UpsertAnswer(ctx context.Context, answer *types.ExamPracticeAnswer) error
