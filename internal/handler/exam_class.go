@@ -23,8 +23,17 @@ func (h *ExamClassHandler) ListClasses(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.GetString(types.UserIDContextKey.String())
 	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+	var query struct {
+		IncludeArchived bool `form:"include_archived"`
+	}
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.Error(apperrors.NewValidationError("Invalid request parameters").WithDetails(err.Error()))
+		return
+	}
 
-	classes, err := h.classService.ListClasses(ctx, tenantID, userID)
+	classes, err := h.classService.ListClasses(ctx, tenantID, userID, types.ListExamClassesFilter{
+		IncludeArchived: query.IncludeArchived,
+	})
 	if err != nil {
 		logger.Errorf(ctx, "Failed to list exam classes: %v", err)
 		writeExamError(c, err, "Failed to list exam classes")
