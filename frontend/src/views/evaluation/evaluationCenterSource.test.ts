@@ -46,3 +46,13 @@ test('uses a dense desktop workspace and mobile stacked rows without overflow', 
   assert.match(style, /min-width:\s*0/)
   assert.doesNotMatch(style, /font-size:\s*clamp\(/)
 })
+
+test('keeps the mobile evaluation heading readable beside a compact refresh action', () => {
+  const mobileStyle = style.slice(style.indexOf('@media (max-width: 720px)'))
+
+  assert.match(page, /evaluation-refresh__label/)
+  assert.match(mobileStyle, /\.evaluation-header h2\s*\{[^}]*white-space:\s*normal/)
+  assert.match(mobileStyle, /\.evaluation-refresh__label\s*\{[^}]*display:\s*none/)
+  assert.match(mobileStyle, /\.evaluation-header\s*>\s*\.t-button\s*\{[^}]*min-width:\s*32px/)
+  assert.doesNotMatch(mobileStyle, /\.evaluation-header h2\s*\{[^}]*white-space:\s*nowrap/)
+})

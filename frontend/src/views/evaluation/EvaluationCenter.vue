@@ -2,7 +2,10 @@
   <div class="evaluation-page">
     <header class="evaluation-header">
       <div><h2>RAG / Agent 评测中心</h2><p>跨题库基线、回归运行与版本化评测资产</p></div>
-      <t-button variant="outline" :loading="loading" @click="loadData"><template #icon><t-icon name="refresh" /></template>刷新</t-button>
+      <t-button class="evaluation-refresh" variant="outline" :loading="loading" aria-label="刷新评测数据" @click="loadData">
+        <template #icon><t-icon name="refresh" /></template>
+        <span class="evaluation-refresh__label">刷新</span>
+      </t-button>
     </header>
 
     <section class="evaluation-toolbar" aria-label="评测筛选">
