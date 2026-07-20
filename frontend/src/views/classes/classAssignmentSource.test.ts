@@ -14,9 +14,15 @@ test('declares class assignment frontend API', () => {
   assert.match(assignmentApi, /createClassAssignment/)
   assert.match(assignmentApi, /createAssignmentAttempt/)
   assert.match(assignmentApi, /getClassAssignmentProgress/)
+  assert.match(assignmentApi, /updateClassAssignment/)
+  assert.match(assignmentApi, /withdrawClassAssignment/)
+  assert.match(assignmentApi, /republishClassAssignment/)
+  assert.match(assignmentApi, /import \{ get, post, put \}/)
   assert.match(assignmentApi, /exam\/classes\/\$\{classId\}\/assignments/)
   assert.match(assignmentApi, /exam\/assignments\/\$\{assignmentId\}\/attempts/)
   assert.match(assignmentApi, /exam\/classes\/\$\{classId\}\/assignments\/\$\{assignmentId\}\/progress/)
+  assert.match(assignmentApi, /exam\/classes\/\$\{classId\}\/assignments\/\$\{assignmentId\}\/withdraw/)
+  assert.match(assignmentApi, /exam\/classes\/\$\{classId\}\/assignments\/\$\{assignmentId\}\/republish/)
 })
 
 test('class detail replaces homework placeholder with assignment workflow', () => {

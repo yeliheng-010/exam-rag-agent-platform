@@ -1,4 +1,4 @@
-import { get, post } from '@/utils/request'
+import { get, post, put } from '@/utils/request'
 import type {
   ApiResponse,
   CreatePracticeAttemptResult,
@@ -11,6 +11,12 @@ export interface CreateClassAssignmentPayload {
   title?: string
   instructions?: string
   due_at?: string
+}
+
+export interface UpdateClassAssignmentPayload {
+  title: string
+  instructions: string
+  due_at: string | null
 }
 
 export interface ListExamAssignmentsParams {
@@ -34,6 +40,18 @@ export function listMyExamAssignments(params?: ListExamAssignmentsParams) {
 
 export function createClassAssignment(classId: string, data: CreateClassAssignmentPayload) {
   return post(`/api/v1/exam/classes/${classId}/assignments`, data) as unknown as Promise<ApiResponse<ExamAssignmentSummary>>
+}
+
+export function updateClassAssignment(classId: string, assignmentId: string, data: UpdateClassAssignmentPayload) {
+  return put(`/api/v1/exam/classes/${classId}/assignments/${assignmentId}`, data) as unknown as Promise<ApiResponse<ExamAssignmentSummary>>
+}
+
+export function withdrawClassAssignment(classId: string, assignmentId: string) {
+  return post(`/api/v1/exam/classes/${classId}/assignments/${assignmentId}/withdraw`, {}) as unknown as Promise<ApiResponse<ExamAssignmentSummary>>
+}
+
+export function republishClassAssignment(classId: string, assignmentId: string) {
+  return post(`/api/v1/exam/classes/${classId}/assignments/${assignmentId}/republish`, {}) as unknown as Promise<ApiResponse<ExamAssignmentSummary>>
 }
 
 export function createAssignmentAttempt(assignmentId: string) {

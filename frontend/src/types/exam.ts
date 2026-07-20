@@ -15,7 +15,7 @@ export type ExamQualitySeverity = 'error' | 'warning'
 export type QuestionGroupType = 'reading_passage' | 'math_problem' | 'single_question' | string
 export type ExamPracticeAttemptStatus = 'in_progress' | 'completed'
 export type PracticeAnswerReviewStatus = 'unreviewed' | 'reviewing' | 'mastered'
-export type ExamAssignmentStatus = 'published' | 'archived'
+export type ExamAssignmentStatus = 'published' | 'withdrawn' | 'archived'
 export type ExamAssignmentProgressStatus = 'not_started' | 'in_progress' | 'completed'
 export type ExamEvaluationKind = 'rag' | 'agent'
 
