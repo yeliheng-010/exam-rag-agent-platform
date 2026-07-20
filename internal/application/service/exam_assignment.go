@@ -14,12 +14,13 @@ import (
 )
 
 type examAssignmentService struct {
-	assignmentRepo interfaces.ExamAssignmentRepository
-	classRepo      interfaces.ExamClassRepository
-	questionRepo   interfaces.ExamQuestionRepository
-	practiceRepo   interfaces.ExamPracticeRepository
-	spaceService   interfaces.ExamSpaceService
-	now            func() time.Time
+	assignmentRepo   interfaces.ExamAssignmentRepository
+	classRepo        interfaces.ExamClassRepository
+	questionRepo     interfaces.ExamQuestionRepository
+	practiceRepo     interfaces.ExamPracticeRepository
+	notificationRepo interfaces.ExamAssignmentNotificationRepository
+	spaceService     interfaces.ExamSpaceService
+	now              func() time.Time
 }
 
 func NewExamAssignmentService(
@@ -27,15 +28,17 @@ func NewExamAssignmentService(
 	classRepo interfaces.ExamClassRepository,
 	questionRepo interfaces.ExamQuestionRepository,
 	practiceRepo interfaces.ExamPracticeRepository,
+	notificationRepo interfaces.ExamAssignmentNotificationRepository,
 	spaceService interfaces.ExamSpaceService,
 ) interfaces.ExamAssignmentService {
 	return &examAssignmentService{
-		assignmentRepo: assignmentRepo,
-		classRepo:      classRepo,
-		questionRepo:   questionRepo,
-		practiceRepo:   practiceRepo,
-		spaceService:   spaceService,
-		now:            time.Now,
+		assignmentRepo:   assignmentRepo,
+		classRepo:        classRepo,
+		questionRepo:     questionRepo,
+		practiceRepo:     practiceRepo,
+		notificationRepo: notificationRepo,
+		spaceService:     spaceService,
+		now:              time.Now,
 	}
 }
 
@@ -298,6 +301,13 @@ func (s *examAssignmentService) GetAssignmentProgress(
 	if err != nil {
 		return nil, err
 	}
+	latestReminders, err := s.notificationRepo.ListLatestReminders(ctx, tenantID, assignment.ID, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	now := s.now()
+	assignmentCanRemind := assignment.Status == types.ExamAssignmentStatusPublished && !assignmentExpired(assignment, now)
+	reminderCutoff := now.Add(-24 * time.Hour)
 	summary := &types.ExamAssignmentProgressSummary{
 		Assignment:    assignment,
 		TotalStudents: len(students),
@@ -320,11 +330,21 @@ func (s *examAssignmentService) GetAssignmentProgress(
 				summary.CompletedCount++
 			}
 		}
+		lastRemindedAt, wasReminded := latestReminders[student.UserID]
+		canRemind := assignmentCanRemind && status != types.ExamAssignmentProgressStatusCompleted &&
+			(!wasReminded || !lastRemindedAt.After(reminderCutoff))
+		var lastRemindedAtPointer *time.Time
+		if wasReminded {
+			lastRemindedAtCopy := lastRemindedAt
+			lastRemindedAtPointer = &lastRemindedAtCopy
+		}
 		summary.Members = append(summary.Members, &types.ExamAssignmentMemberProgress{
-			Member:      student,
-			Attempt:     attempt,
-			Status:      status,
-			CorrectRate: correctRate,
+			Member:         student,
+			Attempt:        attempt,
+			Status:         status,
+			CorrectRate:    correctRate,
+			LastRemindedAt: lastRemindedAtPointer,
+			CanRemind:      canRemind,
 		})
 	}
 	if summary.StartedCount > 0 {

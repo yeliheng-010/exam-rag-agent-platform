@@ -57,6 +57,30 @@ func (r *examAssignmentRepository) GetAssignmentByIDAndTenant(ctx context.Contex
 	return &assignment, nil
 }
 
+func (r *examAssignmentRepository) ListAssignmentsByIDsAndTenant(
+	ctx context.Context,
+	tenantID uint64,
+	assignmentIDs []string,
+) (map[string]*types.ExamClassAssignment, error) {
+	out := make(map[string]*types.ExamClassAssignment, len(assignmentIDs))
+	if len(assignmentIDs) == 0 {
+		return out, nil
+	}
+	var assignments []*types.ExamClassAssignment
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND id IN ?", tenantID, assignmentIDs).
+		Find(&assignments).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, assignment := range assignments {
+		if assignment != nil {
+			out[assignment.ID] = assignment
+		}
+	}
+	return out, nil
+}
+
 func (r *examAssignmentRepository) ListAssignmentsByClass(
 	ctx context.Context,
 	tenantID uint64,

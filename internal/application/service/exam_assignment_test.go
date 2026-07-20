@@ -20,7 +20,7 @@ func TestExamAssignmentCreateRequiresClassWriteRole(t *testing.T) {
 	group := newPracticeGroupDetail()
 	group.Group.SpaceID = class.SpaceID
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
-	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
+	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo(), newStubExamAssignmentNotificationRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
 
 	_, err := svc.CreateAssignment(ctx, 10000, "student-1", "class-1", &types.CreateExamAssignmentRequest{
 		GroupID: "group-1",
@@ -44,7 +44,7 @@ func TestExamAssignmentCreateRejectsGroupOutsideClassSpace(t *testing.T) {
 	group := newPracticeGroupDetail()
 	group.Group.SpaceID = "other-space"
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
-	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
+	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo(), newStubExamAssignmentNotificationRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
 
 	_, err := svc.CreateAssignment(ctx, 10000, "teacher-1", "class-1", &types.CreateExamAssignmentRequest{
 		GroupID: "group-1",
@@ -98,6 +98,7 @@ func TestExamAssignmentCreateImportsReadableGroupOutsideClassSpace(t *testing.T)
 		classRepo,
 		questionRepo,
 		newStubPracticeRepo(),
+		newStubExamAssignmentNotificationRepo(),
 		newStubExamAssignmentSpaceService("personal-space"),
 	).(*examAssignmentService)
 
@@ -165,7 +166,7 @@ func TestExamAssignmentAttemptStoresAssignmentID(t *testing.T) {
 	group.Group.SpaceID = class.SpaceID
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
 	practiceRepo := newStubPracticeRepo()
-	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, practiceRepo, newStubExamAssignmentSpaceService()).(*examAssignmentService)
+	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, practiceRepo, newStubExamAssignmentNotificationRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
 	assignment, err := svc.CreateAssignment(ctx, 10000, "teacher-1", class.ID, &types.CreateExamAssignmentRequest{
 		GroupID:      "group-1",
 		Title:        "Reading homework",
@@ -212,7 +213,7 @@ func TestExamAssignmentListMineRequiresActiveClassMember(t *testing.T) {
 	group := newPracticeGroupDetail()
 	group.Group.SpaceID = class.SpaceID
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
-	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
+	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo(), newStubExamAssignmentNotificationRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
 	if _, err := svc.CreateAssignment(ctx, 10000, "teacher-1", class.ID, &types.CreateExamAssignmentRequest{
 		GroupID: "group-1",
 		Title:   "Reading homework",
@@ -250,7 +251,7 @@ func TestExamAssignmentProgressSummarizesActiveStudents(t *testing.T) {
 	group.Group.SpaceID = class.SpaceID
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
 	practiceRepo := newStubPracticeRepo()
-	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, practiceRepo, newStubExamAssignmentSpaceService()).(*examAssignmentService)
+	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, practiceRepo, newStubExamAssignmentNotificationRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
 	assignment, err := svc.CreateAssignment(ctx, 10000, "teacher-1", class.ID, &types.CreateExamAssignmentRequest{
 		GroupID: group.Group.ID,
 		Title:   "Reading homework",
@@ -335,7 +336,7 @@ func TestExamAssignmentProgressRequiresClassWriteRole(t *testing.T) {
 	group := newPracticeGroupDetail()
 	group.Group.SpaceID = class.SpaceID
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
-	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
+	svc := NewExamAssignmentService(assignRepo, classRepo, questionRepo, newStubPracticeRepo(), newStubExamAssignmentNotificationRepo(), newStubExamAssignmentSpaceService()).(*examAssignmentService)
 	assignment, err := svc.CreateAssignment(ctx, 10000, "teacher-1", class.ID, &types.CreateExamAssignmentRequest{
 		GroupID: group.Group.ID,
 		Title:   "Reading homework",
@@ -352,10 +353,11 @@ func TestExamAssignmentProgressRequiresClassWriteRole(t *testing.T) {
 }
 
 type assignmentLifecycleFixture struct {
-	svc            *examAssignmentService
-	assignmentRepo *stubExamAssignmentRepo
-	practiceRepo   *stubPracticeRepo
-	now            time.Time
+	svc              *examAssignmentService
+	assignmentRepo   *stubExamAssignmentRepo
+	practiceRepo     *stubPracticeRepo
+	notificationRepo *stubExamAssignmentNotificationRepo
+	now              time.Time
 }
 
 func newAssignmentLifecycleFixture(t *testing.T) *assignmentLifecycleFixture {
@@ -371,11 +373,13 @@ func newAssignmentLifecycleFixture(t *testing.T) *assignmentLifecycleFixture {
 	group.Group.SpaceID = class.SpaceID
 	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
 	practiceRepo := newStubPracticeRepo()
+	notificationRepo := newStubExamAssignmentNotificationRepo()
 	svc := NewExamAssignmentService(
 		assignmentRepo,
 		classRepo,
 		questionRepo,
 		practiceRepo,
+		notificationRepo,
 		newStubExamAssignmentSpaceService(),
 	).(*examAssignmentService)
 	svc.now = func() time.Time { return now }
@@ -395,10 +399,11 @@ func newAssignmentLifecycleFixture(t *testing.T) *assignmentLifecycleFixture {
 		UpdatedAt:       now,
 	})
 	return &assignmentLifecycleFixture{
-		svc:            svc,
-		assignmentRepo: assignmentRepo,
-		practiceRepo:   practiceRepo,
-		now:            now,
+		svc:              svc,
+		assignmentRepo:   assignmentRepo,
+		practiceRepo:     practiceRepo,
+		notificationRepo: notificationRepo,
+		now:              now,
 	}
 }
 
@@ -528,6 +533,98 @@ func TestExamAssignmentListAndProgressRespectWithdrawnVisibility(t *testing.T) {
 	require.Equal(t, types.ExamAssignmentStatusWithdrawn, progress.Assignment.Status)
 }
 
+func TestExamAssignmentReminderTargetsActiveIncompleteStudents(t *testing.T) {
+	fixture := newAssignmentLifecycleFixture(t)
+
+	result, err := fixture.svc.SendAssignmentReminders(
+		context.Background(), 10000, "teacher-1", "class-1", "assignment-1",
+		&types.SendExamAssignmentReminderRequest{},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, result.SentCount)
+	require.Len(t, fixture.notificationRepo.reminderCandidates, 1)
+	require.Equal(t, "student-1", fixture.notificationRepo.reminderCandidates[0].RecipientUserID)
+	require.Equal(t, types.ExamAssignmentNotificationKindReminder, fixture.notificationRepo.reminderCandidates[0].Kind)
+	require.Contains(t, fixture.notificationRepo.reminderCandidates[0].Title, "Reading homework")
+}
+
+func TestExamAssignmentReminderRejectsInvalidTargetsAndStudentSender(t *testing.T) {
+	fixture := newAssignmentLifecycleFixture(t)
+	ctx := context.Background()
+
+	_, err := fixture.svc.SendAssignmentReminders(
+		ctx, 10000, "student-1", "class-1", "assignment-1", &types.SendExamAssignmentReminderRequest{},
+	)
+	require.ErrorIs(t, err, ErrExamPermissionDenied)
+
+	_, err = fixture.svc.SendAssignmentReminders(
+		ctx, 10000, "teacher-1", "class-1", "assignment-1",
+		&types.SendExamAssignmentReminderRequest{RecipientUserIDs: []string{"pending-1"}},
+	)
+	require.ErrorIs(t, err, ErrExamInvalidRequest)
+	require.Empty(t, fixture.notificationRepo.reminderCandidates)
+}
+
+func TestExamAssignmentProgressIncludesReminderAvailability(t *testing.T) {
+	fixture := newAssignmentLifecycleFixture(t)
+	lastRemindedAt := fixture.now.Add(-time.Hour)
+	fixture.notificationRepo.latestReminders["student-1"] = lastRemindedAt
+
+	progress, err := fixture.svc.GetAssignmentProgress(
+		context.Background(), 10000, "teacher-1", "class-1", "assignment-1",
+	)
+
+	require.NoError(t, err)
+	student := findAssignmentProgress(progress.Members, "student-1")
+	require.NotNil(t, student)
+	require.NotNil(t, student.LastRemindedAt)
+	require.WithinDuration(t, lastRemindedAt, *student.LastRemindedAt, time.Second)
+	require.False(t, student.CanRemind)
+}
+
+func TestExamAssignmentNotificationListIncludesLatestAttemptContext(t *testing.T) {
+	fixture := newAssignmentLifecycleFixture(t)
+	assignmentID := "assignment-1"
+	fixture.notificationRepo.notifications = append(fixture.notificationRepo.notifications, &types.ExamAssignmentNotification{
+		ID: "notification-1", TenantID: 10000, ClassID: "class-1", AssignmentID: assignmentID,
+		GroupID: "group-1", RecipientUserID: "student-1", ActorUserID: "teacher-1",
+		Kind: types.ExamAssignmentNotificationKindPublished, Title: "New assignment", Content: "Start now",
+		CreatedAt: fixture.now,
+	})
+	fixture.practiceRepo.attempts = append(fixture.practiceRepo.attempts, &types.ExamPracticeAttempt{
+		ID: "attempt-1", TenantID: 10000, UserID: "student-1", AssignmentID: &assignmentID,
+		GroupID: "group-1", Status: types.ExamPracticeAttemptStatusInProgress, CreatedAt: fixture.now,
+	})
+
+	result, err := fixture.svc.ListAssignmentNotifications(context.Background(), 10000, "student-1", 50)
+
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.UnreadCount)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, "attempt-1", result.Items[0].LastAttemptID)
+	require.Equal(t, types.ExamAssignmentStatusPublished, result.Items[0].AssignmentStatus)
+	require.False(t, result.Items[0].CanStart)
+}
+
+func TestExamAssignmentNotificationReadMethodsStayRecipientScoped(t *testing.T) {
+	fixture := newAssignmentLifecycleFixture(t)
+	fixture.notificationRepo.notifications = append(fixture.notificationRepo.notifications, &types.ExamAssignmentNotification{
+		ID: "notification-1", TenantID: 10000, ClassID: "class-1", AssignmentID: "assignment-1",
+		GroupID: "group-1", RecipientUserID: "student-1", ActorUserID: "teacher-1",
+		Kind: types.ExamAssignmentNotificationKindReminder, Title: "Reminder", Content: "Start now",
+		CreatedAt: fixture.now,
+	})
+
+	err := fixture.svc.MarkAssignmentNotificationRead(context.Background(), 10000, "student-1", "notification-1")
+	require.NoError(t, err)
+	require.NotNil(t, fixture.notificationRepo.notifications[0].ReadAt)
+
+	err = fixture.svc.MarkAssignmentNotificationRead(context.Background(), 10000, "student-2", "notification-1")
+	require.ErrorIs(t, err, ErrExamNotFound)
+	require.NoError(t, fixture.svc.MarkAllAssignmentNotificationsRead(context.Background(), 10000, "student-1"))
+}
+
 func findAssignmentProgress(items []*types.ExamAssignmentMemberProgress, userID string) *types.ExamAssignmentMemberProgress {
 	for _, item := range items {
 		if item != nil && item.Member != nil && item.Member.UserID == userID {
@@ -535,6 +632,102 @@ func findAssignmentProgress(items []*types.ExamAssignmentMemberProgress, userID 
 		}
 	}
 	return nil
+}
+
+type stubExamAssignmentNotificationRepo struct {
+	notifications      []*types.ExamAssignmentNotification
+	reminderCandidates []*types.ExamAssignmentNotification
+	latestReminders    map[string]time.Time
+}
+
+func newStubExamAssignmentNotificationRepo() *stubExamAssignmentNotificationRepo {
+	return &stubExamAssignmentNotificationRepo{latestReminders: map[string]time.Time{}}
+}
+
+func (r *stubExamAssignmentNotificationRepo) ListForRecipient(
+	_ context.Context,
+	tenantID uint64,
+	userID string,
+	limit int,
+) ([]*types.ExamAssignmentNotification, int64, error) {
+	items := make([]*types.ExamAssignmentNotification, 0, len(r.notifications))
+	var unread int64
+	for _, notification := range r.notifications {
+		if notification.TenantID != tenantID || notification.RecipientUserID != userID {
+			continue
+		}
+		items = append(items, cloneExamAssignmentNotifications([]*types.ExamAssignmentNotification{notification})[0])
+		if notification.ReadAt == nil {
+			unread++
+		}
+		if limit > 0 && len(items) == limit {
+			break
+		}
+	}
+	return items, unread, nil
+}
+
+func (r *stubExamAssignmentNotificationRepo) MarkRead(
+	_ context.Context,
+	tenantID uint64,
+	userID string,
+	notificationID string,
+	readAt time.Time,
+) error {
+	for _, notification := range r.notifications {
+		if notification.TenantID == tenantID && notification.RecipientUserID == userID && notification.ID == notificationID {
+			notification.ReadAt = &readAt
+			return nil
+		}
+	}
+	return repository.ErrExamAssignmentNotificationNotFound
+}
+
+func (r *stubExamAssignmentNotificationRepo) MarkAllRead(
+	_ context.Context,
+	tenantID uint64,
+	userID string,
+	readAt time.Time,
+) error {
+	for _, notification := range r.notifications {
+		if notification.TenantID == tenantID && notification.RecipientUserID == userID && notification.ReadAt == nil {
+			notification.ReadAt = &readAt
+		}
+	}
+	return nil
+}
+
+func (r *stubExamAssignmentNotificationRepo) ListLatestReminders(
+	_ context.Context,
+	_ uint64,
+	_ string,
+	userIDs []string,
+) (map[string]time.Time, error) {
+	out := make(map[string]time.Time, len(userIDs))
+	for _, userID := range userIDs {
+		if remindedAt, ok := r.latestReminders[userID]; ok {
+			out[userID] = remindedAt
+		}
+	}
+	return out, nil
+}
+
+func (r *stubExamAssignmentNotificationRepo) CreateRemindersIfEligible(
+	_ context.Context,
+	_ uint64,
+	_ string,
+	candidates []*types.ExamAssignmentNotification,
+	_ time.Time,
+) (*types.SendExamAssignmentReminderResult, error) {
+	r.reminderCandidates = cloneExamAssignmentNotifications(candidates)
+	r.notifications = append(r.notifications, cloneExamAssignmentNotifications(candidates)...)
+	userIDs := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		userIDs = append(userIDs, candidate.RecipientUserID)
+	}
+	return &types.SendExamAssignmentReminderResult{
+		SentCount: len(userIDs), SentUserIDs: userIDs,
+	}, nil
 }
 
 type stubExamAssignmentRepo struct {
@@ -569,6 +762,24 @@ func (r *stubExamAssignmentRepo) GetAssignmentByIDAndTenant(_ context.Context, t
 		}
 	}
 	return nil, repository.ErrExamClassAssignmentNotFound
+}
+
+func (r *stubExamAssignmentRepo) ListAssignmentsByIDsAndTenant(
+	_ context.Context,
+	tenantID uint64,
+	assignmentIDs []string,
+) (map[string]*types.ExamClassAssignment, error) {
+	allowed := make(map[string]bool, len(assignmentIDs))
+	for _, assignmentID := range assignmentIDs {
+		allowed[assignmentID] = true
+	}
+	out := make(map[string]*types.ExamClassAssignment, len(assignmentIDs))
+	for _, assignment := range r.assignments {
+		if assignment.TenantID == tenantID && allowed[assignment.ID] {
+			out[assignment.ID] = cloneExamClassAssignment(assignment)
+		}
+	}
+	return out, nil
 }
 
 func (r *stubExamAssignmentRepo) ListAssignmentsByClass(

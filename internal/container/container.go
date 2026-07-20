@@ -162,6 +162,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewExamSpaceRepository))
 	must(container.Provide(repository.NewExamClassRepository))
 	must(container.Provide(repository.NewExamAssignmentRepository))
+	must(container.Provide(repository.NewExamAssignmentNotificationRepository))
 	must(container.Provide(repository.NewExamTeacherApplicationRepository))
 	must(container.Provide(repository.NewExamQuestionRepository))
 	must(container.Provide(repository.NewExamPracticeRepository))

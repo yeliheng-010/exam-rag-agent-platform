@@ -34,6 +34,29 @@ func TestExamAssignmentRepositoryFiltersLifecycleStatuses(t *testing.T) {
 	require.Equal(t, "published-1", items[1].ID)
 }
 
+func TestExamAssignmentRepositoryListsIDsWithinTenant(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:exam-assignment-list-ids?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&types.ExamClassAssignment{}))
+	repo := &examAssignmentRepository{db: db}
+	now := time.Now().UTC()
+	require.NoError(t, db.Create(testExamAssignment("assignment-1", "group-1", types.ExamAssignmentStatusPublished, now)).Error)
+	require.NoError(t, db.Create(testExamAssignment("assignment-2", "group-2", types.ExamAssignmentStatusWithdrawn, now)).Error)
+	otherTenant := testExamAssignment("assignment-other", "group-3", types.ExamAssignmentStatusPublished, now)
+	otherTenant.TenantID = 20000
+	require.NoError(t, db.Create(otherTenant).Error)
+
+	items, err := repo.ListAssignmentsByIDsAndTenant(
+		context.Background(), 10000, []string{"assignment-1", "assignment-2", "assignment-other"},
+	)
+
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+	require.Equal(t, types.ExamAssignmentStatusPublished, items["assignment-1"].Status)
+	require.Equal(t, types.ExamAssignmentStatusWithdrawn, items["assignment-2"].Status)
+	require.NotContains(t, items, "assignment-other")
+}
+
 func TestExamAssignmentRepositoryTransitionRequiresExpectedStatus(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:exam-assignment-transition?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
