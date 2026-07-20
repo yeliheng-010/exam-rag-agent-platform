@@ -61,10 +61,12 @@ type ExamAssignmentSummary struct {
 }
 
 type ExamAssignmentMemberProgress struct {
-	Member      *ExamClassMember             `json:"member"`
-	Attempt     *ExamPracticeAttempt         `json:"attempt,omitempty"`
-	Status      ExamAssignmentProgressStatus `json:"status"`
-	CorrectRate float64                      `json:"correct_rate"`
+	Member         *ExamClassMember             `json:"member"`
+	Attempt        *ExamPracticeAttempt         `json:"attempt,omitempty"`
+	Status         ExamAssignmentProgressStatus `json:"status"`
+	CorrectRate    float64                      `json:"correct_rate"`
+	LastRemindedAt *time.Time                   `json:"last_reminded_at,omitempty"`
+	CanRemind      bool                         `json:"can_remind"`
 }
 
 type ExamAssignmentProgressSummary struct {
