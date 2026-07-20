@@ -72,13 +72,20 @@ func (s *examAssignmentService) ListAssignmentNotifications(
 	if err != nil {
 		return nil, err
 	}
+	classes, err := s.classRepo.ListByIDsAndTenantIncludingArchived(ctx, tenantID, notificationClassIDs(assignments))
+	if err != nil {
+		return nil, err
+	}
+	activeClasses := activeExamClassIDs(classes)
 	now := s.now()
 	items := make([]*types.ExamAssignmentNotificationItem, 0, len(notifications))
 	for _, notification := range notifications {
 		if notification == nil {
 			continue
 		}
-		item := assignmentNotificationItem(notification, assignments[notification.AssignmentID], attempts[notification.AssignmentID], now)
+		assignment := assignments[notification.AssignmentID]
+		classActive := assignment != nil && activeClasses[assignment.ClassID]
+		item := assignmentNotificationItem(notification, assignment, attempts[notification.AssignmentID], classActive, now)
 		items = append(items, item)
 	}
 	return &types.ExamAssignmentNotificationList{Items: items, UnreadCount: unreadCount}, nil
@@ -220,16 +227,40 @@ func assignmentNotificationItem(
 	notification *types.ExamAssignmentNotification,
 	assignment *types.ExamClassAssignment,
 	attempt *types.ExamPracticeAttempt,
+	classActive bool,
 	now time.Time,
 ) *types.ExamAssignmentNotificationItem {
 	item := &types.ExamAssignmentNotificationItem{Notification: notification}
 	if assignment != nil {
 		item.AssignmentStatus = assignment.Status
 		item.AssignmentDueAt = assignment.DueAt
-		item.CanStart = attempt == nil && assignment.Status == types.ExamAssignmentStatusPublished && !assignmentExpired(assignment, now)
+		item.CanStart = attempt == nil && classActive && assignment.Status == types.ExamAssignmentStatusPublished && !assignmentExpired(assignment, now)
 	}
 	if attempt != nil {
 		item.LastAttemptID = attempt.ID
 	}
 	return item
+}
+
+func notificationClassIDs(assignments map[string]*types.ExamClassAssignment) []string {
+	seen := make(map[string]bool, len(assignments))
+	classIDs := make([]string, 0, len(assignments))
+	for _, assignment := range assignments {
+		if assignment == nil || assignment.ClassID == "" || seen[assignment.ClassID] {
+			continue
+		}
+		seen[assignment.ClassID] = true
+		classIDs = append(classIDs, assignment.ClassID)
+	}
+	return classIDs
+}
+
+func activeExamClassIDs(classes []*types.ExamClass) map[string]bool {
+	active := make(map[string]bool, len(classes))
+	for _, class := range classes {
+		if class != nil && class.Status == types.ExamClassStatusActive {
+			active[class.ID] = true
+		}
+	}
+	return active
 }

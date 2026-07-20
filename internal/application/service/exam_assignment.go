@@ -216,6 +216,12 @@ func (s *examAssignmentService) CreateAssignmentAttempt(
 	if err != nil {
 		return nil, err
 	}
+	if _, err := s.classRepo.GetByIDAndTenant(ctx, assignment.ClassID, tenantID); err != nil {
+		if errors.Is(err, repository.ErrExamClassNotFound) {
+			return nil, ErrExamStateConflict
+		}
+		return nil, err
+	}
 	if _, err := s.ensureActiveClassMember(ctx, tenantID, userID, assignment.ClassID); err != nil {
 		return nil, err
 	}

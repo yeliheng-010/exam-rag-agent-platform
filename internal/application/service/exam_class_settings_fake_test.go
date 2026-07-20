@@ -48,6 +48,7 @@ func (r *fakeExamClassRepo) ListByIDsAndTenantIncludingArchived(
 	tenantID uint64,
 	ids []string,
 ) ([]*types.ExamClass, error) {
+	r.listByIDsCalls++
 	classes := make([]*types.ExamClass, 0, len(ids))
 	for _, id := range ids {
 		if class := r.classes[id]; class != nil && class.TenantID == tenantID {

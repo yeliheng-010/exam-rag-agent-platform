@@ -15,6 +15,7 @@ type fakeExamClassRepo struct {
 	members                map[string]*types.ExamClassMember
 	updateClassMetadataErr error
 	transitionClassErr     error
+	listByIDsCalls         int
 }
 
 func newFakeExamClassRepo() *fakeExamClassRepo {
