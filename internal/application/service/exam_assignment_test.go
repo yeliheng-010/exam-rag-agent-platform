@@ -8,6 +8,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExamAssignmentCreateRequiresClassWriteRole(t *testing.T) {
@@ -337,6 +338,148 @@ func TestExamAssignmentProgressRequiresClassWriteRole(t *testing.T) {
 	}
 }
 
+type assignmentLifecycleFixture struct {
+	svc            *examAssignmentService
+	assignmentRepo *stubExamAssignmentRepo
+	practiceRepo   *stubPracticeRepo
+	now            time.Time
+}
+
+func newAssignmentLifecycleFixture(t *testing.T) *assignmentLifecycleFixture {
+	t.Helper()
+	now := time.Date(2026, 7, 20, 8, 0, 0, 0, time.UTC)
+	classRepo := newFakeExamClassRepo()
+	assignmentRepo := newStubExamAssignmentRepo(classRepo)
+	class := seedExamClass(classRepo, "class-1", 10000, "teacher-1", "CLASSCODE")
+	seedExamClassMember(classRepo, class.ID, 10000, "teacher-1", types.ExamClassRoleTeacher, types.ExamClassMemberStatusActive)
+	seedExamClassMember(classRepo, class.ID, 10000, "student-1", types.ExamClassRoleStudent, types.ExamClassMemberStatusActive)
+	seedExamClassMember(classRepo, class.ID, 10000, "pending-1", types.ExamClassRoleStudent, types.ExamClassMemberStatusPending)
+	group := newPracticeGroupDetail()
+	group.Group.SpaceID = class.SpaceID
+	questionRepo := &stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{group}}
+	practiceRepo := newStubPracticeRepo()
+	svc := NewExamAssignmentService(
+		assignmentRepo,
+		classRepo,
+		questionRepo,
+		practiceRepo,
+		newStubExamAssignmentSpaceService(),
+	).(*examAssignmentService)
+	svc.now = func() time.Time { return now }
+	dueAt := now.Add(24 * time.Hour)
+	assignmentRepo.assignments = append(assignmentRepo.assignments, &types.ExamClassAssignment{
+		ID:              "assignment-1",
+		TenantID:        10000,
+		ClassID:         class.ID,
+		SpaceID:         class.SpaceID,
+		QuestionBankID:  group.Group.QuestionBankID,
+		GroupID:         group.Group.ID,
+		Title:           "Reading homework",
+		Status:          types.ExamAssignmentStatusPublished,
+		DueAt:           &dueAt,
+		CreatedByUserID: "teacher-1",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	})
+	return &assignmentLifecycleFixture{
+		svc:            svc,
+		assignmentRepo: assignmentRepo,
+		practiceRepo:   practiceRepo,
+		now:            now,
+	}
+}
+
+func TestExamAssignmentLifecycleWithdrawEditRepublish(t *testing.T) {
+	fixture := newAssignmentLifecycleFixture(t)
+	ctx := context.Background()
+	assignmentID := "assignment-1"
+	fixture.practiceRepo.attempts = append(fixture.practiceRepo.attempts, &types.ExamPracticeAttempt{
+		ID: "attempt-1", TenantID: 10000, UserID: "student-1", AssignmentID: &assignmentID,
+		Status: types.ExamPracticeAttemptStatusInProgress,
+	})
+
+	withdrawn, err := fixture.svc.WithdrawAssignment(ctx, 10000, "teacher-1", "class-1", assignmentID)
+	require.NoError(t, err)
+	require.Equal(t, types.ExamAssignmentStatusWithdrawn, withdrawn.Assignment.Status)
+
+	dueAt := fixture.now.Add(48 * time.Hour)
+	updated, err := fixture.svc.UpdateAssignment(ctx, 10000, "teacher-1", "class-1", assignmentID, &types.UpdateExamAssignmentRequest{
+		Title: "Extended homework", Instructions: "Finish every question", DueAt: &dueAt,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Extended homework", updated.Assignment.Title)
+	require.Equal(t, withdrawn.Assignment.GroupID, updated.Assignment.GroupID)
+
+	republished, err := fixture.svc.RepublishAssignment(ctx, 10000, "teacher-1", "class-1", assignmentID)
+	require.NoError(t, err)
+	require.Equal(t, assignmentID, republished.Assignment.ID)
+	require.Equal(t, types.ExamAssignmentStatusPublished, republished.Assignment.Status)
+	require.Len(t, fixture.practiceRepo.attempts, 1)
+	require.Equal(t, assignmentID, *fixture.practiceRepo.attempts[0].AssignmentID)
+}
+
+func TestExamAssignmentLifecycleRejectsExpiredPublishedUntilWithdrawn(t *testing.T) {
+	fixture := newAssignmentLifecycleFixture(t)
+	ctx := context.Background()
+	pastDueAt := fixture.now.Add(-time.Minute)
+	fixture.assignmentRepo.assignments[0].DueAt = &pastDueAt
+
+	_, err := fixture.svc.UpdateAssignment(ctx, 10000, "teacher-1", "class-1", "assignment-1", &types.UpdateExamAssignmentRequest{
+		Title: "Late edit",
+	})
+	require.ErrorIs(t, err, ErrExamStateConflict)
+	_, err = fixture.svc.CreateAssignmentAttempt(ctx, 10000, "student-1", "assignment-1")
+	require.ErrorIs(t, err, ErrExamStateConflict)
+	require.Empty(t, fixture.practiceRepo.attempts)
+
+	_, err = fixture.svc.WithdrawAssignment(ctx, 10000, "teacher-1", "class-1", "assignment-1")
+	require.NoError(t, err)
+	futureDueAt := fixture.now.Add(24 * time.Hour)
+	_, err = fixture.svc.UpdateAssignment(ctx, 10000, "teacher-1", "class-1", "assignment-1", &types.UpdateExamAssignmentRequest{
+		Title: "Reopened homework", DueAt: &futureDueAt,
+	})
+	require.NoError(t, err)
+	_, err = fixture.svc.RepublishAssignment(ctx, 10000, "teacher-1", "class-1", "assignment-1")
+	require.NoError(t, err)
+}
+
+func TestExamAssignmentLifecycleEnforcesRoleAndActiveMembership(t *testing.T) {
+	fixture := newAssignmentLifecycleFixture(t)
+	ctx := context.Background()
+	request := &types.UpdateExamAssignmentRequest{Title: "Student edit"}
+
+	_, err := fixture.svc.UpdateAssignment(ctx, 10000, "student-1", "class-1", "assignment-1", request)
+	require.ErrorIs(t, err, ErrExamPermissionDenied)
+	_, err = fixture.svc.WithdrawAssignment(ctx, 10000, "student-1", "class-1", "assignment-1")
+	require.ErrorIs(t, err, ErrExamPermissionDenied)
+	_, err = fixture.svc.RepublishAssignment(ctx, 10000, "student-1", "class-1", "assignment-1")
+	require.ErrorIs(t, err, ErrExamPermissionDenied)
+	_, err = fixture.svc.ListClassAssignments(ctx, 10000, "pending-1", "class-1", types.ListExamAssignmentsFilter{})
+	require.ErrorIs(t, err, ErrExamPermissionDenied)
+}
+
+func TestExamAssignmentListAndProgressRespectWithdrawnVisibility(t *testing.T) {
+	fixture := newAssignmentLifecycleFixture(t)
+	ctx := context.Background()
+	withdrawn := cloneExamClassAssignment(fixture.assignmentRepo.assignments[0])
+	withdrawn.ID = "assignment-withdrawn"
+	withdrawn.Status = types.ExamAssignmentStatusWithdrawn
+	withdrawn.CreatedAt = withdrawn.CreatedAt.Add(time.Minute)
+	fixture.assignmentRepo.assignments = append(fixture.assignmentRepo.assignments, withdrawn)
+
+	teacherItems, err := fixture.svc.ListClassAssignments(ctx, 10000, "teacher-1", "class-1", types.ListExamAssignmentsFilter{})
+	require.NoError(t, err)
+	require.Len(t, teacherItems, 2)
+	studentItems, err := fixture.svc.ListClassAssignments(ctx, 10000, "student-1", "class-1", types.ListExamAssignmentsFilter{})
+	require.NoError(t, err)
+	require.Len(t, studentItems, 1)
+	require.Equal(t, types.ExamAssignmentStatusPublished, studentItems[0].Assignment.Status)
+
+	progress, err := fixture.svc.GetAssignmentProgress(ctx, 10000, "teacher-1", "class-1", withdrawn.ID)
+	require.NoError(t, err)
+	require.Equal(t, types.ExamAssignmentStatusWithdrawn, progress.Assignment.Status)
+}
+
 func findAssignmentProgress(items []*types.ExamAssignmentMemberProgress, userID string) *types.ExamAssignmentMemberProgress {
 	for _, item := range items {
 		if item != nil && item.Member != nil && item.Member.UserID == userID {
@@ -369,14 +512,76 @@ func (r *stubExamAssignmentRepo) GetAssignmentByIDAndTenant(_ context.Context, t
 	return nil, repository.ErrExamClassAssignmentNotFound
 }
 
-func (r *stubExamAssignmentRepo) ListAssignmentsByClass(_ context.Context, tenantID uint64, classID string, limit int) ([]*types.ExamClassAssignment, error) {
+func (r *stubExamAssignmentRepo) ListAssignmentsByClass(
+	_ context.Context,
+	tenantID uint64,
+	classID string,
+	statuses []types.ExamAssignmentStatus,
+	limit int,
+) ([]*types.ExamClassAssignment, error) {
 	out := []*types.ExamClassAssignment{}
 	for _, assignment := range r.assignments {
-		if assignment.TenantID == tenantID && assignment.ClassID == classID && assignment.Status == types.ExamAssignmentStatusPublished {
+		if assignment.TenantID == tenantID && assignment.ClassID == classID && assignmentStatusIncluded(assignment.Status, statuses) {
 			out = append(out, cloneExamClassAssignment(assignment))
 		}
 	}
 	return limitExamAssignments(out, limit), nil
+}
+
+func (r *stubExamAssignmentRepo) UpdateAssignmentMetadata(
+	_ context.Context,
+	tenantID uint64,
+	classID string,
+	assignmentID string,
+	allowed []types.ExamAssignmentStatus,
+	title string,
+	instructions string,
+	dueAt *time.Time,
+	updatedAt time.Time,
+) error {
+	for _, assignment := range r.assignments {
+		if assignment.ID != assignmentID || assignment.TenantID != tenantID || assignment.ClassID != classID {
+			continue
+		}
+		if !assignmentStatusIncluded(assignment.Status, allowed) {
+			return repository.ErrExamClassAssignmentStateConflict
+		}
+		assignment.Title = title
+		assignment.Instructions = instructions
+		assignment.DueAt = dueAt
+		assignment.UpdatedAt = updatedAt
+		return nil
+	}
+	return repository.ErrExamClassAssignmentStateConflict
+}
+
+func (r *stubExamAssignmentRepo) TransitionAssignmentStatus(
+	_ context.Context,
+	tenantID uint64,
+	classID string,
+	assignmentID string,
+	expected types.ExamAssignmentStatus,
+	next types.ExamAssignmentStatus,
+	updatedAt time.Time,
+) error {
+	for _, assignment := range r.assignments {
+		if assignment.ID != assignmentID || assignment.TenantID != tenantID || assignment.ClassID != classID || assignment.Status != expected {
+			continue
+		}
+		assignment.Status = next
+		assignment.UpdatedAt = updatedAt
+		return nil
+	}
+	return repository.ErrExamClassAssignmentStateConflict
+}
+
+func assignmentStatusIncluded(status types.ExamAssignmentStatus, statuses []types.ExamAssignmentStatus) bool {
+	for _, candidate := range statuses {
+		if candidate == status {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *stubExamAssignmentRepo) ListAssignmentsByUserClasses(ctx context.Context, tenantID uint64, userID string, limit int) ([]*types.ExamClassAssignment, error) {

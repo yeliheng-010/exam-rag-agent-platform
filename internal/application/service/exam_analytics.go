@@ -44,7 +44,13 @@ func (s *examAnalyticsService) GetClassAnalytics(
 	if err != nil {
 		return nil, err
 	}
-	assignments, err := s.assignmentRepo.ListAssignmentsByClass(ctx, tenantID, class.ID, 100)
+	assignments, err := s.assignmentRepo.ListAssignmentsByClass(
+		ctx,
+		tenantID,
+		class.ID,
+		[]types.ExamAssignmentStatus{types.ExamAssignmentStatusPublished},
+		100,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -88,6 +88,34 @@ func TestExamClassAnalyticsRequiresClassWriteRole(t *testing.T) {
 	}
 }
 
+func TestExamClassAnalyticsExcludesWithdrawnAssignments(t *testing.T) {
+	ctx := context.Background()
+	classRepo := newFakeExamClassRepo()
+	assignRepo := newStubExamAssignmentRepo(classRepo)
+	practiceRepo := newStubPracticeRepo()
+	class := seedExamClass(classRepo, "class-analytics", 10000, "teacher-1", "CLASSCODE")
+	seedExamClassMember(classRepo, class.ID, 10000, "teacher-1", types.ExamClassRoleTeacher, types.ExamClassMemberStatusActive)
+	seedExamClassMember(classRepo, class.ID, 10000, "student-1", types.ExamClassRoleStudent, types.ExamClassMemberStatusActive)
+	published := seedAnalyticsAssignment(assignRepo, class, "assignment-published", "group-1", time.Now().Add(-time.Hour))
+	withdrawn := seedAnalyticsAssignment(assignRepo, class, "assignment-withdrawn", "group-2", time.Now())
+	withdrawn.Status = types.ExamAssignmentStatusWithdrawn
+	seedAnalyticsAttempt(practiceRepo, published, "student-1", 5, 4, true, time.Now())
+	seedAnalyticsAttempt(practiceRepo, withdrawn, "student-1", 5, 5, true, time.Now())
+	svc := NewExamAnalyticsService(classRepo, assignRepo, practiceRepo)
+
+	analytics, err := svc.GetClassAnalytics(ctx, 10000, "teacher-1", class.ID)
+
+	if err != nil {
+		t.Fatalf("GetClassAnalytics returned error: %v", err)
+	}
+	if analytics.AssignmentCount != 1 || len(analytics.Assignments) != 1 {
+		t.Fatalf("withdrawn assignment leaked into analytics: %#v", analytics.Assignments)
+	}
+	if analytics.Assignments[0].Assignment.ID != published.ID {
+		t.Fatalf("analytics assignment = %s, want %s", analytics.Assignments[0].Assignment.ID, published.ID)
+	}
+}
+
 func TestExamClassAnalyticsAggregatesFrequentWrongQuestionsFromLatestAttempts(t *testing.T) {
 	ctx := context.Background()
 	classRepo := newFakeExamClassRepo()

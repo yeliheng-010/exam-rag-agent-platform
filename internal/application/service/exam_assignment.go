@@ -19,6 +19,7 @@ type examAssignmentService struct {
 	questionRepo   interfaces.ExamQuestionRepository
 	practiceRepo   interfaces.ExamPracticeRepository
 	spaceService   interfaces.ExamSpaceService
+	now            func() time.Time
 }
 
 func NewExamAssignmentService(
@@ -34,6 +35,7 @@ func NewExamAssignmentService(
 		questionRepo:   questionRepo,
 		practiceRepo:   practiceRepo,
 		spaceService:   spaceService,
+		now:            time.Now,
 	}
 }
 
@@ -72,7 +74,7 @@ func (s *examAssignmentService) CreateAssignment(
 	if len([]rune(title)) > 255 || len([]rune(instructions)) > 2000 {
 		return nil, ErrExamInvalidRequest
 	}
-	now := time.Now()
+	now := s.now()
 	assignment := &types.ExamClassAssignment{
 		ID:              uuid.New().String(),
 		TenantID:        tenantID,
@@ -94,6 +96,69 @@ func (s *examAssignmentService) CreateAssignment(
 	return s.assignmentSummary(ctx, tenantID, userID, assignment)
 }
 
+func (s *examAssignmentService) UpdateAssignment(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	classID string,
+	assignmentID string,
+	req *types.UpdateExamAssignmentRequest,
+) (*types.ExamAssignmentSummary, error) {
+	title, instructions, err := validateAssignmentUpdate(req)
+	if err != nil {
+		return nil, err
+	}
+	assignment, err := s.writableAssignment(ctx, tenantID, userID, classID, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if assignment.Status == types.ExamAssignmentStatusPublished && assignmentExpired(assignment, s.now()) {
+		return nil, ErrExamStateConflict
+	}
+	if !assignmentStatusAllowed(assignment.Status, types.ExamAssignmentStatusPublished, types.ExamAssignmentStatusWithdrawn) {
+		return nil, ErrExamStateConflict
+	}
+	err = s.assignmentRepo.UpdateAssignmentMetadata(
+		ctx, tenantID, assignment.ClassID, assignment.ID, []types.ExamAssignmentStatus{assignment.Status},
+		title, instructions, req.DueAt, s.now(),
+	)
+	if err != nil {
+		return nil, mapAssignmentStateError(err)
+	}
+	return s.refreshedAssignmentSummary(ctx, tenantID, userID, assignment.ID)
+}
+
+func (s *examAssignmentService) WithdrawAssignment(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	classID string,
+	assignmentID string,
+) (*types.ExamAssignmentSummary, error) {
+	assignment, err := s.writableAssignment(ctx, tenantID, userID, classID, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	return s.transitionAssignment(ctx, tenantID, userID, assignment, types.ExamAssignmentStatusPublished, types.ExamAssignmentStatusWithdrawn)
+}
+
+func (s *examAssignmentService) RepublishAssignment(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	classID string,
+	assignmentID string,
+) (*types.ExamAssignmentSummary, error) {
+	assignment, err := s.writableAssignment(ctx, tenantID, userID, classID, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if assignment.Status != types.ExamAssignmentStatusWithdrawn || assignmentExpired(assignment, s.now()) {
+		return nil, ErrExamStateConflict
+	}
+	return s.transitionAssignment(ctx, tenantID, userID, assignment, types.ExamAssignmentStatusWithdrawn, types.ExamAssignmentStatusPublished)
+}
+
 func (s *examAssignmentService) ListClassAssignments(
 	ctx context.Context,
 	tenantID uint64,
@@ -104,10 +169,15 @@ func (s *examAssignmentService) ListClassAssignments(
 	if strings.TrimSpace(classID) == "" {
 		return nil, ErrExamInvalidRequest
 	}
-	if _, err := s.ensureActiveClassMember(ctx, tenantID, userID, strings.TrimSpace(classID)); err != nil {
+	member, err := s.ensureActiveClassMember(ctx, tenantID, userID, strings.TrimSpace(classID))
+	if err != nil {
 		return nil, err
 	}
-	assignments, err := s.assignmentRepo.ListAssignmentsByClass(ctx, tenantID, strings.TrimSpace(classID), filter.Limit)
+	statuses := []types.ExamAssignmentStatus{types.ExamAssignmentStatusPublished}
+	if member.Role.CanWrite() {
+		statuses = append(statuses, types.ExamAssignmentStatusWithdrawn)
+	}
+	assignments, err := s.assignmentRepo.ListAssignmentsByClass(ctx, tenantID, strings.TrimSpace(classID), statuses, filter.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -137,18 +207,18 @@ func (s *examAssignmentService) CreateAssignmentAttempt(
 	if err != nil {
 		return nil, err
 	}
-	if assignment.Status != types.ExamAssignmentStatusPublished {
-		return nil, ErrExamInvalidRequest
-	}
 	if _, err := s.ensureActiveClassMember(ctx, tenantID, userID, assignment.ClassID); err != nil {
 		return nil, err
+	}
+	if assignment.Status != types.ExamAssignmentStatusPublished || assignmentExpired(assignment, s.now()) {
+		return nil, ErrExamStateConflict
 	}
 	detail, err := s.assignmentQuestionGroup(ctx, tenantID, assignment.GroupID)
 	if err != nil {
 		return nil, err
 	}
 	assignmentIDCopy := assignment.ID
-	now := time.Now()
+	now := s.now()
 	attempt := &types.ExamPracticeAttempt{
 		ID:             uuid.New().String(),
 		TenantID:       tenantID,
@@ -187,7 +257,11 @@ func (s *examAssignmentService) GetAssignmentProgress(
 	if err != nil {
 		return nil, err
 	}
-	if assignment.ClassID != class.ID || assignment.Status != types.ExamAssignmentStatusPublished {
+	if assignment.ClassID != class.ID || !assignmentStatusAllowed(
+		assignment.Status,
+		types.ExamAssignmentStatusPublished,
+		types.ExamAssignmentStatusWithdrawn,
+	) {
 		return nil, ErrExamNotFound
 	}
 	members, err := s.classRepo.ListMembers(ctx, class.ID, tenantID, []types.ExamClassMemberStatus{
@@ -268,6 +342,9 @@ func (s *examAssignmentService) ensureCanWriteAssignmentClass(ctx context.Contex
 	if !member.Role.CanWrite() {
 		return nil, ErrExamPermissionDenied
 	}
+	if member.Status != types.ExamClassMemberStatusActive {
+		return nil, ErrExamPermissionDenied
+	}
 	return class, nil
 }
 
@@ -282,7 +359,96 @@ func (s *examAssignmentService) ensureActiveClassMember(ctx context.Context, ten
 		}
 		return nil, err
 	}
+	if member.Status != types.ExamClassMemberStatusActive {
+		return nil, ErrExamPermissionDenied
+	}
 	return member, nil
+}
+
+func validateAssignmentUpdate(req *types.UpdateExamAssignmentRequest) (string, string, error) {
+	if req == nil {
+		return "", "", ErrExamInvalidRequest
+	}
+	title := strings.TrimSpace(req.Title)
+	instructions := strings.TrimSpace(req.Instructions)
+	if title == "" || len([]rune(title)) > 255 || len([]rune(instructions)) > 2000 {
+		return "", "", ErrExamInvalidRequest
+	}
+	return title, instructions, nil
+}
+
+func (s *examAssignmentService) writableAssignment(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	classID string,
+	assignmentID string,
+) (*types.ExamClassAssignment, error) {
+	class, err := s.ensureCanWriteAssignmentClass(ctx, tenantID, userID, strings.TrimSpace(classID))
+	if err != nil {
+		return nil, err
+	}
+	assignment, err := s.assignmentByID(ctx, tenantID, strings.TrimSpace(assignmentID))
+	if err != nil {
+		return nil, err
+	}
+	if assignment.ClassID != class.ID {
+		return nil, ErrExamNotFound
+	}
+	return assignment, nil
+}
+
+func (s *examAssignmentService) transitionAssignment(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	assignment *types.ExamClassAssignment,
+	expected types.ExamAssignmentStatus,
+	next types.ExamAssignmentStatus,
+) (*types.ExamAssignmentSummary, error) {
+	if assignment.Status != expected {
+		return nil, ErrExamStateConflict
+	}
+	err := s.assignmentRepo.TransitionAssignmentStatus(
+		ctx, tenantID, assignment.ClassID, assignment.ID, expected, next, s.now(),
+	)
+	if err != nil {
+		return nil, mapAssignmentStateError(err)
+	}
+	return s.refreshedAssignmentSummary(ctx, tenantID, userID, assignment.ID)
+}
+
+func (s *examAssignmentService) refreshedAssignmentSummary(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	assignmentID string,
+) (*types.ExamAssignmentSummary, error) {
+	assignment, err := s.assignmentByID(ctx, tenantID, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	return s.assignmentSummary(ctx, tenantID, userID, assignment)
+}
+
+func mapAssignmentStateError(err error) error {
+	if errors.Is(err, repository.ErrExamClassAssignmentStateConflict) {
+		return ErrExamStateConflict
+	}
+	return err
+}
+
+func assignmentExpired(assignment *types.ExamClassAssignment, now time.Time) bool {
+	return assignment != nil && assignment.DueAt != nil && !assignment.DueAt.After(now)
+}
+
+func assignmentStatusAllowed(status types.ExamAssignmentStatus, allowed ...types.ExamAssignmentStatus) bool {
+	for _, candidate := range allowed {
+		if status == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *examAssignmentService) assignmentByID(ctx context.Context, tenantID uint64, assignmentID string) (*types.ExamClassAssignment, error) {

@@ -107,6 +107,7 @@ func (s *stubInterventionAssignmentRepo) ListAssignmentsByClass(
 	_ context.Context,
 	_ uint64,
 	_ string,
+	_ []types.ExamAssignmentStatus,
 	limit int,
 ) ([]*types.ExamClassAssignment, error) {
 	if limit > 0 && len(s.assignments) > limit {

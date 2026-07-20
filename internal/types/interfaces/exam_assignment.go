@@ -9,6 +9,9 @@ import (
 
 type ExamAssignmentService interface {
 	CreateAssignment(ctx context.Context, tenantID uint64, userID string, classID string, req *types.CreateExamAssignmentRequest) (*types.ExamAssignmentSummary, error)
+	UpdateAssignment(ctx context.Context, tenantID uint64, userID, classID, assignmentID string, req *types.UpdateExamAssignmentRequest) (*types.ExamAssignmentSummary, error)
+	WithdrawAssignment(ctx context.Context, tenantID uint64, userID, classID, assignmentID string) (*types.ExamAssignmentSummary, error)
+	RepublishAssignment(ctx context.Context, tenantID uint64, userID, classID, assignmentID string) (*types.ExamAssignmentSummary, error)
 	ListClassAssignments(ctx context.Context, tenantID uint64, userID string, classID string, filter types.ListExamAssignmentsFilter) ([]*types.ExamAssignmentSummary, error)
 	ListMyAssignments(ctx context.Context, tenantID uint64, userID string, filter types.ListExamAssignmentsFilter) ([]*types.ExamAssignmentSummary, error)
 	CreateAssignmentAttempt(ctx context.Context, tenantID uint64, userID string, assignmentID string) (*types.CreatePracticeAttemptResult, error)
