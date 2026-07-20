@@ -75,6 +75,16 @@ type CreateExamClassRequest struct {
 	MemberLimit *int    `json:"member_limit"`
 }
 
+type UpdateExamClassRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	MemberLimit int    `json:"member_limit"`
+}
+
+type ListExamClassesFilter struct {
+	IncludeArchived bool
+}
+
 type JoinExamClassRequest struct {
 	InviteCode string `json:"invite_code" binding:"required,min=1,max=32"`
 }
