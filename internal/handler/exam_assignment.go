@@ -38,6 +38,59 @@ func (h *ExamAssignmentHandler) CreateAssignment(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"success": true, "data": item})
 }
 
+func (h *ExamAssignmentHandler) UpdateAssignment(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(types.UserIDContextKey.String())
+	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+
+	var req types.UpdateExamAssignmentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(apperrors.NewValidationError("Invalid request parameters").WithDetails(err.Error()))
+		return
+	}
+	item, err := h.assignmentService.UpdateAssignment(
+		ctx, tenantID, userID, c.Param("class_id"), c.Param("assignment_id"), &req,
+	)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to update exam assignment: %v", err)
+		writeExamError(c, err, "Failed to update exam assignment")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
+}
+
+func (h *ExamAssignmentHandler) WithdrawAssignment(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(types.UserIDContextKey.String())
+	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+
+	item, err := h.assignmentService.WithdrawAssignment(
+		ctx, tenantID, userID, c.Param("class_id"), c.Param("assignment_id"),
+	)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to withdraw exam assignment: %v", err)
+		writeExamError(c, err, "Failed to withdraw exam assignment")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
+}
+
+func (h *ExamAssignmentHandler) RepublishAssignment(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(types.UserIDContextKey.String())
+	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+
+	item, err := h.assignmentService.RepublishAssignment(
+		ctx, tenantID, userID, c.Param("class_id"), c.Param("assignment_id"),
+	)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to republish exam assignment: %v", err)
+		writeExamError(c, err, "Failed to republish exam assignment")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
+}
+
 func (h *ExamAssignmentHandler) ListClassAssignments(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.GetString(types.UserIDContextKey.String())
