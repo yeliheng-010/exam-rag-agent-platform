@@ -35,7 +35,7 @@
             <t-tag :theme="item.status === 'active' ? 'success' : 'default'" variant="light">{{ statusLabel(item.status) }}</t-tag>
           </div>
           <div class="card-meta">
-            <span><t-icon name="usergroup" />成员上限 {{ item.member_limit }}</span>
+            <span><t-icon name="usergroup" />成员上限 {{ item.member_limit || '不限' }}</span>
             <span><t-icon name="folder" />{{ domainName(item.domain_id) }}</span>
           </div>
           <div class="card-footer">
@@ -188,7 +188,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const [classRes, domainRes, teacherRes] = await Promise.allSettled([
-      listExamClasses(),
+      listExamClasses({ includeArchived: true }),
       listExamDomains(),
       getMyTeacherApplication(),
     ])

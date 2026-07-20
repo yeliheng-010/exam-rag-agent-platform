@@ -1,0 +1,85 @@
+.settings-panel {
+  width: 100%;
+  max-width: 860px;
+}
+
+.settings-heading,
+.status-command,
+.form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-heading h3,
+.status-command h4 {
+  margin: 0;
+}
+
+.settings-heading p,
+.status-command p {
+  margin: 5px 0 0;
+  color: var(--td-text-color-secondary);
+  font-size: 13px;
+}
+
+.permission-alert,
+.settings-form,
+.settings-summary {
+  margin-top: 20px;
+}
+
+.settings-grid,
+.settings-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr);
+  gap: 16px;
+}
+
+.form-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.settings-summary {
+  margin-bottom: 0;
+}
+
+.settings-summary > div {
+  min-width: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--td-component-stroke);
+}
+
+.settings-summary dt {
+  color: var(--td-text-color-secondary);
+  font-size: 13px;
+}
+
+.settings-summary dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--td-text-color-primary);
+}
+
+.summary-description {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 600px) {
+  .settings-grid,
+  .settings-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-description {
+    grid-column: auto;
+  }
+
+  .settings-heading,
+  .status-command {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}

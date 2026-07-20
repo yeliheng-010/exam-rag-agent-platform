@@ -22,7 +22,7 @@
         </div>
         <div class="summary-item">
           <span>成员上限</span>
-          <strong>{{ classInfo.member_limit }}</strong>
+          <strong>{{ classInfo.member_limit || '不限' }}</strong>
         </div>
         <div class="summary-item">
           <span>邀请码</span>
@@ -43,7 +43,7 @@
             </div>
           </div>
         </t-tab-panel>
-        <t-tab-panel value="members" label="成员">
+        <t-tab-panel value="members" label="成员" :disabled="isArchivedClass">
           <div class="tab-panel">
             <div class="panel-title-row">
               <div>
@@ -96,7 +96,7 @@
             </t-loading>
           </div>
         </t-tab-panel>
-        <t-tab-panel value="resources" label="资料">
+        <t-tab-panel value="resources" label="资料" :disabled="isArchivedClass">
           <div class="tab-panel">
             <div class="panel-title-row">
               <div>
@@ -261,7 +261,7 @@
             </div>
           </div>
         </t-tab-panel>
-        <t-tab-panel value="assignments" label="练习任务">
+        <t-tab-panel value="assignments" label="练习任务" :disabled="isArchivedClass">
           <div class="tab-panel">
             <div class="panel-title-row">
               <div>
@@ -361,7 +361,7 @@
             </t-loading>
           </div>
         </t-tab-panel>
-        <t-tab-panel value="analytics" label="分析">
+        <t-tab-panel value="analytics" label="分析" :disabled="isArchivedClass">
           <div class="tab-panel">
             <div class="panel-title-row">
               <div>
@@ -485,7 +485,21 @@
             </t-loading>
           </div>
         </t-tab-panel>
-        <t-tab-panel v-for="item in futureTabs" :key="item.value" :value="item.value" :label="item.label">
+        <t-tab-panel value="settings" label="设置">
+          <ClassSettingsPanel
+            v-if="classInfo"
+            :class-info="classInfo"
+            :current-user-id="authStore.currentUserId"
+            @updated="handleClassSettingsUpdated"
+          />
+        </t-tab-panel>
+        <t-tab-panel
+          v-for="item in futureTabs"
+          :key="item.value"
+          :value="item.value"
+          :label="item.label"
+          :disabled="isArchivedClass"
+        >
           <div class="tab-panel">
             <h3>{{ item.label }}</h3>
             <p>{{ item.desc }}</p>
@@ -826,6 +840,7 @@ import { listKnowledgeBases, listKnowledgeFiles } from '@/api/knowledge-base'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
 import ClassPracticeRecommendations from './ClassPracticeRecommendations.vue'
+import ClassSettingsPanel from './ClassSettingsPanel.vue'
 import {
   assignmentLifecycleState,
   assignmentStatusLabel,
@@ -836,6 +851,7 @@ import {
   existingAssignmentAttemptID,
 } from './assignmentLifecycle'
 import { memberDisplayId, memberDisplayName } from './memberDisplay'
+import { isArchivedExamClass } from './classSettings'
 import type {
   ExamClassAssignment,
   ExamClass,
@@ -940,6 +956,7 @@ const canViewAnalytics = computed(() => authStore.hasRole('contributor'))
 const assignmentDialogTitle = computed(() => assignmentMode.value === 'edit' ? '编辑练习任务' : '发布练习任务')
 const assignmentConfirmLabel = computed(() => assignmentMode.value === 'edit' ? '保存' : '发布')
 const currentClassId = computed(() => String(route.params.classId || ''))
+const isArchivedClass = computed(() => isArchivedExamClass(classInfo.value))
 const hasImportableAssignmentGroups = computed(() => {
   const classSpaceId = classInfo.value?.space_id
   return assignmentGroups.value.some((item) => item.group?.space_id && item.group.space_id !== classSpaceId)
@@ -1018,7 +1035,6 @@ const assignmentForm = ref({
 const futureTabs = [
   { value: 'questionSets', label: '题集', desc: '班级题集来自题库筛选、试卷结构化和老师手动组题。', empty: '题集能力将在结构化题库后启用' },
   { value: 'entitlements', label: '权益', desc: '高成本解析、Agent 工具调用和班级人数会进入权益校验。', empty: '权益明细将在支付模块接入后显示' },
-  { value: 'settings', label: '设置', desc: '班级名称、考试域、成员上限和归档策略在此维护。', empty: '班级设置将在编辑接口接入后启用' },
 ]
 
 const memberColumns = [
@@ -1230,10 +1246,22 @@ const loadData = async () => {
   try {
     const res = await getExamClass(classId)
     classInfo.value = res.data
+    if (isArchivedClass.value && archivedBusinessTabs.has(activeTab.value)) {
+      activeTab.value = 'settings'
+    }
   } catch (error: any) {
     MessagePlugin.error(error?.message || '班级详情加载失败')
   } finally {
     loading.value = false
+  }
+}
+
+const archivedBusinessTabs = new Set(['members', 'resources', 'assignments', 'analytics', 'questionSets', 'entitlements'])
+
+const handleClassSettingsUpdated = (updated: ExamClass) => {
+  classInfo.value = updated
+  if (updated.status === 'archived') {
+    activeTab.value = 'settings'
   }
 }
 
@@ -1846,6 +1874,10 @@ const startChat = (kbId: string) => {
 }
 
 watch(activeTab, (tab) => {
+  if (isArchivedClass.value && archivedBusinessTabs.has(tab)) {
+    activeTab.value = 'settings'
+    return
+  }
   if (tab === 'members') {
     loadMembers()
   }
