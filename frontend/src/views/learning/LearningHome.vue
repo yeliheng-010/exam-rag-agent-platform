@@ -115,7 +115,13 @@
           <t-button variant="text" :loading="assignmentLoading" @click="loadClassAssignments">刷新</t-button>
         </div>
         <div v-if="classAssignments.length" class="practice-grid">
-          <div v-for="item in classAssignments" :key="item.assignment.id" class="practice-card assignment-card">
+          <div
+            v-for="item in classAssignments"
+            :id="`assignment-${item.assignment.id}`"
+            :key="item.assignment.id"
+            class="practice-card assignment-card"
+            :class="{ 'assignment-card--highlighted': highlightedAssignmentId === item.assignment.id }"
+          >
             <div class="practice-card__main">
               <div>
                 <strong>{{ item.assignment.title || assignmentGroupLabel(item) }}</strong>
@@ -215,8 +221,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { listExamDomains } from '@/api/exam/domain'
 import { ensurePersonalExamSpace } from '@/api/exam/space'
@@ -238,6 +244,7 @@ import {
 } from '../classes/assignmentLifecycle'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const loading = ref(false)
@@ -245,6 +252,8 @@ const resourcesLoading = ref(false)
 const practiceLoading = ref(false)
 const assignmentLoading = ref(false)
 const startingAssignmentId = ref('')
+const highlightedAssignmentId = ref('')
+let highlightTimer: ReturnType<typeof setTimeout> | undefined
 const domains = ref<ExamDomain[]>([])
 const personalSpace = ref<ExamSpace | null>(null)
 const classes = ref<ExamClass[]>([])
@@ -416,11 +425,29 @@ const loadClassAssignments = async () => {
   try {
     const res = await listMyExamAssignments({ limit: 8 })
     classAssignments.value = res.data || []
+    await focusAssignmentFromNotification()
   } catch (error: any) {
     MessagePlugin.error(error?.message || '班级任务加载失败')
   } finally {
     assignmentLoading.value = false
   }
+}
+
+const focusAssignmentFromNotification = async () => {
+  const assignmentId = String(route.query.assignment_id || '')
+  if (!assignmentId) return
+  await nextTick()
+  const target = document.getElementById(`assignment-${assignmentId}`)
+  if (!target) {
+    MessagePlugin.warning('该任务当前不可开始或已撤回')
+    return
+  }
+  highlightedAssignmentId.value = assignmentId
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  if (highlightTimer) clearTimeout(highlightTimer)
+  highlightTimer = setTimeout(() => {
+    highlightedAssignmentId.value = ''
+  }, 2_000)
 }
 
 const startChat = (kbId: string) => {
@@ -453,6 +480,14 @@ const loadData = async () => {
 }
 
 onMounted(loadData)
+
+watch(() => route.query.assignment_id, () => {
+  void focusAssignmentFromNotification()
+})
+
+onUnmounted(() => {
+  if (highlightTimer) clearTimeout(highlightTimer)
+})
 </script>
 
 <style lang="less" scoped>
@@ -559,6 +594,12 @@ onMounted(loadData)
 .assignment-card {
   min-width: 0;
   border-color: var(--td-brand-color-4);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.assignment-card--highlighted {
+  border-color: var(--td-brand-color);
+  box-shadow: 0 0 0 2px var(--td-brand-color-focus);
 }
 
 .panel-title {

@@ -33,3 +33,14 @@ test('student assignment entry continues existing attempts and blocks expired st
     /existingAttemptId[\s\S]{0,500}attempt_id=\$\{existingAttemptId\}[\s\S]{0,300}return[\s\S]{0,300}canCreateAssignmentAttempt[\s\S]{0,300}createAssignmentAttempt/,
   )
 })
+
+test('learning center locates a notification assignment without starting it', () => {
+  assert.match(learningHome, /useRoute/)
+  assert.match(learningHome, /route\.query\.assignment_id/)
+  assert.match(learningHome, /assignment-card--highlighted/)
+  assert.match(learningHome, /scrollIntoView\(\{\s*behavior:\s*'smooth',\s*block:\s*'center'/)
+  assert.match(learningHome, /setTimeout/)
+  assert.match(learningHome, /clearTimeout/)
+  assert.match(learningHome, /onUnmounted/)
+  assert.match(learningHome, /watch\(\(\) => route\.query\.assignment_id/)
+})

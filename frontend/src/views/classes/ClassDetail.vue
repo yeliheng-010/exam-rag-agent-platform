@@ -722,6 +722,18 @@
     >
       <t-loading :loading="assignmentProgressLoading">
         <div v-if="assignmentProgressDetail" class="assignment-progress">
+          <div class="assignment-progress__toolbar">
+            <t-button
+              size="small"
+              variant="outline"
+              :loading="remindingUserId === 'all'"
+              :disabled="!!remindingUserId || !assignmentProgressRows.some(row => row.can_remind)"
+              @click="sendProgressReminders()"
+            >
+              <template #icon><t-icon name="send" /></template>
+              一键催交
+            </t-button>
+          </div>
           <div class="assignment-progress__summary">
             <div class="summary-item">
               <span>学生总数</span>
@@ -764,6 +776,22 @@
             <template #completed_at="{ row }">
               {{ row.completed_at ? formatDate(row.completed_at) : '-' }}
             </template>
+            <template #reminder="{ row }">
+              <t-tooltip v-if="row.status !== 'completed'" :content="assignmentReminderTooltip(row)">
+                <t-button
+                  shape="square"
+                  variant="text"
+                  size="small"
+                  :loading="remindingUserId === row.user_id"
+                  :disabled="!!remindingUserId || !row.can_remind"
+                  aria-label="催交该学生"
+                  @click="sendProgressReminders(row.user_id)"
+                >
+                  <t-icon name="send" />
+                </t-button>
+              </t-tooltip>
+              <span v-else class="muted-text">-</span>
+            </template>
           </t-table>
         </div>
       </t-loading>
@@ -792,6 +820,7 @@ import {
   updateClassAssignment,
   withdrawClassAssignment,
 } from '@/api/exam/assignment'
+import { sendAssignmentReminders } from '@/api/exam/assignmentNotification'
 import { listPracticeQuestionGroups } from '@/api/exam/practice'
 import { listKnowledgeBases, listKnowledgeFiles } from '@/api/knowledge-base'
 import { useSettingsStore } from '@/stores/settings'
@@ -849,6 +878,8 @@ interface AssignmentProgressRow {
   correct_text: string
   correct_rate: number
   completed_at?: string
+  last_reminded_at?: string
+  can_remind: boolean
 }
 
 const route = useRoute()
@@ -875,6 +906,8 @@ const reviewingUserId = ref('')
 const extractingTaskId = ref('')
 const startingAssignmentId = ref('')
 const loadingAssignmentProgressId = ref('')
+const assignmentProgressAssignmentId = ref('')
+const remindingUserId = ref('')
 const assignmentActionId = ref('')
 const activeTab = ref('overview')
 const classInfo = ref<ExamClass | null>(null)
@@ -935,6 +968,8 @@ const assignmentProgressRows = computed<AssignmentProgressRow[]>(() => {
       correct_text: attempt ? `${attempt.correct_count}/${attempt.question_count}` : '-',
       correct_rate: item.correct_rate || 0,
       completed_at: attempt?.completed_at,
+      last_reminded_at: item.last_reminded_at,
+      can_remind: item.can_remind,
     }
   })
 })
@@ -1028,6 +1063,7 @@ const assignmentProgressColumns = [
   { colKey: 'correct_text', title: '正确数', width: 100 },
   { colKey: 'correct_rate', title: '正确率', cell: 'correct_rate', width: 100 },
   { colKey: 'completed_at', title: '完成时间', cell: 'completed_at', width: 180 },
+  { colKey: 'reminder', title: '催交', cell: 'reminder', width: 72 },
 ]
 
 const analyticsMemberColumns = [
@@ -1554,23 +1590,55 @@ const submitRepublishAssignment = async (item: ExamAssignmentSummary) => {
   }
 }
 
-const openAssignmentProgress = async (item: ExamAssignmentSummary) => {
-  const classId = String(route.params.classId || '')
-  if (!classId || !item.assignment?.id || !canManageAssignments.value) return
-  assignmentProgressVisible.value = true
-  assignmentProgressDetail.value = null
+const loadAssignmentProgress = async () => {
+  const classId = currentClassId.value
+  const assignmentId = assignmentProgressAssignmentId.value
+  if (!classId || !assignmentId) return
   assignmentProgressLoading.value = true
-  loadingAssignmentProgressId.value = item.assignment.id
+  loadingAssignmentProgressId.value = assignmentId
   try {
-    const res = await getClassAssignmentProgress(classId, item.assignment.id)
+    const res = await getClassAssignmentProgress(classId, assignmentId)
     assignmentProgressDetail.value = res.data
   } catch (error: any) {
     MessagePlugin.error(error?.message || '练习结果加载失败')
-    assignmentProgressVisible.value = false
   } finally {
     assignmentProgressLoading.value = false
     loadingAssignmentProgressId.value = ''
   }
+}
+
+const openAssignmentProgress = async (item: ExamAssignmentSummary) => {
+  if (!currentClassId.value || !item.assignment?.id || !canManageAssignments.value) return
+  assignmentProgressVisible.value = true
+  assignmentProgressDetail.value = null
+  assignmentProgressAssignmentId.value = item.assignment.id
+  await loadAssignmentProgress()
+}
+
+const sendProgressReminders = async (recipientUserId?: string) => {
+  const classId = currentClassId.value
+  const assignmentId = assignmentProgressAssignmentId.value
+  if (!classId || !assignmentId || remindingUserId.value) return
+  remindingUserId.value = recipientUserId || 'all'
+  try {
+    const res = await sendAssignmentReminders(classId, assignmentId, {
+      recipient_user_ids: recipientUserId ? [recipientUserId] : [],
+    })
+    const result = res.data
+    MessagePlugin.success(
+      `已发送 ${result.sent_count} 条提醒，完成跳过 ${result.completed_skipped_count}，限频跳过 ${result.cooldown_skipped_count}`,
+    )
+    await loadAssignmentProgress()
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '催交失败')
+  } finally {
+    remindingUserId.value = ''
+  }
+}
+
+const assignmentReminderTooltip = (row: AssignmentProgressRow) => {
+  if (row.can_remind) return '催交该学生'
+  return row.last_reminded_at ? '24 小时内已催' : '当前不可催交'
 }
 
 const startAssignmentPractice = async (item: ExamAssignmentSummary) => {
@@ -2049,6 +2117,12 @@ onMounted(async () => {
   gap: 16px;
 }
 
+.assignment-progress__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .assignment-progress__summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2119,6 +2193,10 @@ onMounted(async () => {
   }
 
   .assignment-card__actions {
+    justify-content: flex-start;
+  }
+
+  .assignment-progress__toolbar {
     justify-content: flex-start;
   }
 }

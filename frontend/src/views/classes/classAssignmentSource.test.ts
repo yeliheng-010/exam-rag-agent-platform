@@ -55,6 +55,18 @@ test('class detail manages assignment lifecycle and preserves existing attempts'
   assert.match(classDetail, /已截止/)
 })
 
+test('class detail supports bulk and individual assignment reminders', () => {
+  assert.match(classDetail, /sendAssignmentReminders/)
+  assert.match(classDetail, /一键催交/)
+  assert.match(classDetail, /row\.can_remind/)
+  assert.match(classDetail, /row\.status !== 'completed'/)
+  assert.match(classDetail, /name="send"/)
+  assert.match(classDetail, /24 小时内已催/)
+  assert.match(classDetail, /loadAssignmentProgress/)
+  assert.match(classDetail, /completed_skipped_count/)
+  assert.match(classDetail, /cooldown_skipped_count/)
+})
+
 test('exam types include assignment summary and attempt linkage', () => {
   assert.match(examTypes, /ExamClassAssignment/)
   assert.match(examTypes, /ExamAssignmentSummary/)
