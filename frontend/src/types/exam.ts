@@ -17,6 +17,7 @@ export type ExamPracticeAttemptStatus = 'in_progress' | 'completed'
 export type PracticeAnswerReviewStatus = 'unreviewed' | 'reviewing' | 'mastered'
 export type ExamAssignmentStatus = 'published' | 'withdrawn' | 'archived'
 export type ExamAssignmentProgressStatus = 'not_started' | 'in_progress' | 'completed'
+export type ExamAssignmentNotificationKind = 'published' | 'republished' | 'withdrawn' | 'reminder'
 export type ExamEvaluationKind = 'rag' | 'agent'
 
 export interface ExamDomain {
@@ -804,6 +805,8 @@ export interface ExamAssignmentMemberProgress {
   attempt?: ExamPracticeAttempt
   status: ExamAssignmentProgressStatus
   correct_rate: number
+  last_reminded_at?: string
+  can_remind: boolean
 }
 
 export interface ExamAssignmentProgressSummary {
@@ -813,6 +816,45 @@ export interface ExamAssignmentProgressSummary {
   completed_count: number
   average_correct_rate: number
   members: ExamAssignmentMemberProgress[]
+}
+
+export interface ExamAssignmentNotification {
+  id: string
+  tenant_id: number
+  class_id: string
+  assignment_id: string
+  group_id: string
+  recipient_user_id: string
+  actor_user_id: string
+  kind: ExamAssignmentNotificationKind
+  title: string
+  content: string
+  read_at?: string
+  created_at: string
+}
+
+export interface ExamAssignmentNotificationItem {
+  notification: ExamAssignmentNotification
+  last_attempt_id?: string
+  assignment_status: ExamAssignmentStatus
+  assignment_due_at?: string
+  can_start: boolean
+}
+
+export interface ExamAssignmentNotificationList {
+  items: ExamAssignmentNotificationItem[]
+  unread_count: number
+}
+
+export interface SendExamAssignmentReminderRequest {
+  recipient_user_ids: string[]
+}
+
+export interface SendExamAssignmentReminderResult {
+  sent_count: number
+  completed_skipped_count: number
+  cooldown_skipped_count: number
+  sent_user_ids: string[]
 }
 
 export interface ExamPracticeAnswer {
