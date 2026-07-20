@@ -40,6 +40,21 @@ test('class detail replaces homework placeholder with assignment workflow', () =
   assert.doesNotMatch(classDetail, /value:\s*['"]homework['"][\s\S]{0,160}作业闭环将在练习阶段启用/)
 })
 
+test('class detail manages assignment lifecycle and preserves existing attempts', () => {
+  assert.match(classDetail, /assignmentStatusLabel/)
+  assert.match(classDetail, /canEditAssignment/)
+  assert.match(classDetail, /canWithdrawAssignment/)
+  assert.match(classDetail, /canRepublishAssignment/)
+  assert.match(classDetail, /updateClassAssignment/)
+  assert.match(classDetail, /withdrawClassAssignment/)
+  assert.match(classDetail, /republishClassAssignment/)
+  assert.match(classDetail, /DialogPlugin\.confirm/)
+  assert.match(classDetail, /学生入口将隐藏，历史答题不会删除/)
+  assert.match(classDetail, /existingAssignmentAttemptID/)
+  assert.match(classDetail, /canCreateAssignmentAttempt/)
+  assert.match(classDetail, /已截止/)
+})
+
 test('exam types include assignment summary and attempt linkage', () => {
   assert.match(examTypes, /ExamClassAssignment/)
   assert.match(examTypes, /ExamAssignmentSummary/)

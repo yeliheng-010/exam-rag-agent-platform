@@ -288,22 +288,34 @@
               <div v-if="assignments.length" class="assignment-list">
                 <div v-for="item in assignments" :key="item.assignment.id" class="assignment-card">
                   <div class="assignment-card__header">
-                    <div>
+                    <div class="assignment-card__title">
                       <strong>{{ item.assignment.title || assignmentGroupLabel(item) }}</strong>
                       <span>{{ item.bank_name || '题库' }} · {{ assignmentGroupLabel(item) }}</span>
                     </div>
-                    <t-tag variant="light" :theme="item.last_attempt?.status === 'completed' ? 'success' : 'warning'">
-                      {{ assignmentProgress(item) }}
-                    </t-tag>
+                    <t-space size="small">
+                      <t-tag variant="light" :theme="assignmentStatusTheme(item.assignment)">
+                        {{ assignmentStatusLabel(item.assignment) }}
+                      </t-tag>
+                      <t-tag v-if="item.last_attempt" variant="light" :theme="item.last_attempt.status === 'completed' ? 'success' : 'warning'">
+                        {{ assignmentProgress(item) }}
+                      </t-tag>
+                    </t-space>
                   </div>
                   <p v-if="item.assignment.instructions" class="assignment-card__instructions">
                     {{ item.assignment.instructions }}
                   </p>
                   <div class="assignment-card__footer">
                     <span>{{ item.question_count }} 题 · {{ assignmentDueText(item.assignment.due_at) }}</span>
-                    <t-space size="small">
+                    <t-space v-if="canManageAssignments" class="assignment-card__actions" size="small">
                       <t-button
-                        v-if="canManageAssignments"
+                        v-if="canEditAssignment(item.assignment)"
+                        size="small"
+                        variant="text"
+                        @click="openEditAssignmentDialog(item)"
+                      >
+                        编辑
+                      </t-button>
+                      <t-button
                         size="small"
                         variant="outline"
                         :loading="loadingAssignmentProgressId === item.assignment.id"
@@ -312,14 +324,36 @@
                         查看结果
                       </t-button>
                       <t-button
+                        v-if="canWithdrawAssignment(item.assignment)"
+                        size="small"
+                        theme="danger"
+                        variant="text"
+                        :loading="assignmentActionId === item.assignment.id"
+                        @click="confirmWithdrawAssignment(item)"
+                      >
+                        撤回
+                      </t-button>
+                      <t-button
+                        v-if="item.assignment.status === 'withdrawn'"
                         size="small"
                         theme="primary"
-                        :loading="startingAssignmentId === item.assignment.id"
-                        @click="startAssignmentPractice(item)"
+                        :disabled="!canRepublishAssignment(item.assignment)"
+                        :loading="assignmentActionId === item.assignment.id"
+                        @click="submitRepublishAssignment(item)"
                       >
-                        {{ item.last_attempt ? '继续练习' : '开始练习' }}
+                        重新发布
                       </t-button>
                     </t-space>
+                    <t-button
+                      v-else
+                      size="small"
+                      theme="primary"
+                      :disabled="!existingAssignmentAttemptID(item) && !canCreateAssignmentAttempt(item)"
+                      :loading="startingAssignmentId === item.assignment.id"
+                      @click="startAssignmentPractice(item)"
+                    >
+                      {{ assignmentStartLabel(item) }}
+                    </t-button>
                   </div>
                 </div>
               </div>
@@ -626,14 +660,15 @@
 
     <t-dialog
       v-model:visible="assignmentVisible"
-      header="发布练习任务"
+      :header="assignmentDialogTitle"
       width="min(720px, calc(100vw - 16px))"
-      :confirm-btn="{ content: '发布', loading: creatingAssignment }"
+      :confirm-btn="{ content: assignmentConfirmLabel, loading: creatingAssignment }"
       @confirm="submitCreateAssignment"
     >
       <t-form ref="assignmentFormRef" class="assignment-form" :data="assignmentForm" :rules="assignmentRules" label-align="top">
         <t-form-item class="assignment-group-control" label="练习题组" name="group_id">
           <t-select
+            v-if="assignmentMode === 'create'"
             v-model="assignmentForm.group_id"
             :loading="assignmentGroupsLoading"
             placeholder="选择一个已确认的正式题组"
@@ -647,13 +682,18 @@
               :label="assignmentGroupOptionLabel(item)"
             />
           </t-select>
+          <t-input
+            v-else
+            :value="editingAssignment ? assignmentGroupLabel(editingAssignment) : assignmentForm.group_id"
+            readonly
+          />
           <t-alert
-            v-if="!assignmentGroupsLoading && !assignmentGroups.length"
+            v-if="assignmentMode === 'create' && !assignmentGroupsLoading && !assignmentGroups.length"
             theme="info"
             message="暂无可发布题组，请先在题库中心完成试卷结构化并确认题组。"
           />
           <t-alert
-            v-else-if="!assignmentGroupsLoading && hasImportableAssignmentGroups"
+            v-else-if="assignmentMode === 'create' && !assignmentGroupsLoading && hasImportableAssignmentGroups"
             theme="info"
             message="选择可导入题组发布时，系统会自动复制到当前班级空间后再生成练习任务。"
           />
@@ -734,7 +774,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import type { FormInstanceFunctions, FormRule } from 'tdesign-vue-next'
 import { approveExamClassMember, getExamClass, listExamClassMembers, rejectExamClassMember } from '@/api/exam/class'
 import { listExamDomains, listExamSubjects } from '@/api/exam/domain'
@@ -748,14 +788,27 @@ import {
   createClassAssignment,
   getClassAssignmentProgress,
   listClassAssignments,
+  republishClassAssignment,
+  updateClassAssignment,
+  withdrawClassAssignment,
 } from '@/api/exam/assignment'
 import { listPracticeQuestionGroups } from '@/api/exam/practice'
 import { listKnowledgeBases, listKnowledgeFiles } from '@/api/knowledge-base'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
 import ClassPracticeRecommendations from './ClassPracticeRecommendations.vue'
+import {
+  assignmentLifecycleState,
+  assignmentStatusLabel,
+  canCreateAssignmentAttempt,
+  canEditAssignment,
+  canRepublishAssignment,
+  canWithdrawAssignment,
+  existingAssignmentAttemptID,
+} from './assignmentLifecycle'
 import { memberDisplayId, memberDisplayName } from './memberDisplay'
 import type {
+  ExamClassAssignment,
   ExamClass,
   ExamClassAnalyticsAssignment,
   ExamClassAnalyticsSummary,
@@ -822,6 +875,7 @@ const reviewingUserId = ref('')
 const extractingTaskId = ref('')
 const startingAssignmentId = ref('')
 const loadingAssignmentProgressId = ref('')
+const assignmentActionId = ref('')
 const activeTab = ref('overview')
 const classInfo = ref<ExamClass | null>(null)
 const members = ref<ExamClassMember[]>([])
@@ -844,10 +898,14 @@ const bindVisible = ref(false)
 const materialVisible = ref(false)
 const assignmentVisible = ref(false)
 const assignmentProgressVisible = ref(false)
+const assignmentMode = ref<'create' | 'edit'>('create')
+const editingAssignment = ref<ExamAssignmentSummary | null>(null)
 const canReviewMembers = computed(() => authStore.hasRole('contributor'))
 const canManageResources = computed(() => authStore.hasRole('contributor'))
 const canManageAssignments = computed(() => authStore.hasRole('contributor'))
 const canViewAnalytics = computed(() => authStore.hasRole('contributor'))
+const assignmentDialogTitle = computed(() => assignmentMode.value === 'edit' ? '编辑练习任务' : '发布练习任务')
+const assignmentConfirmLabel = computed(() => assignmentMode.value === 'edit' ? '保存' : '发布')
 const currentClassId = computed(() => String(route.params.classId || ''))
 const hasImportableAssignmentGroups = computed(() => {
   const classSpaceId = classInfo.value?.space_id
@@ -1001,9 +1059,12 @@ const materialRules: Record<string, FormRule[]> = {
   domain_id: [{ required: true, message: '请选择考试方向', type: 'error' }],
 }
 
-const assignmentRules: Record<string, FormRule[]> = {
+const assignmentRules = computed<Record<string, FormRule[]>>(() => ({
   group_id: [{ required: true, message: '请选择题组', type: 'error' }],
-}
+  ...(assignmentMode.value === 'edit'
+    ? { title: [{ required: true, message: '请输入任务标题', type: 'error' }] }
+    : {}),
+}))
 
 const formatDate = (value?: string) => {
   if (!value) return ''
@@ -1335,6 +1396,18 @@ const assignmentProgress = (item: ExamAssignmentSummary) => {
   return `进行中 ${attempt.answered_count}/${attempt.question_count}`
 }
 
+const assignmentStatusTheme = (assignment: ExamClassAssignment) => {
+  const state = assignmentLifecycleState(assignment)
+  if (state === 'active') return 'success'
+  if (state === 'expired') return 'warning'
+  return 'default'
+}
+
+const assignmentStartLabel = (item: ExamAssignmentSummary) => {
+  if (existingAssignmentAttemptID(item)) return '继续练习'
+  return assignmentLifecycleState(item.assignment) === 'expired' ? '已截止' : '开始练习'
+}
+
 const assignmentDueText = (value?: string) => {
   if (!value) return '不限截止'
   const date = new Date(value)
@@ -1355,8 +1428,18 @@ const normalizeAssignmentDueAt = (value: string) => {
   return normalized
 }
 
+const assignmentDueInput = (value?: string) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
 const openAssignmentDialog = async () => {
   if (!canManageAssignments.value) return
+  assignmentMode.value = 'create'
+  editingAssignment.value = null
   assignmentForm.value = {
     group_id: '',
     title: '',
@@ -1367,8 +1450,23 @@ const openAssignmentDialog = async () => {
   await loadAssignmentGroups()
 }
 
+const openEditAssignmentDialog = (item: ExamAssignmentSummary) => {
+  if (!canManageAssignments.value || !canEditAssignment(item.assignment)) return
+  assignmentMode.value = 'edit'
+  editingAssignment.value = item
+  assignmentForm.value = {
+    group_id: item.assignment.group_id,
+    title: item.assignment.title,
+    instructions: item.assignment.instructions || '',
+    due_at: assignmentDueInput(item.assignment.due_at),
+  }
+  assignmentVisible.value = true
+}
+
 const prefillRecommendedAssignment = async (recommendation: ExamPracticeRecommendation) => {
   if (!canManageAssignments.value || !recommendation.group?.group?.id) return
+  assignmentMode.value = 'create'
+  editingAssignment.value = null
   await loadAssignmentGroups()
   const groupID = recommendation.group.group.id
   if (!assignmentGroups.value.some(item => item.group.id === groupID)) {
@@ -1389,19 +1487,70 @@ const submitCreateAssignment = async () => {
 
   creatingAssignment.value = true
   try {
-    await createClassAssignment(classId, {
-      group_id: assignmentForm.value.group_id,
-      title: assignmentForm.value.title.trim() || undefined,
-      instructions: assignmentForm.value.instructions.trim() || undefined,
-      due_at: normalizeAssignmentDueAt(assignmentForm.value.due_at),
-    })
-    MessagePlugin.success('练习任务已发布')
+    if (assignmentMode.value === 'edit' && editingAssignment.value) {
+      await updateClassAssignment(classId, editingAssignment.value.assignment.id, {
+        title: assignmentForm.value.title.trim(),
+        instructions: assignmentForm.value.instructions.trim(),
+        due_at: normalizeAssignmentDueAt(assignmentForm.value.due_at) || null,
+      })
+      MessagePlugin.success('练习任务已更新')
+    } else {
+      await createClassAssignment(classId, {
+        group_id: assignmentForm.value.group_id,
+        title: assignmentForm.value.title.trim() || undefined,
+        instructions: assignmentForm.value.instructions.trim() || undefined,
+        due_at: normalizeAssignmentDueAt(assignmentForm.value.due_at),
+      })
+      MessagePlugin.success('练习任务已发布')
+    }
     assignmentVisible.value = false
     await loadAssignments()
   } catch (error: any) {
-    MessagePlugin.error(error?.message || '发布练习任务失败')
+    MessagePlugin.error(error?.message || (assignmentMode.value === 'edit' ? '更新练习任务失败' : '发布练习任务失败'))
+    if (error?.status === 409) await loadAssignments()
   } finally {
     creatingAssignment.value = false
+  }
+}
+
+const confirmWithdrawAssignment = (item: ExamAssignmentSummary) => {
+  const classId = String(route.params.classId || '')
+  if (!classId || !canWithdrawAssignment(item.assignment)) return
+  const confirmDialog = DialogPlugin.confirm({
+    header: '撤回练习任务',
+    body: '学生入口将隐藏，历史答题不会删除。',
+    confirmBtn: { content: '确认撤回', theme: 'danger' },
+    theme: 'warning',
+    onConfirm: async () => {
+      assignmentActionId.value = item.assignment.id
+      try {
+        await withdrawClassAssignment(classId, item.assignment.id)
+        MessagePlugin.success('练习任务已撤回')
+        await loadAssignments()
+        confirmDialog.destroy()
+      } catch (error: any) {
+        MessagePlugin.error(error?.message || '撤回练习任务失败')
+        if (error?.status === 409) await loadAssignments()
+      } finally {
+        assignmentActionId.value = ''
+      }
+    },
+  })
+}
+
+const submitRepublishAssignment = async (item: ExamAssignmentSummary) => {
+  const classId = String(route.params.classId || '')
+  if (!classId || !canRepublishAssignment(item.assignment)) return
+  assignmentActionId.value = item.assignment.id
+  try {
+    await republishClassAssignment(classId, item.assignment.id)
+    MessagePlugin.success('练习任务已重新发布')
+    await loadAssignments()
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '重新发布练习任务失败')
+    if (error?.status === 409) await loadAssignments()
+  } finally {
+    assignmentActionId.value = ''
   }
 }
 
@@ -1426,6 +1575,12 @@ const openAssignmentProgress = async (item: ExamAssignmentSummary) => {
 
 const startAssignmentPractice = async (item: ExamAssignmentSummary) => {
   if (!item.assignment?.id) return
+  const existingAttemptId = existingAssignmentAttemptID(item)
+  if (existingAttemptId) {
+    router.push(`/platform/practice/question-groups/${item.assignment.group_id}?attempt_id=${existingAttemptId}`)
+    return
+  }
+  if (!canCreateAssignmentAttempt(item)) return
   startingAssignmentId.value = item.assignment.id
   try {
     const res = await createAssignmentAttempt(item.assignment.id)
@@ -1836,6 +1991,11 @@ onMounted(async () => {
 }
 
 .assignment-card__header {
+  .assignment-card__title {
+    min-width: 0;
+    flex: 1;
+  }
+
   strong {
     display: block;
     overflow: hidden;
@@ -1875,6 +2035,12 @@ onMounted(async () => {
     color: var(--td-text-color-placeholder);
     font-size: 12px;
   }
+}
+
+.assignment-card__actions {
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .assignment-progress {
@@ -1944,6 +2110,16 @@ onMounted(async () => {
   .panel-title-row,
   .section-title-row {
     flex-direction: column;
+  }
+
+  .assignment-card__header,
+  .assignment-card__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .assignment-card__actions {
+    justify-content: flex-start;
   }
 }
 </style>

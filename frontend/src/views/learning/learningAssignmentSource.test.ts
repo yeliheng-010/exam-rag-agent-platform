@@ -22,3 +22,14 @@ test('assignment API exposes student task attempt creation', () => {
   assert.match(assignmentApi, /ExamAssignmentSummary/)
   assert.match(assignmentApi, /CreatePracticeAttemptResult/)
 })
+
+test('student assignment entry continues existing attempts and blocks expired starts', () => {
+  assert.match(learningHome, /existingAssignmentAttemptID/)
+  assert.match(learningHome, /canCreateAssignmentAttempt/)
+  assert.match(learningHome, /assignmentLifecycleState/)
+  assert.match(learningHome, /已截止/)
+  assert.match(
+    learningHome,
+    /existingAttemptId[\s\S]{0,500}attempt_id=\$\{existingAttemptId\}[\s\S]{0,300}return[\s\S]{0,300}canCreateAssignmentAttempt[\s\S]{0,300}createAssignmentAttempt/,
+  )
+})

@@ -121,9 +121,14 @@
                 <strong>{{ item.assignment.title || assignmentGroupLabel(item) }}</strong>
                 <span>{{ item.bank_name || '题库' }} · {{ assignmentGroupLabel(item) }} · {{ item.question_count }} 题</span>
               </div>
-              <t-tag variant="light" :theme="item.last_attempt?.status === 'completed' ? 'success' : 'warning'">
-                {{ assignmentProgress(item) }}
-              </t-tag>
+              <t-space size="small">
+                <t-tag variant="light" :theme="assignmentLifecycleTheme(item)">
+                  {{ assignmentStatusLabel(item.assignment) }}
+                </t-tag>
+                <t-tag v-if="item.last_attempt" variant="light" :theme="item.last_attempt.status === 'completed' ? 'success' : 'warning'">
+                  {{ assignmentProgress(item) }}
+                </t-tag>
+              </t-space>
             </div>
             <div class="practice-card__material">
               {{ item.assignment.instructions || item.group?.material_text || item.group?.title || '老师发布的班级练习任务' }}
@@ -133,10 +138,11 @@
               <t-button
                 size="small"
                 theme="primary"
+                :disabled="!existingAssignmentAttemptID(item) && !canCreateAssignmentAttempt(item)"
                 :loading="startingAssignmentId === item.assignment.id"
                 @click="goAssignmentPractice(item)"
               >
-                {{ item.last_attempt ? '继续任务' : '开始任务' }}
+                {{ assignmentStartLabel(item) }}
               </t-button>
             </div>
           </div>
@@ -224,6 +230,12 @@ import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import type { KnowledgeBaseInfo } from '@/api/auth'
 import type { ExamAssignmentSummary, ExamClass, ExamDomain, ExamMaterialType, ExamSpace, ExamSpaceResource, QuestionBank, QuestionGroupPracticeSummary, QuestionGroupType, ReviewStatus } from '@/types/exam'
+import {
+  assignmentLifecycleState,
+  assignmentStatusLabel,
+  canCreateAssignmentAttempt,
+  existingAssignmentAttemptID,
+} from '../classes/assignmentLifecycle'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -330,6 +342,15 @@ const assignmentProgress = (item: ExamAssignmentSummary) => {
   return `进行中 ${attempt.answered_count}/${attempt.question_count}`
 }
 
+const assignmentLifecycleTheme = (item: ExamAssignmentSummary) => {
+  return assignmentLifecycleState(item.assignment) === 'expired' ? 'warning' : 'success'
+}
+
+const assignmentStartLabel = (item: ExamAssignmentSummary) => {
+  if (existingAssignmentAttemptID(item)) return '继续任务'
+  return assignmentLifecycleState(item.assignment) === 'expired' ? '已截止' : '开始任务'
+}
+
 const assignmentDueText = (value?: string) => {
   if (!value) return '不限截止'
   const date = new Date(value)
@@ -343,6 +364,12 @@ const goPractice = (groupId: string) => {
 
 const goAssignmentPractice = async (item: ExamAssignmentSummary) => {
   if (!item.assignment?.id) return
+  const existingAttemptId = existingAssignmentAttemptID(item)
+  if (existingAttemptId) {
+    router.push(`/platform/practice/question-groups/${item.assignment.group_id}?attempt_id=${existingAttemptId}`)
+    return
+  }
+  if (!canCreateAssignmentAttempt(item)) return
   startingAssignmentId.value = item.assignment.id
   try {
     const res = await createAssignmentAttempt(item.assignment.id)
@@ -530,6 +557,7 @@ onMounted(loadData)
 }
 
 .assignment-card {
+  min-width: 0;
   border-color: var(--td-brand-color-4);
 }
 
@@ -640,6 +668,11 @@ onMounted(loadData)
 
 .resource-card-main,
 .practice-card__main {
+  > div {
+    min-width: 0;
+    flex: 1;
+  }
+
   strong {
     display: block;
     overflow: hidden;
@@ -694,6 +727,12 @@ onMounted(loadData)
 @media (max-width: 720px) {
   .panel-title,
   .panel-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .practice-card__main,
+  .practice-card__footer {
     align-items: stretch;
     flex-direction: column;
   }
