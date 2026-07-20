@@ -55,8 +55,12 @@ func RegisterExamRoutes(
 		exam.POST("/classes/:class_id/assignments/:assignment_id/withdraw", g.Viewer(), assignmentHandler.WithdrawAssignment)
 		exam.POST("/classes/:class_id/assignments/:assignment_id/republish", g.Viewer(), assignmentHandler.RepublishAssignment)
 		exam.GET("/classes/:class_id/assignments/:assignment_id/progress", g.Viewer(), assignmentHandler.GetAssignmentProgress)
+		exam.POST("/classes/:class_id/assignments/:assignment_id/reminders", g.Viewer(), assignmentHandler.SendAssignmentReminders)
 		exam.GET("/assignments", g.Viewer(), assignmentHandler.ListMyAssignments)
 		exam.POST("/assignments/:assignment_id/attempts", g.Viewer(), assignmentHandler.CreateAssignmentAttempt)
+		exam.GET("/notifications", g.Viewer(), assignmentHandler.ListAssignmentNotifications)
+		exam.POST("/notifications/read-all", g.Viewer(), assignmentHandler.MarkAllAssignmentNotificationsRead)
+		exam.POST("/notifications/:notification_id/read", g.Viewer(), assignmentHandler.MarkAssignmentNotificationRead)
 
 		exam.GET("/question-banks", g.Contributor(), questionHandler.ListQuestionBanks)
 		exam.POST("/question-banks", g.Contributor(), questionHandler.CreateQuestionBank)

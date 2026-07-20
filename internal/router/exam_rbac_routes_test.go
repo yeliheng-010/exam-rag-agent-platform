@@ -148,6 +148,10 @@ func TestExamAssignmentRouteGuardSourceMatrix(t *testing.T) {
 		`exam.GET("/classes/:class_id/assignments/:assignment_id/progress", g.Viewer(), assignmentHandler.GetAssignmentProgress)`,
 		`exam.GET("/assignments", g.Viewer(), assignmentHandler.ListMyAssignments)`,
 		`exam.POST("/assignments/:assignment_id/attempts", g.Viewer(), assignmentHandler.CreateAssignmentAttempt)`,
+		`exam.POST("/classes/:class_id/assignments/:assignment_id/reminders", g.Viewer(), assignmentHandler.SendAssignmentReminders)`,
+		`exam.GET("/notifications", g.Viewer(), assignmentHandler.ListAssignmentNotifications)`,
+		`exam.POST("/notifications/read-all", g.Viewer(), assignmentHandler.MarkAllAssignmentNotificationsRead)`,
+		`exam.POST("/notifications/:notification_id/read", g.Viewer(), assignmentHandler.MarkAssignmentNotificationRead)`,
 	})
 }
 

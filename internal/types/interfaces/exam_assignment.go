@@ -16,6 +16,10 @@ type ExamAssignmentService interface {
 	ListMyAssignments(ctx context.Context, tenantID uint64, userID string, filter types.ListExamAssignmentsFilter) ([]*types.ExamAssignmentSummary, error)
 	CreateAssignmentAttempt(ctx context.Context, tenantID uint64, userID string, assignmentID string) (*types.CreatePracticeAttemptResult, error)
 	GetAssignmentProgress(ctx context.Context, tenantID uint64, userID string, classID string, assignmentID string) (*types.ExamAssignmentProgressSummary, error)
+	SendAssignmentReminders(ctx context.Context, tenantID uint64, userID, classID, assignmentID string, req *types.SendExamAssignmentReminderRequest) (*types.SendExamAssignmentReminderResult, error)
+	ListAssignmentNotifications(ctx context.Context, tenantID uint64, userID string, limit int) (*types.ExamAssignmentNotificationList, error)
+	MarkAssignmentNotificationRead(ctx context.Context, tenantID uint64, userID, notificationID string) error
+	MarkAllAssignmentNotificationsRead(ctx context.Context, tenantID uint64, userID string) error
 }
 
 type ExamAssignmentRepository interface {
