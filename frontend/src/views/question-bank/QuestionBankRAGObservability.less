@@ -29,6 +29,12 @@
   }
 }
 
+.rag-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .parameter-band {
   display: grid;
   grid-template-columns: 180px repeat(2, minmax(220px, 1fr));
@@ -254,6 +260,11 @@
 
   .rag-header {
     display: grid;
+  }
+
+  .rag-header__actions {
+    align-items: stretch;
+    justify-content: space-between;
   }
 
   .parameter-band,

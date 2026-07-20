@@ -126,6 +126,7 @@ type SyncTaskParams struct {
 	WikiIngest                interfaces.TaskHandler `name:"wikiIngest"`
 	QuestionGroupDraftService interfaces.ExamQuestionGroupDraftService
 	RAGEvaluationService      interfaces.ExamRAGEvaluationService
+	AgentEvaluationService    interfaces.ExamAgentEvaluationService
 }
 
 // RegisterSyncHandlers registers all task handlers on the SyncTaskExecutor.
@@ -139,6 +140,7 @@ func RegisterSyncHandlers(params SyncTaskParams) {
 	params.Executor.RegisterHandler(types.TypeQuestionGeneration, params.KnowledgeService.ProcessQuestionGeneration)
 	params.Executor.RegisterHandler(types.TypeExamQuestionGroupExtraction, params.QuestionGroupDraftService.ProcessExtractionTask)
 	params.Executor.RegisterHandler(types.TypeExamRAGEvaluationRun, params.RAGEvaluationService.ProcessRunTask)
+	params.Executor.RegisterHandler(types.TypeExamAgentEvaluationRun, params.AgentEvaluationService.ProcessRunTask)
 	params.Executor.RegisterHandler(types.TypeSummaryGeneration, params.KnowledgeService.ProcessSummaryGeneration)
 	params.Executor.RegisterHandler(types.TypeKBClone, params.KnowledgeService.ProcessKBClone)
 	params.Executor.RegisterHandler(types.TypeKnowledgeMove, params.KnowledgeService.ProcessKnowledgeMove)

@@ -73,7 +73,7 @@ func (s *examRAGEvaluationService) ListRuns(
 	if err := s.authorizeBank(ctx, tenantID, userID, bankID); err != nil {
 		return nil, err
 	}
-	runs, err := s.repo.ListRuns(ctx, tenantID, strings.TrimSpace(bankID), limit)
+	runs, err := s.repo.ListRuns(ctx, tenantID, strings.TrimSpace(bankID), types.ExamEvaluationKindRAG, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (s *examRAGEvaluationService) GetRun(
 	if err := s.authorizeBank(ctx, tenantID, userID, bankID); err != nil {
 		return nil, err
 	}
-	return s.repo.GetRun(ctx, tenantID, strings.TrimSpace(bankID), strings.TrimSpace(runID))
+	return s.repo.GetRun(ctx, tenantID, strings.TrimSpace(bankID), types.ExamEvaluationKindRAG, strings.TrimSpace(runID))
 }
 
 func (s *examRAGEvaluationService) authorizeBank(
@@ -125,6 +125,7 @@ func newExamRAGEvaluationRun(
 	now := time.Now().UTC()
 	return &types.ExamRAGEvaluationRun{
 		ID: uuid.NewString(), TenantID: tenantID, QuestionBankID: preparation.QuestionBank.ID,
+		EvaluationKind: types.ExamEvaluationKindRAG,
 		CreatedBy: userID, Status: types.ExamRAGEvaluationRunStatusQueued,
 		Progress: progress, RequestSnapshot: request, CreatedAt: now, UpdatedAt: now,
 	}, nil
@@ -185,7 +186,7 @@ func (s *examRAGEvaluationService) failQueuedRun(
 	run.ErrorMessage = cause.Error()
 	run.CompletedAt = &now
 	run.UpdatedAt = now
-	if err := s.repo.UpdateRun(context.WithoutCancel(ctx), run.TenantID, run.QuestionBankID, run); err != nil {
+	if err := s.repo.UpdateRun(context.WithoutCancel(ctx), run.TenantID, run.QuestionBankID, types.ExamEvaluationKindRAG, run); err != nil {
 		return errors.Join(cause, err)
 	}
 	return cause

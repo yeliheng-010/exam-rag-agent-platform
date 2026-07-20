@@ -460,6 +460,17 @@
   line-height: 18px;
 }
 
+.question-answer__item {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 4px;
+
+  > span {
+    flex-shrink: 0;
+  }
+}
+
 .pipeline {
   display: flex;
   flex-direction: column;
@@ -670,6 +681,10 @@
   .question-option :deep(.t-tag) {
     grid-column: 2;
     width: fit-content;
+  }
+
+  .question-option__content :deep(.katex) {
+    font-size: 0.78em;
   }
 
   .question-review__toolbar {

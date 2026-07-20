@@ -30,6 +30,7 @@ export const useMenuStore = defineStore('menuStore', () => {
     { title: '', titleKey: 'menu.learning', icon: 'zhishiku', path: 'learning' },
     { title: '', titleKey: 'menu.classes', icon: 'organization', path: 'classes' },
     { title: '', titleKey: 'menu.questionBank', icon: 'zhishiku', path: 'question-banks', minRole: 'contributor' },
+    { title: '', titleKey: 'menu.evaluations', icon: 'integration', path: 'evaluations', minRole: 'contributor' },
     { title: '', titleKey: 'menu.knowledgeBase', icon: 'zhishiku', path: 'knowledge-bases', minRole: 'contributor' },
     { title: '', titleKey: 'menu.agents', icon: 'agent', path: 'agents', minRole: 'contributor' },
     { title: '', titleKey: 'menu.analytics', icon: 'integration', path: 'analytics', minRole: 'admin' },

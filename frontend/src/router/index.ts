@@ -141,6 +141,18 @@ const router = createRouter({
           meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
         },
         {
+          path: "question-banks/:bankId/agent-evaluation",
+          name: "questionBankAgentEvaluation",
+          component: () => import("../views/question-bank/QuestionBankAgentEvaluation.vue"),
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
+        },
+        {
+          path: "evaluations",
+          name: "evaluationCenter",
+          component: () => import("../views/evaluation/EvaluationCenter.vue"),
+          meta: { requiresInit: true, requiresAuth: true, minRole: 'contributor' as RoleKey }
+        },
+        {
           path: "structuring-tasks/:taskId/review",
           name: "questionDraftReview",
           component: () => import("../views/question-draft/QuestionDraftReview.vue"),

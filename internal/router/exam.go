@@ -17,6 +17,8 @@ func RegisterExamRoutes(
 	questionHandler *handler.ExamQuestionHandler,
 	ragDiagnosticHandler *handler.ExamRAGDiagnosticHandler,
 	ragEvaluationHandler *handler.ExamRAGEvaluationHandler,
+	agentEvaluationHandler *handler.ExamAgentEvaluationHandler,
+	evaluationCenterHandler *handler.ExamEvaluationCenterHandler,
 	practiceHandler *handler.ExamPracticeHandler,
 	questionDraftHandler *handler.ExamQuestionDraftHandler,
 	questionGroupDraftHandler *handler.ExamQuestionGroupDraftHandler,
@@ -62,6 +64,16 @@ func RegisterExamRoutes(
 		exam.POST("/question-banks/:bank_id/rag-evaluation-runs", g.Contributor(), ragEvaluationHandler.CreateRun)
 		exam.GET("/question-banks/:bank_id/rag-evaluation-runs", g.Contributor(), ragEvaluationHandler.ListRuns)
 		exam.GET("/question-banks/:bank_id/rag-evaluation-runs/:run_id", g.Contributor(), ragEvaluationHandler.GetRun)
+		exam.POST("/question-banks/:bank_id/agent-evaluation-runs", g.Contributor(), agentEvaluationHandler.CreateRun)
+		exam.GET("/question-banks/:bank_id/agent-evaluation-runs", g.Contributor(), agentEvaluationHandler.ListRuns)
+		exam.GET("/question-banks/:bank_id/agent-evaluation-runs/:run_id", g.Contributor(), agentEvaluationHandler.GetRun)
+
+		exam.GET("/evaluation-center", g.Contributor(), evaluationCenterHandler.GetCenter)
+		exam.PUT("/evaluation-center/baseline", g.Contributor(), evaluationCenterHandler.SetBaseline)
+		exam.GET("/evaluation-sets", g.Contributor(), evaluationCenterHandler.ListEvaluationSets)
+		exam.POST("/evaluation-sets", g.Contributor(), evaluationCenterHandler.CreateEvaluationSet)
+		exam.POST("/evaluation-sets/:set_id/versions", g.Contributor(), evaluationCenterHandler.CreateEvaluationSetVersion)
+		exam.POST("/evaluation-sets/:set_id/runs", g.Contributor(), evaluationCenterHandler.RunEvaluationSet)
 
 		exam.GET("/practice/question-groups", g.Viewer(), practiceHandler.ListQuestionGroups)
 		exam.GET("/practice/recommendations", g.Viewer(), interventionHandler.GetStudentRecommendations)

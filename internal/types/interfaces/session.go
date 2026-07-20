@@ -57,6 +57,9 @@ type SessionService interface {
 	SearchKnowledge(ctx context.Context, knowledgeBaseIDs []string, knowledgeIDs []string, query string) ([]*types.SearchResult, error)
 	// AgentQA performs agent-based question answering with conversation history and streaming support.
 	AgentQA(ctx context.Context, req *types.QARequest, eventBus *event.EventBus) error
+	// ExecuteAgentEvaluation runs the production Agent path and returns its state
+	// without requiring the caller to persist a chat session or messages.
+	ExecuteAgentEvaluation(ctx context.Context, req *types.QARequest, eventBus *event.EventBus) (*types.AgentState, error)
 }
 
 // SessionRepository defines the session repository interface

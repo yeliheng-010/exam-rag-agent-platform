@@ -43,6 +43,7 @@ const (
 	TypeWikiIngest                  = "wiki:ingest"            // Wiki 页面同步任务
 	TypeExamQuestionGroupExtraction = "exam:question_group_extract"
 	TypeExamRAGEvaluationRun        = "exam:rag_evaluation_run"
+	TypeExamAgentEvaluationRun      = "exam:agent_evaluation_run"
 )
 
 type ExamQuestionGroupExtractionPayload struct {
@@ -54,6 +55,10 @@ type ExamQuestionGroupExtractionPayload struct {
 }
 
 type ExamRAGEvaluationTaskPayload struct {
+	RunID string `json:"run_id"`
+}
+
+type ExamAgentEvaluationTaskPayload struct {
 	RunID string `json:"run_id"`
 }
 

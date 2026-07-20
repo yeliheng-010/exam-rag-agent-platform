@@ -424,6 +424,8 @@ const isMenuItemActive = (itemPath: string): boolean => {
             return currentRoute === 'classList' || currentRoute === 'classDetail';
         case 'question-banks':
             return currentRoute === 'questionBankList' || currentRoute === 'questionBankDetail';
+        case 'evaluations':
+            return currentRoute === 'evaluationCenter';
         case 'analytics':
             return currentRoute === 'analyticsHome';
         case 'billing':
@@ -471,6 +473,7 @@ const topMenuItems = computed<MenuItem[]>(() => {
         item.path === 'learning' ||
         item.path === 'classes' ||
         item.path === 'question-banks' ||
+        item.path === 'evaluations' ||
         item.path === 'knowledge-bases' ||
         item.path === 'agents' ||
         item.path === 'analytics' ||
@@ -490,6 +493,7 @@ const bottomMenuItems = computed<MenuItem[]>(() => {
             item.path === 'learning' ||
             item.path === 'classes' ||
             item.path === 'question-banks' ||
+            item.path === 'evaluations' ||
             item.path === 'knowledge-bases' ||
             item.path === 'agents' ||
             item.path === 'analytics' ||
@@ -1139,6 +1143,8 @@ const handleMenuClick = async (path: string) => {
         router.push('/platform/classes')
     } else if (path === 'question-banks') {
         router.push('/platform/question-banks')
+    } else if (path === 'evaluations') {
+        router.push('/platform/evaluations')
     } else if (path === 'analytics') {
         router.push('/platform/analytics')
     } else if (path === 'billing') {

@@ -1,5 +1,5 @@
 import { get, post } from '@/utils/request'
-import type { ApiResponse, ExamRAGDiagnosticCase, ExamRAGDiagnosticResult, ExamRAGEvaluationRun, QuestionBank, QuestionDetail, RunExamRAGEvaluationPayload } from '@/types/exam'
+import type { ApiResponse, ExamAgentEvaluationRun, ExamRAGDiagnosticCase, ExamRAGDiagnosticResult, ExamRAGEvaluationRun, QuestionBank, QuestionDetail, RunExamAgentEvaluationPayload, RunExamRAGEvaluationPayload } from '@/types/exam'
 
 export interface CreateQuestionBankPayload {
   space_id: string
@@ -44,6 +44,18 @@ export function listQuestionBankRAGEvaluationRuns(bankId: string, limit = 20) {
 
 export function getQuestionBankRAGEvaluationRun(bankId: string, runId: string) {
 	return get(`/api/v1/exam/question-banks/${bankId}/rag-evaluation-runs/${runId}`) as unknown as Promise<ApiResponse<ExamRAGEvaluationRun>>
+}
+
+export function createQuestionBankAgentEvaluationRun(bankId: string, data: RunExamAgentEvaluationPayload) {
+  return post(`/api/v1/exam/question-banks/${bankId}/agent-evaluation-runs`, data) as unknown as Promise<ApiResponse<ExamAgentEvaluationRun>>
+}
+
+export function listQuestionBankAgentEvaluationRuns(bankId: string, limit = 20) {
+  return get(`/api/v1/exam/question-banks/${bankId}/agent-evaluation-runs?limit=${limit}`) as unknown as Promise<ApiResponse<ExamAgentEvaluationRun[]>>
+}
+
+export function getQuestionBankAgentEvaluationRun(bankId: string, runId: string) {
+  return get(`/api/v1/exam/question-banks/${bankId}/agent-evaluation-runs/${runId}`) as unknown as Promise<ApiResponse<ExamAgentEvaluationRun>>
 }
 
 export { listQuestionGroupDetails } from './question-group'

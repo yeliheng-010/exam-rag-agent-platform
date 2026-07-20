@@ -112,7 +112,7 @@
                   class="question-group-material__body"
                   :class="{ 'is-expanded': isMaterialExpanded(group), 'is-collapsible': canToggleMaterial(group) }"
                 >
-                  {{ group.group.material_text }}
+                  <ExamRichText :content="group.group.material_text" />
                 </div>
               </section>
 
@@ -168,7 +168,7 @@
                 <article v-for="item in visibleQuestions(group)" :key="item.question.id" class="question-item">
                   <div class="question-item__no">{{ questionNo(item) }}</div>
                   <div class="question-item__content">
-                    <p class="question-stem">{{ item.question.stem }}</p>
+                    <ExamRichText class="question-stem" :content="item.question.stem" inline />
                     <div v-if="item.options?.length" class="question-options">
                       <div
                         v-for="option in item.options"
@@ -177,15 +177,21 @@
                         :class="{ 'is-correct': isCorrectOption(item, option.option_key) }"
                       >
                         <span class="question-option__key">{{ option.option_key }}</span>
-                        <span class="question-option__content">{{ option.content }}</span>
+                        <ExamRichText class="question-option__content" :content="option.content" inline />
                         <t-tag v-if="isCorrectOption(item, option.option_key)" size="small" theme="success" variant="light">
                           正确答案
                         </t-tag>
                       </div>
                     </div>
                     <div class="question-answer">
-                      <span>答案：{{ answerSummary(item) }}</span>
-                      <span v-if="explanationSummary(item)">解析：{{ explanationSummary(item) }}</span>
+                      <div class="question-answer__item">
+                        <span>答案：</span>
+                        <ExamRichText :content="answerSummary(item)" inline />
+                      </div>
+                      <div v-if="explanationSummary(item)" class="question-answer__item">
+                        <span>解析：</span>
+                        <ExamRichText :content="explanationSummary(item)" inline />
+                      </div>
                     </div>
                   </div>
                 </article>
@@ -327,6 +333,10 @@
               <template #icon><t-icon name="chart-bubble" /></template>
               进入评测中心
             </t-button>
+            <t-button class="rag-observability-entry" variant="outline" block @click="openAgentEvaluationCenter">
+              <template #icon><t-icon name="system-sum" /></template>
+              Agent 行为评测
+            </t-button>
           </section>
         </aside>
       </div>
@@ -342,6 +352,7 @@ import { getQuestionBank, listQuestionGroupDetails, runQuestionBankRAGDiagnostic
 import { listExamStructuringTasks } from '@/api/exam/material'
 import { listQuestionGroupDrafts } from '@/api/exam/question-group-draft'
 import type { ExamQuestionGroupDraftStats, ExamRAGDiagnosticResult, ExamRAGDiagnosticResultItem, ExamStructuringTask, ExamStructuringTaskStatus, QuestionBank, QuestionDetail, QuestionGroupAsset, QuestionGroupDetail, ReviewStatus } from '@/types/exam'
+import ExamRichText from './ExamRichText.vue'
 import { loadQuestionBankReviewEntry } from './questionBankReviewEntry'
 
 const route = useRoute()
@@ -593,6 +604,10 @@ const openLatestReviewTask = () => {
 
 const openRAGEvaluationCenter = () => {
   router.push(`/platform/question-banks/${String(route.params.bankId || '')}/rag-observability`)
+}
+
+const openAgentEvaluationCenter = () => {
+  router.push(`/platform/question-banks/${String(route.params.bankId || '')}/agent-evaluation`)
 }
 
 const loadReviewEntry = async (bankId: string, spaceId: string) => {

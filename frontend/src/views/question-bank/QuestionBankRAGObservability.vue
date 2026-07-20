@@ -8,10 +8,16 @@
         </t-button>
         <h2>{{ bank?.name || 'RAG 评测中心' }}</h2>
       </div>
-      <t-button theme="primary" :loading="creating" @click="createRun">
-        <template #icon><t-icon name="play-circle" /></template>
-        运行评测
-      </t-button>
+      <div class="rag-header__actions">
+        <t-radio-group value="rag" variant="default-filled" @change="openEvaluationMode">
+          <t-radio-button value="rag">RAG</t-radio-button>
+          <t-radio-button value="agent">Agent</t-radio-button>
+        </t-radio-group>
+        <t-button theme="primary" :loading="creating" @click="createRun">
+          <template #icon><t-icon name="play-circle" /></template>
+          运行评测
+        </t-button>
+      </div>
     </header>
 
     <section class="parameter-band" aria-label="评测参数">
@@ -147,6 +153,10 @@ const statusTheme = (status: ExamRAGEvaluationRunStatus) => status === 'complete
   ? 'success'
   : status === 'failed' ? 'danger' : 'primary'
 
+const openEvaluationMode = (mode: string | number) => {
+  if (mode === 'agent') router.push(`/platform/question-banks/${bankId.value}/agent-evaluation`)
+}
+
 const fetchRun = async (runId: string) => {
   const response = await getQuestionBankRAGEvaluationRun(bankId.value, runId)
   return response.data
@@ -155,6 +165,7 @@ const fetchRun = async (runId: string) => {
 const replaceRun = (run: ExamRAGEvaluationRun) => {
   const index = runs.value.findIndex(item => item.id === run.id)
   if (index >= 0) runs.value.splice(index, 1, run)
+  else runs.value.unshift(run)
 }
 
 const selectRun = async (runId: string) => {
@@ -167,8 +178,15 @@ const selectRun = async (runId: string) => {
 const loadRuns = async () => {
   const response = await listQuestionBankRAGEvaluationRuns(bankId.value)
   runs.value = response.data || []
-  const selected = runs.value.find(run => run.id === activeRun.value?.id) || runs.value[0]
-  if (selected) await selectRun(selected.id)
+  const requestedRunID = String(route.query.run_id || '')
+  const selectedRunID = requestedRunID || activeRun.value?.id || runs.value[0]?.id
+  if (!selectedRunID) return
+  try {
+    await selectRun(selectedRunID)
+  } catch (error) {
+    if (!requestedRunID || !runs.value[0]) throw error
+    await selectRun(runs.value[0].id)
+  }
 }
 
 const createRun = async () => {

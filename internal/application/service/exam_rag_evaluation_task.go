@@ -17,7 +17,7 @@ func (s *examRAGEvaluationService) ProcessRunTask(ctx context.Context, task *asy
 	if task == nil || json.Unmarshal(task.Payload(), &payload) != nil || strings.TrimSpace(payload.RunID) == "" {
 		return fmt.Errorf("decode exam RAG evaluation payload: %w", ErrExamInvalidRequest)
 	}
-	run, err := s.repo.GetRunForTask(ctx, strings.TrimSpace(payload.RunID))
+	run, err := s.repo.GetRunForTask(ctx, types.ExamEvaluationKindRAG, strings.TrimSpace(payload.RunID))
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func (s *examRAGEvaluationService) markRunRunning(ctx context.Context, run *type
 		run.StartedAt = &now
 	}
 	run.UpdatedAt = now
-	return s.repo.UpdateRun(context.WithoutCancel(ctx), run.TenantID, run.QuestionBankID, run)
+	return s.repo.UpdateRun(context.WithoutCancel(ctx), run.TenantID, run.QuestionBankID, types.ExamEvaluationKindRAG, run)
 }
 
 func (s *examRAGEvaluationService) persistRunCompletion(
@@ -109,7 +109,7 @@ func (s *examRAGEvaluationService) persistRunCompletion(
 	run.ErrorMessage = ""
 	run.CompletedAt = &now
 	run.UpdatedAt = now
-	return s.repo.UpdateRun(context.WithoutCancel(ctx), run.TenantID, run.QuestionBankID, run)
+	return s.repo.UpdateRun(context.WithoutCancel(ctx), run.TenantID, run.QuestionBankID, types.ExamEvaluationKindRAG, run)
 }
 
 func (s *examRAGEvaluationService) persistRunFailure(
@@ -122,7 +122,7 @@ func (s *examRAGEvaluationService) persistRunFailure(
 	run.ErrorMessage = cause.Error()
 	run.CompletedAt = &now
 	run.UpdatedAt = now
-	if err := s.repo.UpdateRun(context.WithoutCancel(ctx), run.TenantID, run.QuestionBankID, run); err != nil {
+	if err := s.repo.UpdateRun(context.WithoutCancel(ctx), run.TenantID, run.QuestionBankID, types.ExamEvaluationKindRAG, run); err != nil {
 		return errors.Join(cause, err)
 	}
 	return cause

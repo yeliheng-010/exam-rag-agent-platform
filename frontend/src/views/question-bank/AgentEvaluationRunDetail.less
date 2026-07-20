@@ -1,0 +1,128 @@
+.agent-run-detail,
+.agent-case,
+.tool-call,
+.final-answer {
+  min-width: 0;
+}
+
+.agent-case {
+  border-top: 1px solid var(--td-component-stroke);
+
+  > summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 0;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  > summary div,
+  > summary span,
+  > summary strong {
+    min-width: 0;
+  }
+
+  > summary div {
+    display: grid;
+    gap: 4px;
+  }
+
+  > summary span {
+    color: var(--td-text-color-secondary);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+}
+
+.assertion-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-bottom: 12px;
+  background: var(--td-component-stroke);
+
+  > div {
+    display: grid;
+    gap: 4px;
+    padding: 9px;
+    background: var(--td-bg-color-container);
+  }
+
+  span {
+    color: var(--td-text-color-secondary);
+    font-size: 11px;
+  }
+}
+
+.assertion-failures {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--td-error-color);
+  background: var(--td-error-color-light);
+  font-size: 12px;
+
+  ul {
+    margin: 7px 0 0;
+    padding-left: 18px;
+  }
+}
+
+.tool-timeline h4,
+.final-answer h4 {
+  margin: 14px 0 8px;
+  font-size: 13px;
+}
+
+.tool-call {
+  margin-bottom: 9px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--td-brand-color);
+  background: var(--td-bg-color-secondarycontainer);
+
+  > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  header div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  header span,
+  > div > span {
+    color: var(--td-text-color-secondary);
+    font-size: 11px;
+  }
+
+  pre {
+    max-height: 240px;
+    margin: 5px 0 9px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
+.tool-call__error {
+  color: var(--td-error-color);
+  overflow-wrap: anywhere;
+}
+
+.final-answer p {
+  margin: 0 0 16px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .assertion-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

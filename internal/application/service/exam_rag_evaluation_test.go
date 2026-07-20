@@ -157,34 +157,34 @@ func (r *examRAGEvaluationRunRepoStub) CreateRun(_ context.Context, run *types.E
 	return nil
 }
 
-func (r *examRAGEvaluationRunRepoStub) GetRun(_ context.Context, tenantID uint64, bankID string, runID string) (*types.ExamRAGEvaluationRun, error) {
+func (r *examRAGEvaluationRunRepoStub) GetRun(_ context.Context, tenantID uint64, bankID string, kind types.ExamEvaluationKind, runID string) (*types.ExamRAGEvaluationRun, error) {
 	run := r.runs[runID]
-	if run == nil || run.TenantID != tenantID || run.QuestionBankID != bankID {
+	if run == nil || run.TenantID != tenantID || run.QuestionBankID != bankID || run.EvaluationKind != kind {
 		return nil, repository.ErrExamRAGEvaluationRunNotFound
 	}
 	return run, nil
 }
 
-func (r *examRAGEvaluationRunRepoStub) GetRunForTask(_ context.Context, runID string) (*types.ExamRAGEvaluationRun, error) {
+func (r *examRAGEvaluationRunRepoStub) GetRunForTask(_ context.Context, kind types.ExamEvaluationKind, runID string) (*types.ExamRAGEvaluationRun, error) {
 	run := r.runs[runID]
-	if run == nil {
+	if run == nil || run.EvaluationKind != kind {
 		return nil, repository.ErrExamRAGEvaluationRunNotFound
 	}
 	return run, nil
 }
 
-func (r *examRAGEvaluationRunRepoStub) ListRuns(_ context.Context, tenantID uint64, bankID string, _ int) ([]*types.ExamRAGEvaluationRun, error) {
+func (r *examRAGEvaluationRunRepoStub) ListRuns(_ context.Context, tenantID uint64, bankID string, kind types.ExamEvaluationKind, _ int) ([]*types.ExamRAGEvaluationRun, error) {
 	var runs []*types.ExamRAGEvaluationRun
 	for _, run := range r.runs {
-		if run.TenantID == tenantID && run.QuestionBankID == bankID {
+		if run.TenantID == tenantID && run.QuestionBankID == bankID && run.EvaluationKind == kind {
 			runs = append(runs, run)
 		}
 	}
 	return runs, nil
 }
 
-func (r *examRAGEvaluationRunRepoStub) UpdateRun(_ context.Context, tenantID uint64, bankID string, run *types.ExamRAGEvaluationRun) error {
-	if run == nil || run.TenantID != tenantID || run.QuestionBankID != bankID {
+func (r *examRAGEvaluationRunRepoStub) UpdateRun(_ context.Context, tenantID uint64, bankID string, kind types.ExamEvaluationKind, run *types.ExamRAGEvaluationRun) error {
+	if run == nil || run.TenantID != tenantID || run.QuestionBankID != bankID || run.EvaluationKind != kind {
 		return repository.ErrExamRAGEvaluationRunNotFound
 	}
 	r.runs[run.ID] = run

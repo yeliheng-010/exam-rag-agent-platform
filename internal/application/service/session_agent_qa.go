@@ -15,25 +15,71 @@ import (
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
-// AgentQA performs agent-based question answering with conversation history and streaming support
-// customAgent is optional - if provided, uses custom agent configuration instead of tenant defaults
-// summaryModelID is optional - if provided, overrides the model from customAgent config
 func (s *sessionService) AgentQA(
 	ctx context.Context,
 	req *types.QARequest,
 	eventBus *event.EventBus,
 ) error {
+	_, err := s.executeAgent(ctx, req, eventBus)
+	var executionErr *agentExecutionError
+	if errors.As(err, &executionErr) {
+		logger.Errorf(ctx, "Agent execution failed: %v", executionErr.err)
+		eventBus.Emit(ctx, event.Event{
+			Type:      event.EventError,
+			SessionID: req.Session.ID,
+			Data: event.ErrorData{
+				Error:     executionErr.err.Error(),
+				Stage:     "agent_execution",
+				SessionID: req.Session.ID,
+			},
+		})
+		return nil
+	}
+	return err
+}
+
+func (s *sessionService) ExecuteAgentEvaluation(
+	ctx context.Context,
+	req *types.QARequest,
+	eventBus *event.EventBus,
+) (*types.AgentState, error) {
+	state, err := s.executeAgent(ctx, req, eventBus)
+	var executionErr *agentExecutionError
+	if errors.As(err, &executionErr) {
+		return state, executionErr.err
+	}
+	return state, err
+}
+
+type agentExecutionError struct {
+	err error
+}
+
+func (e *agentExecutionError) Error() string {
+	return e.err.Error()
+}
+
+func (e *agentExecutionError) Unwrap() error {
+	return e.err
+}
+
+// executeAgent builds and runs the production Agent path for chat and evaluation callers.
+func (s *sessionService) executeAgent(
+	ctx context.Context,
+	req *types.QARequest,
+	eventBus *event.EventBus,
+) (*types.AgentState, error) {
 	sessionID := req.Session.ID
 	sessionJSON, err := json.Marshal(req.Session)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to marshal session, session ID: %s, error: %v", sessionID, err)
-		return fmt.Errorf("failed to marshal session: %w", err)
+		return nil, fmt.Errorf("failed to marshal session: %w", err)
 	}
 
 	// customAgent is required for AgentQA (handler has already done permission check for shared agent)
 	if req.CustomAgent == nil {
 		logger.Warnf(ctx, "Custom agent not provided for session: %s", sessionID)
-		return errors.New("custom agent configuration is required for agent QA")
+		return nil, errors.New("custom agent configuration is required for agent QA")
 	}
 
 	// Resolve retrieval tenant using shared helper
@@ -65,7 +111,7 @@ func (s *sessionService) AgentQA(
 	// Build AgentConfig from custom agent and tenant info
 	agentConfig, err := s.buildAgentConfig(ctx, req, tenantInfo, agentTenantID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Set VLM model ID for tool result image analysis (runtime-only field)
@@ -76,17 +122,17 @@ func (s *sessionService) AgentQA(
 	// Resolve model ID using shared helper (AgentQA requires a model, so error if not found)
 	effectiveModelID, err := s.resolveChatModelID(ctx, req, agentConfig.KnowledgeBases, agentConfig.KnowledgeIDs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if effectiveModelID == "" {
 		logger.Warnf(ctx, "No summary model configured for custom agent %s", req.CustomAgent.ID)
-		return errors.New("summary model (model_id) is not configured in custom agent settings")
+		return nil, errors.New("summary model (model_id) is not configured in custom agent settings")
 	}
 
 	summaryModel, err := s.modelService.GetChatModel(ctx, effectiveModelID)
 	if err != nil {
 		logger.Warnf(ctx, "Failed to get chat model: %v", err)
-		return fmt.Errorf("failed to get chat model: %w", err)
+		return nil, fmt.Errorf("failed to get chat model: %w", err)
 	}
 
 	// Get rerank model from custom agent config only when knowledge_search can
@@ -106,13 +152,13 @@ func (s *sessionService) AgentQA(
 		rerankModelID := req.CustomAgent.Config.RerankModelID
 		if rerankModelID == "" {
 			logger.Warnf(ctx, "No rerank model configured for custom agent %s, but knowledge_search tool is enabled", req.CustomAgent.ID)
-			return errors.New("rerank model is not configured: please set rerank_model_id on the agent")
+			return nil, errors.New("rerank model is not configured: please set rerank_model_id on the agent")
 		}
 
 		rerankModel, err = s.modelService.GetRerankModel(ctx, rerankModelID)
 		if err != nil {
 			logger.Warnf(ctx, "Failed to get rerank model: %v", err)
-			return fmt.Errorf("failed to get rerank model: %w", err)
+			return nil, fmt.Errorf("failed to get rerank model: %w", err)
 		}
 	} else {
 		logger.Infof(ctx, "knowledge_search is unavailable for the effective agent scope, skipping rerank model initialization")
@@ -153,7 +199,7 @@ func (s *sessionService) AgentQA(
 	)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to create agent engine: %v", err)
-		return err
+		return nil, err
 	}
 
 	// Route image data based on agent model's vision capability
@@ -191,21 +237,11 @@ func (s *sessionService) AgentQA(
 	// Execute agent with streaming (asynchronously)
 	// Events will be emitted to EventBus and handled by the Handler layer
 	logger.Info(ctx, "Executing agent with streaming")
-	if _, err := engine.Execute(ctx, sessionID, req.AssistantMessageID, agentQuery, llmContext, agentImageURLs); err != nil {
-		logger.Errorf(ctx, "Agent execution failed: %v", err)
-		// Emit error event to the EventBus used by this agent
-		eventBus.Emit(ctx, event.Event{
-			Type:      event.EventError,
-			SessionID: sessionID,
-			Data: event.ErrorData{
-				Error:     err.Error(),
-				Stage:     "agent_execution",
-				SessionID: sessionID,
-			},
-		})
+	state, err := engine.Execute(ctx, sessionID, req.AssistantMessageID, agentQuery, llmContext, agentImageURLs)
+	if err != nil {
+		return state, &agentExecutionError{err: err}
 	}
-	// Return empty - events will be handled by Handler via EventBus subscription
-	return nil
+	return state, nil
 }
 
 // buildAgentConfig creates a runtime AgentConfig from the QARequest's custom agent configuration,
@@ -233,9 +269,13 @@ func (s *sessionService) buildAgentConfig(
 		LLMCallTimeout:              customAgent.Config.LLMCallTimeout,
 		RetainRetrievalHistory:      customAgent.Config.RetainRetrievalHistory,
 	}
+	if req.DisableHistory {
+		agentConfig.MultiTurnEnabled = false
+		agentConfig.HistoryTurns = 0
+	}
 
 	// Falls back to global configuration if no specific timeout is set for the agent.
-	if agentConfig.LLMCallTimeout == 0 && s.cfg.Agent != nil && s.cfg.Agent.LLMCallTimeout > 0 {
+	if agentConfig.LLMCallTimeout == 0 && s.cfg != nil && s.cfg.Agent != nil && s.cfg.Agent.LLMCallTimeout > 0 {
 		agentConfig.LLMCallTimeout = s.cfg.Agent.LLMCallTimeout
 	}
 

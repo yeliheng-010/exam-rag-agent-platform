@@ -90,6 +90,7 @@ func testQueuedRAGEvaluationRun(id string) *types.ExamRAGEvaluationRun {
 	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
 	return &types.ExamRAGEvaluationRun{
 		ID: id, TenantID: 10000, QuestionBankID: "bank-1", CreatedBy: "teacher-1",
+		EvaluationKind: types.ExamEvaluationKindRAG,
 		Status: types.ExamRAGEvaluationRunStatusQueued, RequestSnapshot: request, Progress: progress,
 		CreatedAt: now, UpdatedAt: now,
 	}

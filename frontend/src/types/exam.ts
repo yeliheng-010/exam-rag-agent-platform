@@ -17,6 +17,7 @@ export type ExamPracticeAttemptStatus = 'in_progress' | 'completed'
 export type PracticeAnswerReviewStatus = 'unreviewed' | 'reviewing' | 'mastered'
 export type ExamAssignmentStatus = 'published' | 'archived'
 export type ExamAssignmentProgressStatus = 'not_started' | 'in_progress' | 'completed'
+export type ExamEvaluationKind = 'rag' | 'agent'
 
 export interface ExamDomain {
   id: string
@@ -550,6 +551,11 @@ export interface ExamRAGEvaluationRun {
 	id: string
 	tenant_id: number
 	question_bank_id: string
+	evaluation_kind?: ExamEvaluationKind
+	agent_id?: string
+	is_baseline?: boolean
+	evaluation_set_id?: string
+	evaluation_set_version?: number
 	created_by: string
 	status: ExamRAGEvaluationRunStatus
 	progress: ExamRAGEvaluationProgress
@@ -560,6 +566,211 @@ export interface ExamRAGEvaluationRun {
 	completed_at?: string
 	created_at: string
 	updated_at: string
+}
+
+export interface ExamAgentExpectedToolCall {
+  name: string
+  arguments?: Record<string, unknown>
+}
+
+export interface ExamAgentEvaluationCase {
+  name: string
+  input: string
+  expected_tool_calls?: ExamAgentExpectedToolCall[]
+  expected_evidence_phrases?: string[]
+  expected_citations?: string[]
+  expected_answer_phrases?: string[]
+  grounded_phrases?: string[]
+}
+
+export interface RunExamAgentEvaluationPayload {
+  agent_id: string
+  cases: ExamAgentEvaluationCase[]
+}
+
+export interface ExamAgentSnapshot {
+  id: string
+  name: string
+  model_id: string
+  allowed_tools: string[]
+  knowledge_bases: string[]
+  config: Record<string, unknown>
+}
+
+export interface ExamAgentEvaluationRequestSnapshot {
+  agent: ExamAgentSnapshot
+  cases: ExamAgentEvaluationCase[]
+}
+
+export interface ExamAgentActualToolCall {
+  name: string
+  arguments?: Record<string, unknown>
+  success: boolean
+  duration_ms: number
+  output_excerpt?: string
+  error?: string
+}
+
+export interface ExamAgentEvaluationCaseResult {
+  name: string
+  input: string
+  passed: boolean
+  tool_sequence_score: number
+  tool_arguments_score: number
+  evidence_score: number
+  citation_score: number
+  answer_score: number
+  groundedness_score: number
+  duration_ms: number
+  actual_tool_calls: ExamAgentActualToolCall[]
+  final_answer: string
+  assertion_failures?: string[]
+  error?: string
+}
+
+export interface ExamAgentEvaluationSummary {
+  total: number
+  passed: number
+  failed: number
+  pass_rate: number
+  tool_sequence_rate: number
+  tool_arguments_rate: number
+  evidence_rate: number
+  citation_rate: number
+  answer_rate: number
+  groundedness_rate: number
+  average_duration_ms: number
+}
+
+export interface ExamAgentEvaluationResult {
+  question_bank_id: string
+  agent: ExamAgentSnapshot
+  summary: ExamAgentEvaluationSummary
+  results: ExamAgentEvaluationCaseResult[]
+}
+
+export interface ExamAgentEvaluationRun {
+  id: string
+  tenant_id: number
+  question_bank_id: string
+  evaluation_kind: 'agent'
+  agent_id: string
+  is_baseline?: boolean
+  evaluation_set_id?: string
+  evaluation_set_version?: number
+  created_by: string
+  status: ExamRAGEvaluationRunStatus
+  progress: ExamRAGEvaluationProgress
+  request_snapshot: ExamAgentEvaluationRequestSnapshot
+  result_snapshot?: ExamAgentEvaluationResult
+  error_message: string
+  started_at?: string
+  completed_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export type ExamEvaluationComparisonStatus = 'baseline' | 'regressed' | 'stable' | 'uncompared'
+export type ExamEvaluationRegressionFilter = 'all' | 'regressed' | 'stable' | 'uncompared'
+
+export interface ExamEvaluationRunSummary {
+  id: string
+  tenant_id: number
+  question_bank_id: string
+  evaluation_kind: ExamEvaluationKind
+  agent_id?: string
+  is_baseline: boolean
+  evaluation_set_id?: string
+  evaluation_set_version?: number
+  created_by: string
+  status: ExamRAGEvaluationRunStatus
+  progress: ExamRAGEvaluationProgress
+  request_snapshot: Record<string, unknown>
+  result_snapshot?: Record<string, unknown>
+  error_message: string
+  started_at?: string
+  completed_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ExamEvaluationRegressionReason {
+  metric: string
+  label: string
+  baseline: number
+  current: number
+  delta: number
+}
+
+export interface ExamEvaluationCenterItem {
+  run: ExamEvaluationRunSummary
+  question_bank_name: string
+  agent_name?: string
+  evaluation_set_name?: string
+  metrics: Record<string, number>
+  baseline_run_id?: string
+  baseline_metrics?: Record<string, number>
+  metric_deltas?: Record<string, number>
+  comparison_status: ExamEvaluationComparisonStatus
+  regression_reasons: ExamEvaluationRegressionReason[]
+}
+
+export interface ExamEvaluationCenterSummary {
+  total_runs: number
+  completed_runs: number
+  baseline_runs: number
+  regression_runs: number
+  average_pass_rate: number
+}
+
+export interface ExamEvaluationAgentOption {
+  id: string
+  name: string
+}
+
+export interface ExamEvaluationCenterResult {
+  summary: ExamEvaluationCenterSummary
+  items: ExamEvaluationCenterItem[]
+  question_banks: QuestionBank[]
+  agents: ExamEvaluationAgentOption[]
+}
+
+export interface ExamEvaluationSetVersion {
+  id: string
+  tenant_id: number
+  evaluation_set_id: string
+  version: number
+  source_run_id: string
+  definition_snapshot?: Record<string, unknown>
+  created_by: string
+  created_at: string
+}
+
+export interface ExamEvaluationSet {
+  id: string
+  tenant_id: number
+  question_bank_id: string
+  evaluation_kind: ExamEvaluationKind
+  agent_id?: string
+  name: string
+  description: string
+  current_version: number
+  created_by: string
+  status: 'active'
+  created_at: string
+  updated_at: string
+  question_bank_name?: string
+  agent_name?: string
+  versions: ExamEvaluationSetVersion[]
+}
+
+export interface ExamEvaluationCenterQuery {
+  kind: ExamEvaluationKind
+  bank_id?: string
+  agent_id?: string
+  status?: ExamRAGEvaluationRunStatus | ''
+  regression?: ExamEvaluationRegressionFilter
+  limit?: number
 }
 
 export interface ExamPracticeAttempt {

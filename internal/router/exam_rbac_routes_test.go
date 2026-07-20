@@ -189,6 +189,23 @@ func TestExamRAGRouteGuardSourceMatrix(t *testing.T) {
 	})
 }
 
+func TestExamEvaluationCenterRouteGuardSourceMatrix(t *testing.T) {
+	sourceBytes, err := os.ReadFile("exam.go")
+	if err != nil {
+		t.Fatalf("read exam.go: %v", err)
+	}
+	source := string(sourceBytes)
+
+	mustContainAll(t, source, []string{
+		`exam.GET("/evaluation-center", g.Contributor(), evaluationCenterHandler.GetCenter)`,
+		`exam.PUT("/evaluation-center/baseline", g.Contributor(), evaluationCenterHandler.SetBaseline)`,
+		`exam.GET("/evaluation-sets", g.Contributor(), evaluationCenterHandler.ListEvaluationSets)`,
+		`exam.POST("/evaluation-sets", g.Contributor(), evaluationCenterHandler.CreateEvaluationSet)`,
+		`exam.POST("/evaluation-sets/:set_id/versions", g.Contributor(), evaluationCenterHandler.CreateEvaluationSetVersion)`,
+		`exam.POST("/evaluation-sets/:set_id/runs", g.Contributor(), evaluationCenterHandler.RunEvaluationSet)`,
+	})
+}
+
 func TestExamAdminMemberRouteGuardSourceMatrix(t *testing.T) {
 	sourceBytes, err := os.ReadFile("router.go")
 	if err != nil {

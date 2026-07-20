@@ -27,11 +27,12 @@ func (r *examRAGEvaluationRepository) GetRun(
 	ctx context.Context,
 	tenantID uint64,
 	bankID string,
+	kind types.ExamEvaluationKind,
 	runID string,
 ) (*types.ExamRAGEvaluationRun, error) {
 	var run types.ExamRAGEvaluationRun
 	err := r.db.WithContext(ctx).
-		Where("id = ? AND tenant_id = ? AND question_bank_id = ?", runID, tenantID, bankID).
+		Where("id = ? AND tenant_id = ? AND question_bank_id = ? AND evaluation_kind = ?", runID, tenantID, bankID, kind).
 		First(&run).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -44,10 +45,11 @@ func (r *examRAGEvaluationRepository) GetRun(
 
 func (r *examRAGEvaluationRepository) GetRunForTask(
 	ctx context.Context,
+	kind types.ExamEvaluationKind,
 	runID string,
 ) (*types.ExamRAGEvaluationRun, error) {
 	var run types.ExamRAGEvaluationRun
-	err := r.db.WithContext(ctx).Where("id = ?", runID).First(&run).Error
+	err := r.db.WithContext(ctx).Where("id = ? AND evaluation_kind = ?", runID, kind).First(&run).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrExamRAGEvaluationRunNotFound
@@ -61,6 +63,7 @@ func (r *examRAGEvaluationRepository) ListRuns(
 	ctx context.Context,
 	tenantID uint64,
 	bankID string,
+	kind types.ExamEvaluationKind,
 	limit int,
 ) ([]*types.ExamRAGEvaluationRun, error) {
 	if limit <= 0 || limit > 100 {
@@ -68,7 +71,7 @@ func (r *examRAGEvaluationRepository) ListRuns(
 	}
 	var runs []*types.ExamRAGEvaluationRun
 	err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND question_bank_id = ?", tenantID, bankID).
+		Where("tenant_id = ? AND question_bank_id = ? AND evaluation_kind = ?", tenantID, bankID, kind).
 		Order("created_at DESC").
 		Limit(limit).
 		Find(&runs).Error
@@ -79,6 +82,7 @@ func (r *examRAGEvaluationRepository) UpdateRun(
 	ctx context.Context,
 	tenantID uint64,
 	bankID string,
+	kind types.ExamEvaluationKind,
 	run *types.ExamRAGEvaluationRun,
 ) error {
 	if run == nil {
@@ -86,7 +90,7 @@ func (r *examRAGEvaluationRepository) UpdateRun(
 	}
 	tx := r.db.WithContext(ctx).
 		Model(&types.ExamRAGEvaluationRun{}).
-		Where("id = ? AND tenant_id = ? AND question_bank_id = ?", run.ID, tenantID, bankID).
+		Where("id = ? AND tenant_id = ? AND question_bank_id = ? AND evaluation_kind = ?", run.ID, tenantID, bankID, kind).
 		Updates(map[string]interface{}{
 			"status":           run.Status,
 			"progress":         run.Progress,

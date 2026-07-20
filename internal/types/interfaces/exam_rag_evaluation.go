@@ -9,10 +9,10 @@ import (
 
 type ExamRAGEvaluationRepository interface {
 	CreateRun(ctx context.Context, run *types.ExamRAGEvaluationRun) error
-	GetRun(ctx context.Context, tenantID uint64, bankID string, runID string) (*types.ExamRAGEvaluationRun, error)
-	GetRunForTask(ctx context.Context, runID string) (*types.ExamRAGEvaluationRun, error)
-	ListRuns(ctx context.Context, tenantID uint64, bankID string, limit int) ([]*types.ExamRAGEvaluationRun, error)
-	UpdateRun(ctx context.Context, tenantID uint64, bankID string, run *types.ExamRAGEvaluationRun) error
+	GetRun(ctx context.Context, tenantID uint64, bankID string, kind types.ExamEvaluationKind, runID string) (*types.ExamRAGEvaluationRun, error)
+	GetRunForTask(ctx context.Context, kind types.ExamEvaluationKind, runID string) (*types.ExamRAGEvaluationRun, error)
+	ListRuns(ctx context.Context, tenantID uint64, bankID string, kind types.ExamEvaluationKind, limit int) ([]*types.ExamRAGEvaluationRun, error)
+	UpdateRun(ctx context.Context, tenantID uint64, bankID string, kind types.ExamEvaluationKind, run *types.ExamRAGEvaluationRun) error
 }
 
 type ExamRAGEvaluationService interface {

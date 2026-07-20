@@ -3,6 +3,7 @@ export default {
     learning: 'Learning',
     classes: 'Classes',
     questionBank: 'Question Banks',
+    evaluations: 'Evaluations',
     knowledgeBase: 'Knowledge Base',
     agents: 'Agents',
     analytics: 'Analytics',

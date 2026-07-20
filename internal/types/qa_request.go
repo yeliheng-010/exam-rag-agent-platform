@@ -19,6 +19,7 @@ type QARequest struct {
 	UserMessageID      string             // Created user message ID
 	WebSearchEnabled   bool               // Whether web search is enabled for this request
 	EnableMemory       bool               // Whether memory feature is enabled
+	DisableHistory     bool               // Isolate evaluation runs from persisted multi-turn history
 	QuotedContext      string             // Quoted message content from IM quote-reply (appended at LLM prompt stage, not used for retrieval)
 	Attachments        MessageAttachments // File attachments (processed and ready for prompt injection)
 }

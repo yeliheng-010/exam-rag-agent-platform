@@ -3,6 +3,7 @@ export default {
     learning: "学习中心",
     classes: "班级中心",
     questionBank: "题库中心",
+    evaluations: "评测中心",
     knowledgeBase: "知识库",
     agents: "智能体",
     analytics: "学习分析",
