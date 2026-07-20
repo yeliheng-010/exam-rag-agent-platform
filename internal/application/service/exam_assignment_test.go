@@ -431,6 +431,41 @@ func TestExamAssignmentLifecycleWithdrawEditRepublish(t *testing.T) {
 	require.Equal(t, assignmentID, *fixture.practiceRepo.attempts[0].AssignmentID)
 }
 
+func TestExamAssignmentPublishesNotificationsToActiveStudents(t *testing.T) {
+	fixture := newAssignmentLifecycleFixture(t)
+	fixture.assignmentRepo.assignments = nil
+
+	created, err := fixture.svc.CreateAssignment(
+		context.Background(), 10000, "teacher-1", "class-1",
+		&types.CreateExamAssignmentRequest{GroupID: "group-1", Title: "Reading homework"},
+	)
+
+	require.NoError(t, err)
+	require.Len(t, fixture.assignmentRepo.notifications, 1)
+	notification := fixture.assignmentRepo.notifications[0]
+	require.Equal(t, "student-1", notification.RecipientUserID)
+	require.Equal(t, created.Assignment.ID, notification.AssignmentID)
+	require.Equal(t, created.Assignment.GroupID, notification.GroupID)
+	require.Equal(t, types.ExamAssignmentNotificationKindPublished, notification.Kind)
+	require.Contains(t, notification.Title, "Reading homework")
+}
+
+func TestExamAssignmentTransitionsNotifyOnlyActiveStudents(t *testing.T) {
+	fixture := newAssignmentLifecycleFixture(t)
+
+	_, err := fixture.svc.WithdrawAssignment(context.Background(), 10000, "teacher-1", "class-1", "assignment-1")
+	require.NoError(t, err)
+	require.Len(t, fixture.assignmentRepo.notifications, 1)
+	require.Equal(t, "student-1", fixture.assignmentRepo.notifications[0].RecipientUserID)
+	require.Equal(t, types.ExamAssignmentNotificationKindWithdrawn, fixture.assignmentRepo.notifications[0].Kind)
+
+	_, err = fixture.svc.RepublishAssignment(context.Background(), 10000, "teacher-1", "class-1", "assignment-1")
+	require.NoError(t, err)
+	require.Len(t, fixture.assignmentRepo.notifications, 2)
+	require.Equal(t, "student-1", fixture.assignmentRepo.notifications[1].RecipientUserID)
+	require.Equal(t, types.ExamAssignmentNotificationKindRepublished, fixture.assignmentRepo.notifications[1].Kind)
+}
+
 func TestExamAssignmentLifecycleRejectsExpiredPublishedUntilWithdrawn(t *testing.T) {
 	fixture := newAssignmentLifecycleFixture(t)
 	ctx := context.Background()
@@ -503,8 +538,9 @@ func findAssignmentProgress(items []*types.ExamAssignmentMemberProgress, userID 
 }
 
 type stubExamAssignmentRepo struct {
-	assignments []*types.ExamClassAssignment
-	classRepo   *fakeExamClassRepo
+	assignments   []*types.ExamClassAssignment
+	notifications []*types.ExamAssignmentNotification
+	classRepo     *fakeExamClassRepo
 }
 
 func newStubExamAssignmentRepo(classRepo *fakeExamClassRepo) *stubExamAssignmentRepo {
@@ -513,6 +549,16 @@ func newStubExamAssignmentRepo(classRepo *fakeExamClassRepo) *stubExamAssignment
 
 func (r *stubExamAssignmentRepo) CreateAssignment(_ context.Context, assignment *types.ExamClassAssignment) error {
 	r.assignments = append(r.assignments, cloneExamClassAssignment(assignment))
+	return nil
+}
+
+func (r *stubExamAssignmentRepo) CreateAssignmentWithNotifications(
+	_ context.Context,
+	assignment *types.ExamClassAssignment,
+	notifications []*types.ExamAssignmentNotification,
+) error {
+	r.assignments = append(r.assignments, cloneExamClassAssignment(assignment))
+	r.notifications = append(r.notifications, cloneExamAssignmentNotifications(notifications)...)
 	return nil
 }
 
@@ -588,6 +634,23 @@ func (r *stubExamAssignmentRepo) TransitionAssignmentStatus(
 	return repository.ErrExamClassAssignmentStateConflict
 }
 
+func (r *stubExamAssignmentRepo) TransitionAssignmentStatusWithNotifications(
+	ctx context.Context,
+	tenantID uint64,
+	classID string,
+	assignmentID string,
+	expected types.ExamAssignmentStatus,
+	next types.ExamAssignmentStatus,
+	updatedAt time.Time,
+	notifications []*types.ExamAssignmentNotification,
+) error {
+	if err := r.TransitionAssignmentStatus(ctx, tenantID, classID, assignmentID, expected, next, updatedAt); err != nil {
+		return err
+	}
+	r.notifications = append(r.notifications, cloneExamAssignmentNotifications(notifications)...)
+	return nil
+}
+
 func assignmentStatusIncluded(status types.ExamAssignmentStatus, statuses []types.ExamAssignmentStatus) bool {
 	for _, candidate := range statuses {
 		if candidate == status {
@@ -628,6 +691,18 @@ func cloneExamClassAssignment(assignment *types.ExamClassAssignment) *types.Exam
 		cp.DueAt = &dueAt
 	}
 	return &cp
+}
+
+func cloneExamAssignmentNotifications(items []*types.ExamAssignmentNotification) []*types.ExamAssignmentNotification {
+	out := make([]*types.ExamAssignmentNotification, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		cp := *item
+		out = append(out, &cp)
+	}
+	return out
 }
 
 func assignmentDueAt() *time.Time {

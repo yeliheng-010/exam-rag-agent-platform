@@ -60,6 +60,52 @@ func TestExamAssignmentRepositoryTransitionRequiresExpectedStatus(t *testing.T) 
 	require.Equal(t, types.ExamAssignmentStatusPublished, stored.Status)
 }
 
+func TestExamAssignmentRepositoryCreateWithNotificationsRollsBackTogether(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:exam-assignment-notification-create-rollback?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&types.ExamClassAssignment{}, &types.ExamAssignmentNotification{}))
+	repo := &examAssignmentRepository{db: db}
+	now := time.Now().UTC()
+	assignment := testExamAssignment("assignment-1", "group-1", types.ExamAssignmentStatusPublished, now)
+	notifications := testLifecycleNotifications(assignment, now)
+	notifications[1].ID = notifications[0].ID
+
+	err = repo.CreateAssignmentWithNotifications(context.Background(), assignment, notifications)
+
+	require.Error(t, err)
+	var assignmentCount int64
+	var notificationCount int64
+	require.NoError(t, db.Model(&types.ExamClassAssignment{}).Count(&assignmentCount).Error)
+	require.NoError(t, db.Model(&types.ExamAssignmentNotification{}).Count(&notificationCount).Error)
+	require.Zero(t, assignmentCount)
+	require.Zero(t, notificationCount)
+}
+
+func TestExamAssignmentRepositoryTransitionWithNotificationsRollsBackTogether(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:exam-assignment-notification-transition-rollback?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&types.ExamClassAssignment{}, &types.ExamAssignmentNotification{}))
+	repo := &examAssignmentRepository{db: db}
+	now := time.Now().UTC()
+	assignment := testExamAssignment("assignment-1", "group-1", types.ExamAssignmentStatusPublished, now)
+	require.NoError(t, db.Create(assignment).Error)
+	notifications := testLifecycleNotifications(assignment, now)
+	notifications[1].ID = notifications[0].ID
+
+	err = repo.TransitionAssignmentStatusWithNotifications(
+		context.Background(), 10000, "class-1", assignment.ID,
+		types.ExamAssignmentStatusPublished, types.ExamAssignmentStatusWithdrawn, now.Add(time.Minute), notifications,
+	)
+
+	require.Error(t, err)
+	stored, err := repo.GetAssignmentByIDAndTenant(context.Background(), 10000, assignment.ID)
+	require.NoError(t, err)
+	require.Equal(t, types.ExamAssignmentStatusPublished, stored.Status)
+	var notificationCount int64
+	require.NoError(t, db.Model(&types.ExamAssignmentNotification{}).Count(&notificationCount).Error)
+	require.Zero(t, notificationCount)
+}
+
 func TestExamAssignmentRepositoryRepublishRejectsExpiredDueAtAtomically(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:exam-assignment-expired-republish?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
@@ -187,6 +233,20 @@ func testAssignmentQuestionGroup(id string, createdAt time.Time) *types.Question
 		ReviewStatus: types.ExamReviewStatusPrivate, Status: "active", CreatedByUserID: "teacher-1",
 		CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
+}
+
+func testLifecycleNotifications(assignment *types.ExamClassAssignment, createdAt time.Time) []*types.ExamAssignmentNotification {
+	items := make([]*types.ExamAssignmentNotification, 0, 2)
+	for index, userID := range []string{"student-1", "student-2"} {
+		items = append(items, &types.ExamAssignmentNotification{
+			ID: fmt.Sprintf("notification-%d", index+1), TenantID: assignment.TenantID,
+			ClassID: assignment.ClassID, AssignmentID: assignment.ID, GroupID: assignment.GroupID,
+			RecipientUserID: userID, ActorUserID: assignment.CreatedByUserID,
+			Kind:  types.ExamAssignmentNotificationKindPublished,
+			Title: assignment.Title, Content: assignment.Title, CreatedAt: createdAt,
+		})
+	}
+	return items
 }
 
 func testExamAssignment(

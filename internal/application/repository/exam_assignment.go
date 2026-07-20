@@ -27,6 +27,22 @@ func (r *examAssignmentRepository) CreateAssignment(ctx context.Context, assignm
 	return r.db.WithContext(ctx).Create(assignment).Error
 }
 
+func (r *examAssignmentRepository) CreateAssignmentWithNotifications(
+	ctx context.Context,
+	assignment *types.ExamClassAssignment,
+	notifications []*types.ExamAssignmentNotification,
+) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(assignment).Error; err != nil {
+			return err
+		}
+		if len(notifications) == 0 {
+			return nil
+		}
+		return tx.Create(notifications).Error
+	})
+}
+
 func (r *examAssignmentRepository) GetAssignmentByIDAndTenant(ctx context.Context, tenantID uint64, assignmentID string) (*types.ExamClassAssignment, error) {
 	var assignment types.ExamClassAssignment
 	err := r.db.WithContext(ctx).
@@ -107,7 +123,42 @@ func (r *examAssignmentRepository) TransitionAssignmentStatus(
 	next types.ExamAssignmentStatus,
 	updatedAt time.Time,
 ) error {
-	query := r.db.WithContext(ctx).
+	return transitionAssignmentStatus(
+		r.db.WithContext(ctx), tenantID, classID, assignmentID, expected, next, updatedAt,
+	)
+}
+
+func (r *examAssignmentRepository) TransitionAssignmentStatusWithNotifications(
+	ctx context.Context,
+	tenantID uint64,
+	classID string,
+	assignmentID string,
+	expected types.ExamAssignmentStatus,
+	next types.ExamAssignmentStatus,
+	updatedAt time.Time,
+	notifications []*types.ExamAssignmentNotification,
+) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := transitionAssignmentStatus(tx, tenantID, classID, assignmentID, expected, next, updatedAt); err != nil {
+			return err
+		}
+		if len(notifications) == 0 {
+			return nil
+		}
+		return tx.Create(notifications).Error
+	})
+}
+
+func transitionAssignmentStatus(
+	db *gorm.DB,
+	tenantID uint64,
+	classID string,
+	assignmentID string,
+	expected types.ExamAssignmentStatus,
+	next types.ExamAssignmentStatus,
+	updatedAt time.Time,
+) error {
+	query := db.
 		Model(&types.ExamClassAssignment{}).
 		Where("tenant_id = ? AND class_id = ? AND id = ? AND status = ?", tenantID, classID, assignmentID, expected)
 	if expected == types.ExamAssignmentStatusWithdrawn && next == types.ExamAssignmentStatusPublished {

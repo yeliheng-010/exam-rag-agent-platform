@@ -20,9 +20,11 @@ type ExamAssignmentService interface {
 
 type ExamAssignmentRepository interface {
 	CreateAssignment(ctx context.Context, assignment *types.ExamClassAssignment) error
+	CreateAssignmentWithNotifications(ctx context.Context, assignment *types.ExamClassAssignment, notifications []*types.ExamAssignmentNotification) error
 	GetAssignmentByIDAndTenant(ctx context.Context, tenantID uint64, assignmentID string) (*types.ExamClassAssignment, error)
 	ListAssignmentsByClass(ctx context.Context, tenantID uint64, classID string, statuses []types.ExamAssignmentStatus, limit int) ([]*types.ExamClassAssignment, error)
 	ListAssignmentsByUserClasses(ctx context.Context, tenantID uint64, userID string, limit int) ([]*types.ExamClassAssignment, error)
 	UpdateAssignmentMetadata(ctx context.Context, tenantID uint64, classID, assignmentID string, allowed []types.ExamAssignmentStatus, title, instructions string, dueAt *time.Time, updatedAt time.Time) error
 	TransitionAssignmentStatus(ctx context.Context, tenantID uint64, classID, assignmentID string, expected, next types.ExamAssignmentStatus, updatedAt time.Time) error
+	TransitionAssignmentStatusWithNotifications(ctx context.Context, tenantID uint64, classID, assignmentID string, expected, next types.ExamAssignmentStatus, updatedAt time.Time, notifications []*types.ExamAssignmentNotification) error
 }

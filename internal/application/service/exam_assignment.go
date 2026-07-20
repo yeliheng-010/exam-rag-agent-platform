@@ -90,7 +90,13 @@ func (s *examAssignmentService) CreateAssignment(
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
-	if err := s.assignmentRepo.CreateAssignment(ctx, assignment); err != nil {
+	notifications, err := s.assignmentNotificationsForStudents(
+		ctx, tenantID, userID, assignment, types.ExamAssignmentNotificationKindPublished, now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.assignmentRepo.CreateAssignmentWithNotifications(ctx, assignment, notifications); err != nil {
 		return nil, err
 	}
 	return s.assignmentSummary(ctx, tenantID, userID, assignment)
@@ -412,8 +418,19 @@ func (s *examAssignmentService) transitionAssignment(
 	if assignment.Status != expected {
 		return nil, ErrExamStateConflict
 	}
-	err := s.assignmentRepo.TransitionAssignmentStatus(
-		ctx, tenantID, assignment.ClassID, assignment.ID, expected, next, s.now(),
+	now := s.now()
+	notificationKind := types.ExamAssignmentNotificationKindWithdrawn
+	if next == types.ExamAssignmentStatusPublished {
+		notificationKind = types.ExamAssignmentNotificationKindRepublished
+	}
+	notifications, err := s.assignmentNotificationsForStudents(
+		ctx, tenantID, userID, assignment, notificationKind, now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	err = s.assignmentRepo.TransitionAssignmentStatusWithNotifications(
+		ctx, tenantID, assignment.ClassID, assignment.ID, expected, next, now, notifications,
 	)
 	if err != nil {
 		return nil, mapAssignmentStateError(err)
