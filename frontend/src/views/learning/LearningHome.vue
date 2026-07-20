@@ -242,6 +242,7 @@ import {
   canCreateAssignmentAttempt,
   existingAssignmentAttemptID,
 } from '../classes/assignmentLifecycle'
+import { assignmentWindowForNotification } from '../classes/assignmentNotification'
 
 const router = useRouter()
 const route = useRoute()
@@ -423,8 +424,9 @@ const loadPracticeGroups = async () => {
 const loadClassAssignments = async () => {
   assignmentLoading.value = true
   try {
-    const res = await listMyExamAssignments({ limit: 8 })
-    classAssignments.value = res.data || []
+    const assignmentId = String(route.query.assignment_id || '')
+    const res = await listMyExamAssignments({ limit: assignmentId ? 100 : 8 })
+    classAssignments.value = assignmentWindowForNotification(res.data || [], assignmentId, 8)
     await focusAssignmentFromNotification()
   } catch (error: any) {
     MessagePlugin.error(error?.message || '班级任务加载失败')
@@ -482,7 +484,7 @@ const loadData = async () => {
 onMounted(loadData)
 
 watch(() => route.query.assignment_id, () => {
-  void focusAssignmentFromNotification()
+  void loadClassAssignments()
 })
 
 onUnmounted(() => {

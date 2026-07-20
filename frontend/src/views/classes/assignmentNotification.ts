@@ -1,4 +1,4 @@
-import type { ExamAssignmentNotificationItem } from '@/types/exam'
+import type { ExamAssignmentNotificationItem, ExamAssignmentSummary } from '@/types/exam'
 
 export type AssignmentNotificationTarget =
   | { kind: 'attempt'; groupId: string; attemptId: string }
@@ -21,4 +21,16 @@ export function assignmentNotificationTarget(item: ExamAssignmentNotificationIte
     return { kind: 'assignment', assignmentId: item.notification.assignment_id }
   }
   return { kind: 'blocked' }
+}
+
+export function assignmentWindowForNotification(
+  assignments: ExamAssignmentSummary[],
+  assignmentId: string,
+  limit: number,
+) {
+  const visible = assignments.slice(0, limit)
+  if (!assignmentId || visible.some(item => item.assignment.id === assignmentId)) return visible
+  const target = assignments.find(item => item.assignment.id === assignmentId)
+  if (!target || limit <= 0) return visible
+  return [...visible.slice(0, limit - 1), target]
 }

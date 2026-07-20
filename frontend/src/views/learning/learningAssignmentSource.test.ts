@@ -44,3 +44,12 @@ test('learning center locates a notification assignment without starting it', ()
   assert.match(learningHome, /onUnmounted/)
   assert.match(learningHome, /watch\(\(\) => route\.query\.assignment_id/)
 })
+
+test('learning center looks beyond the newest eight assignments for a notification target', () => {
+  assert.match(learningHome, /assignmentWindowForNotification/)
+  assert.match(learningHome, /assignmentId\s*\?\s*100\s*:\s*8/)
+  assert.match(
+    learningHome,
+    /watch\(\(\) => route\.query\.assignment_id,\s*\(\) => \{\s*void loadClassAssignments\(\)/,
+  )
+})

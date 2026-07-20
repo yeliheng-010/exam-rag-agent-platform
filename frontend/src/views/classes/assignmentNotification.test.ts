@@ -52,3 +52,18 @@ test('locates an open assignment and blocks a closed one without an attempt', as
   })
   assert.deepEqual(assignmentNotificationTarget(makeItem({ can_start: false })), { kind: 'blocked' })
 })
+
+test('keeps an older notification assignment inside the visible assignment window', async () => {
+  const { assignmentWindowForNotification } = await loadNotification()
+  const assignments = Array.from({ length: 10 }, (_, index) => ({
+    assignment: { id: `assignment-${index + 1}` },
+  }))
+
+  const visible = assignmentWindowForNotification(assignments, 'assignment-10', 8)
+
+  assert.equal(visible.length, 8)
+  assert.deepEqual(
+    visible.map((item: { assignment: { id: string } }) => item.assignment.id),
+    ['assignment-1', 'assignment-2', 'assignment-3', 'assignment-4', 'assignment-5', 'assignment-6', 'assignment-7', 'assignment-10'],
+  )
+})
