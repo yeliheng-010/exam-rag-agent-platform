@@ -34,19 +34,37 @@ def load_from_xml_v2(baseURI, rels_item_xml):
 _SerializedRelationships.load_from_xml = load_from_xml_v2
 
 from docx import Document
-from docx.image.exceptions import (
-    InvalidImageStreamError,
-    UnexpectedEndOfFileError,
-    UnrecognizedImageError,
-)
 from PIL import Image
 
 from docreader.config import CONFIG
 from docreader.models.document import Document as DocumentModel
 from docreader.parser.base_parser import BaseParser
+from docreader.parser.office_media import rasterize_media_bytes
 from docreader.utils import endecode
 
 logger = logging.getLogger(__name__)
+
+
+def _open_related_part_image(related_part) -> Optional[Image.Image]:
+    try:
+        image_blob = related_part.blob
+    except Exception as exc:
+        logger.warning("Failed to read DOCX image part: %s", exc)
+        return None
+
+    try:
+        return Image.open(BytesIO(image_blob)).convert("RGBA")
+    except Exception:
+        part_name = os.path.basename(str(getattr(related_part, "partname", "image.bin")))
+        png = rasterize_media_bytes(part_name, image_blob)
+        if not png:
+            logger.warning("Unsupported DOCX image part: %s", part_name)
+            return None
+        try:
+            return Image.open(BytesIO(png)).convert("RGBA")
+        except Exception as exc:
+            logger.warning("Failed to open rasterized DOCX image %s: %s", part_name, exc)
+            return None
 
 
 class ImageData:
@@ -311,32 +329,12 @@ class Docx:
             related_part = document.part.related_parts[embed]
             logger.info(f"Found embedded image with ID: {embed}")
 
-            try:
-                image_blob = related_part.image.blob
-            except UnrecognizedImageError:
-                logger.warning("Unrecognized image format. Skipping image.")
-                return None
-            except UnexpectedEndOfFileError:
-                logger.warning(
-                    "EOF was unexpectedly encountered while reading an image stream. Skipping image."
-                )
-                return None
-            except InvalidImageStreamError:
-                logger.warning(
-                    "The recognized image stream appears to be corrupted. Skipping image."
-                )
-                return None
-
-            try:
-                logger.info("Converting image blob to PIL Image")
-                image = Image.open(BytesIO(image_blob)).convert("RGBA")
+            image = _open_related_part_image(related_part)
+            if image:
                 logger.info(
                     f"Successfully extracted image, size: {image.width}x{image.height}"
                 )
-                return image
-            except Exception as e:
-                logger.error(f"Failed to open image: {str(e)}")
-                return None
+            return image
         except Exception as e:
             logger.error(f"Error extracting image: {str(e)}")
             return None
@@ -1439,96 +1437,31 @@ def _extract_image_in_process(
         Image: Extracted image object, or None
     """
     try:
-        # Attempt to extract image
-        img = paragraph._element.xpath(".//pic:pic")
-        if not img:
+        pictures = paragraph._element.xpath(".//pic:pic")
+        if not pictures:
             return None
-
-        img = img[0]
-        logger.info(
-            f"[PID:{os.getpid()}] Page {page_num}: Found pic element in paragraph {para_idx}"
-        )
-
-        try:
-            # Extract image ID and related part
-            embed = img.xpath(".//a:blip/@r:embed")
-            if not embed:
-                logger.warning(
-                    f"[PID:{os.getpid()}] Page {page_num}: No embed attribute found in image"
-                )
-                return None
-
-            embed = embed[0]
-            if embed not in doc.part.related_parts:
-                logger.warning(
-                    f"[PID:{os.getpid()}] Page {page_num}: Embed ID {embed} not found in related parts"
-                )
-                return None
-
-            related_part = doc.part.related_parts[embed]
-            logger.info(f"[PID:{os.getpid()}] Found embedded image with ID: {embed}")
-
-            # Attempt to get image data
-            try:
-                image_blob = related_part.image.blob
-                logger.info(
-                    f"[PID:{os.getpid()}] Successfully extracted image blob, size: {len(image_blob)} bytes"
-                )
-            except Exception as blob_error:
-                logger.warning(
-                    f"[PID:{os.getpid()}] Error extracting image blob: {str(blob_error)}"
-                )
-                return None
-
-            # Convert data to PIL image
-            try:
-                image = Image.open(BytesIO(image_blob)).convert("RGBA")
-
-                # Check image size
-                if hasattr(image, "width") and hasattr(image, "height"):
-                    logger.info(
-                        f"[PID:{os.getpid()}] Successfully created image object, "
-                        f"size: {image.width}x{image.height}"
-                    )
-
-                    # Skip small images (usually decorative elements)
-                    if image.width < 50 or image.height < 50:
-                        logger.info(
-                            f"[PID:{os.getpid()}] "
-                            f"Skipping small image ({image.width}x{image.height})"
-                        )
-                        return None
-
-                    # Scale large images
-                    if image.width > max_image_size or image.height > max_image_size:
-                        scale = min(
-                            max_image_size / image.width, max_image_size / image.height
-                        )
-                        new_width = int(image.width * scale)
-                        new_height = int(image.height * scale)
-                        resized_image = image.resize((new_width, new_height))
-                        logger.info(
-                            f"[PID:{os.getpid()}] Resized image to {new_width}x{new_height}"
-                        )
-                        return resized_image
-
-                logger.info(f"[PID:{os.getpid()}] Found image in paragraph {para_idx}")
-                return image
-            except Exception as e:
-                logger.error(
-                    f"[PID:{os.getpid()}] Failed to create image from blob: {str(e)}"
-                )
-                logger.error(
-                    f"[PID:{os.getpid()}] Error traceback: {traceback.format_exc()}"
-                )
-                return None
-        except Exception as e:
-            logger.error(f"[PID:{os.getpid()}] Error extracting image: {str(e)}")
-            logger.error(
-                f"[PID:{os.getpid()}] Error traceback: {traceback.format_exc()}"
+        embed_ids = pictures[0].xpath(".//a:blip/@r:embed")
+        if not embed_ids or embed_ids[0] not in doc.part.related_parts:
+            logger.warning(
+                "[PID:%s] Page %s: image relationship is missing in paragraph %s",
+                os.getpid(),
+                page_num,
+                para_idx,
             )
             return None
-    except Exception as e:
-        logger.error(f"[PID:{os.getpid()}] Error processing image: {str(e)}")
-        logger.error(f"[PID:{os.getpid()}] Error traceback: {traceback.format_exc()}")
+
+        image = _open_related_part_image(doc.part.related_parts[embed_ids[0]])
+        if image is None:
+            return None
+        if image.width < 50 or image.height < 50:
+            logger.info("Skipping small image (%sx%s)", image.width, image.height)
+            return None
+        if image.width > max_image_size or image.height > max_image_size:
+            scale = min(max_image_size / image.width, max_image_size / image.height)
+            size = (int(image.width * scale), int(image.height * scale))
+            image = image.resize(size)
+        return image
+    except Exception as exc:
+        logger.error("[PID:%s] Error extracting DOCX image: %s", os.getpid(), exc)
+        logger.error("[PID:%s] Traceback: %s", os.getpid(), traceback.format_exc())
         return None

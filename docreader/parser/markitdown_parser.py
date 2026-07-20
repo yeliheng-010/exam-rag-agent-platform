@@ -9,6 +9,7 @@ from docreader.parser.base_parser import BaseParser
 from docreader.parser.chain_parser import PipelineParser
 from docreader.parser.concurrency import parser_worker_limit
 from docreader.parser.markdown_parser import MarkdownParser
+from docreader.parser.office_media import attach_vector_data_uris_to_markdown
 from docreader.parser.ppt_convert import normalize_ppt_bytes
 from docreader.parser.pptx_media import (
     attach_pptx_media_to_markdown,
@@ -57,8 +58,11 @@ class StdMarkitdownParser(BaseParser):
 
         text = result.text_content
         images: dict[str, str] = {}
+        text, vector_images = attach_vector_data_uris_to_markdown(text)
+        images.update(vector_images)
         if pptx_bytes is not None and markdown_needs_pptx_media_attach(text):
-            text, images = attach_pptx_media_to_markdown(text, pptx_bytes)
+            text, pptx_images = attach_pptx_media_to_markdown(text, pptx_bytes)
+            images.update(pptx_images)
         return Document(content=text, images=images)
 
     def _convert_markitdown(self, content: bytes, ext: str | None, *, keep_data_uris: bool):
