@@ -11,8 +11,10 @@ import (
 )
 
 type fakeExamClassRepo struct {
-	classes map[string]*types.ExamClass
-	members map[string]*types.ExamClassMember
+	classes                map[string]*types.ExamClass
+	members                map[string]*types.ExamClassMember
+	updateClassMetadataErr error
+	transitionClassErr     error
 }
 
 func newFakeExamClassRepo() *fakeExamClassRepo {
@@ -196,38 +198,6 @@ func (s *fakeExamTeacherAccess) IsApprovedTeacher(_ context.Context, tenantID ui
 
 func newExamClassServiceForTest(repo *fakeExamClassRepo, teacherAccess *fakeExamTeacherAccess) *examClassService {
 	return NewExamClassService(repo, &fakeExamSpaceRepo{}, &fakeExamDomainRepo{}, teacherAccess).(*examClassService)
-}
-
-func seedExamClass(repo *fakeExamClassRepo, classID string, tenantID uint64, ownerID string, inviteCode string) *types.ExamClass {
-	class := &types.ExamClass{
-		ID:          classID,
-		TenantID:    tenantID,
-		OwnerUserID: ownerID,
-		SpaceID:     "space-" + classID,
-		Name:        "IELTS Class",
-		InviteCode:  &inviteCode,
-		MemberLimit: 50,
-		Status:      types.ExamClassStatusActive,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-	}
-	repo.classes[class.ID] = class
-	return class
-}
-
-func seedExamClassMember(repo *fakeExamClassRepo, classID string, tenantID uint64, userID string, role types.ExamClassRole, status types.ExamClassMemberStatus) {
-	member := &types.ExamClassMember{
-		ID:        "member-" + userID,
-		ClassID:   classID,
-		UserID:    userID,
-		TenantID:  tenantID,
-		Role:      role,
-		Status:    status,
-		JoinedAt:  time.Now(),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	repo.members[classMemberKey(classID, userID)] = member
 }
 
 func TestExamClassJoinRequiresTeacherApproval(t *testing.T) {

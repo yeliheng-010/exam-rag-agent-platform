@@ -126,27 +126,6 @@ func (s *examClassService) CreateClass(ctx context.Context, tenantID uint64, use
 	return class, nil
 }
 
-func (s *examClassService) ListClasses(ctx context.Context, tenantID uint64, userID string) ([]*types.ExamClass, error) {
-	return s.classRepo.ListByUser(ctx, tenantID, userID)
-}
-
-func (s *examClassService) GetClass(ctx context.Context, tenantID uint64, userID string, classID string) (*types.ExamClass, error) {
-	class, err := s.classRepo.GetByIDAndTenant(ctx, classID, tenantID)
-	if err != nil {
-		if errors.Is(err, repository.ErrExamClassNotFound) {
-			return nil, ErrExamNotFound
-		}
-		return nil, err
-	}
-	if _, err := s.classRepo.GetMember(ctx, class.ID, tenantID, userID); err != nil {
-		if errors.Is(err, repository.ErrExamClassMemberNotFound) {
-			return nil, ErrExamPermissionDenied
-		}
-		return nil, err
-	}
-	return class, nil
-}
-
 func (s *examClassService) RequestJoinClass(ctx context.Context, tenantID uint64, userID string, req *types.JoinExamClassRequest) (*types.ExamClassMember, error) {
 	if req == nil {
 		return nil, ErrExamInvalidRequest
@@ -219,7 +198,11 @@ func (s *examClassService) ApproveClassMember(ctx context.Context, tenantID uint
 	if member.Role != types.ExamClassRoleStudent || member.Status != types.ExamClassMemberStatusPending {
 		return nil, ErrExamInvalidRequest
 	}
-	return s.classRepo.UpdateMemberStatus(ctx, classID, tenantID, targetUserID, types.ExamClassMemberStatusActive)
+	approved, err := s.classRepo.ApproveMemberWithinLimit(ctx, tenantID, classID, targetUserID, time.Now())
+	if err != nil {
+		return nil, mapExamClassSettingsRepositoryError(err)
+	}
+	return approved, nil
 }
 
 func (s *examClassService) RejectClassMember(ctx context.Context, tenantID uint64, reviewerID string, classID string, targetUserID string) (*types.ExamClassMember, error) {
@@ -240,35 +223,6 @@ func (s *examClassService) RejectClassMember(ctx context.Context, tenantID uint6
 		return nil, ErrExamInvalidRequest
 	}
 	return s.classRepo.UpdateMemberStatus(ctx, classID, tenantID, targetUserID, types.ExamClassMemberStatusRemoved)
-}
-
-func (s *examClassService) CanAccessClass(ctx context.Context, tenantID uint64, userID string, classID string) (bool, error) {
-	_, err := s.GetClass(ctx, tenantID, userID, classID)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, ErrExamNotFound) || errors.Is(err, ErrExamPermissionDenied) {
-		return false, nil
-	}
-	return false, err
-}
-
-func (s *examClassService) CanWriteClass(ctx context.Context, tenantID uint64, userID string, classID string) (bool, error) {
-	class, err := s.classRepo.GetByIDAndTenant(ctx, classID, tenantID)
-	if err != nil {
-		if errors.Is(err, repository.ErrExamClassNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-	member, err := s.classRepo.GetMember(ctx, class.ID, tenantID, userID)
-	if err != nil {
-		if errors.Is(err, repository.ErrExamClassMemberNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-	return member.Role.CanWrite(), nil
 }
 
 func (s *examClassService) ensureCanReviewClassMembers(ctx context.Context, tenantID uint64, userID string, classID string) error {
