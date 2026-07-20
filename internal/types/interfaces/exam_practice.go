@@ -10,6 +10,7 @@ type ExamPracticeService interface {
 	ListQuestionGroups(ctx context.Context, tenantID uint64, userID string, filter types.ListPracticeQuestionGroupsFilter) ([]*types.QuestionGroupPracticeSummary, error)
 	ListAttempts(ctx context.Context, tenantID uint64, userID string, filter types.ListPracticeAttemptsFilter) ([]*types.PracticeAttemptSummary, error)
 	GetAttemptDetail(ctx context.Context, tenantID uint64, userID string, attemptID string) (*types.PracticeAttemptDetail, error)
+	GetExplanationContext(ctx context.Context, tenantID uint64, userID string, attemptID string, questionID string) (*types.PracticeExplanationContext, error)
 	ListWrongQuestions(ctx context.Context, tenantID uint64, userID string, filter types.ListWrongQuestionsFilter) ([]*types.WrongQuestionItem, error)
 	GetQuestionGroupDetail(ctx context.Context, tenantID uint64, userID string, groupID string) (*types.QuestionGroupDetail, error)
 	CreateAttempt(ctx context.Context, tenantID uint64, userID string, groupID string) (*types.CreatePracticeAttemptResult, error)

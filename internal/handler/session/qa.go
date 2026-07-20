@@ -172,6 +172,16 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 		// - Normal pure-chat mode: runs in the async goroutine with progress events
 	}
 
+	imageCount := len(request.Images)
+	request.Images = appendInlineQueryImages(
+		request.Query,
+		c.GetUint64(types.TenantIDContextKey.String()),
+		request.Images,
+	)
+	if added := len(request.Images) - imageCount; added > 0 {
+		logger.Infof(ctx, "[%s] Attached %d trusted inline query image(s)", logPrefix, added)
+	}
+
 	// Process file attachments: decode and save to storage, extract content
 	var processedAttachments types.MessageAttachments
 	if len(request.AttachmentUploads) > 0 {

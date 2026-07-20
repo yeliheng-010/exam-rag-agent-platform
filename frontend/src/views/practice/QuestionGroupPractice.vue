@@ -32,7 +32,7 @@
             class="material-body"
             :class="{ 'is-collapsed': canToggleMaterial && !materialExpanded }"
           >
-            {{ group.group.material_text || '当前题组没有单独材料。' }}
+            <ExamRichText :content="group.group.material_text || '当前题组没有单独材料。'" />
           </div>
           <div v-if="group.assets?.length" class="asset-list">
             <div v-for="asset in group.assets" :key="asset.id" class="asset-chip">
@@ -73,7 +73,7 @@
           </div>
 
           <article v-if="currentQuestion" class="question-card">
-            <div class="question-stem">{{ currentQuestion.question.stem }}</div>
+            <ExamRichText class="question-stem" :content="currentQuestion.question.stem" />
             <div v-if="currentQuestion.options?.length" class="option-list">
               <button
                 v-for="option in currentQuestion.options"
@@ -84,8 +84,8 @@
                 :disabled="hasResult(currentQuestion)"
                 @click="selectOption(currentQuestion, option.option_key)"
               >
-                <span>{{ option.option_key }}</span>
-                <strong>{{ option.content }}</strong>
+                <span class="option-key">{{ option.option_key }}</span>
+                <ExamRichText as="span" class="option-content" :content="option.content" inline />
               </button>
             </div>
             <t-textarea
@@ -101,7 +101,7 @@
               <t-button theme="primary" :disabled="!canSubmitCurrent" :loading="submitting" @click="submitCurrentAnswer">
                 提交答案
               </t-button>
-              <t-button variant="outline" @click="startExplanation">
+              <t-button variant="outline" :disabled="!attempt" :loading="explaining" @click="startExplanation">
                 <template #icon><t-icon name="chat" /></template>
                 AI 讲解
               </t-button>
@@ -110,12 +110,33 @@
             <div v-if="currentResult" class="answer-panel" :class="{ 'is-correct': currentResult.answer.is_correct }">
               <div class="answer-panel__head">
                 <strong>{{ currentResult.answer.is_correct ? '回答正确' : '需要订正' }}</strong>
-                <span>你的答案：{{ currentResult.answer.answer_text || '-' }}</span>
+                <div class="answer-rich-line">
+                  <span class="answer-label">你的答案：</span>
+                  <ExamRichText
+                    as="span"
+                    class="answer-rich-content"
+                    :content="currentResult.answer.answer_text || '-'"
+                    inline
+                  />
+                </div>
               </div>
-              <p>正确答案：{{ currentResult.correct_answers.join('，') || '-' }}</p>
-              <p v-for="item in currentResult.explanations" :key="item.id || item.explanation_text">
-                解析：{{ item.explanation_text }}
-              </p>
+              <div class="answer-rich-line">
+                <span class="answer-label">正确答案：</span>
+                <ExamRichText
+                  as="span"
+                  class="answer-rich-content"
+                  :content="currentResult.correct_answers.join('，') || '-'"
+                  inline
+                />
+              </div>
+              <div
+                v-for="item in currentResult.explanations"
+                :key="item.id || item.explanation_text"
+                class="answer-rich-line"
+              >
+                <span class="answer-label">解析：</span>
+                <ExamRichText as="span" class="answer-rich-content" :content="item.explanation_text" />
+              </div>
               <div v-if="currentResult.chunk_refs?.length" class="evidence-list">
                 <span v-for="ref in currentResult.chunk_refs" :key="`${ref.question_id}-${ref.chunk_id}`">
                   证据 chunk：{{ ref.chunk_id }}
@@ -134,11 +155,14 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { createPracticeAttempt, getPracticeAttempt, submitPracticeAnswer, completePracticeAttempt } from '@/api/exam/practice'
+import { createPracticeAttempt, getPracticeAttempt, getPracticeExplanationContext, submitPracticeAnswer, completePracticeAttempt } from '@/api/exam/practice'
+import { BUILTIN_QUICK_ANSWER_ID } from '@/api/agent'
 import { listExamResources } from '@/api/exam/resource'
 import { useMenuStore } from '@/stores/menu'
 import { useSettingsStore } from '@/stores/settings'
 import type { ExamPracticeAttempt, PracticeAnswerResult, QuestionDetail, QuestionGroupDetail } from '@/types/exam'
+import ExamRichText from '../question-bank/ExamRichText.vue'
+import { buildAuthoritativeReferenceAnswerPrompt } from './explanationPrompt'
 
 const route = useRoute()
 const router = useRouter()
@@ -147,6 +171,7 @@ const settingsStore = useSettingsStore()
 
 const loading = ref(false)
 const submitting = ref(false)
+const explaining = ref(false)
 const group = ref<QuestionGroupDetail | null>(null)
 const attempt = ref<ExamPracticeAttempt | null>(null)
 const currentQuestionIndex = ref(0)
@@ -272,15 +297,32 @@ const completeAttempt = async () => {
 }
 
 const startExplanation = async () => {
-  if (!group.value || !currentQuestion.value) return
-  const kbId = await resolvePracticeKnowledgeBase()
-  if (kbId) {
-    settingsStore.selectKnowledgeBases([kbId])
+  if (!attempt.value || !group.value || !currentQuestion.value) return
+  const question = currentQuestion.value
+  explaining.value = true
+  try {
+    const [contextResponse, kbId] = await Promise.all([
+      getPracticeExplanationContext(attempt.value.id, question.question.id),
+      resolvePracticeKnowledgeBase(),
+    ])
+    const referenceAnswer = contextResponse.data?.reference_answer?.trim() || ''
+    if (!referenceAnswer) {
+      MessagePlugin.error('当前题目暂无可用的权威参考答案')
+      return
+    }
+    settingsStore.selectAgent(BUILTIN_QUICK_ANSWER_ID)
+    if (kbId) {
+      settingsStore.selectKnowledgeBases([kbId])
+    }
+    settingsStore.clearFiles()
+    settingsStore.clearTags()
+    menuStore.setPrefillQuery(buildExplanationPrompt(question, currentResult.value, referenceAnswer))
+    await router.push('/platform/creatChat')
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '获取 AI 讲解上下文失败')
+  } finally {
+    explaining.value = false
   }
-  settingsStore.clearFiles()
-  settingsStore.clearTags()
-  menuStore.setPrefillQuery(buildExplanationPrompt(currentQuestion.value, currentResult.value))
-  router.push('/platform/creatChat')
 }
 
 const resolvePracticeKnowledgeBase = async () => {
@@ -294,23 +336,56 @@ const resolvePracticeKnowledgeBase = async () => {
   }
 }
 
-const buildExplanationPrompt = (question: QuestionDetail, result: PracticeAnswerResult | null) => {
+const buildExplanationPrompt = (question: QuestionDetail, result: PracticeAnswerResult | null, referenceAnswerText: string) => {
   const options = question.options?.map(option => `${option.option_key}. ${option.content}`).join('\n') || '无选项'
   const material = clipText(group.value?.group.material_text || '', 3600)
+  const referenceAnswer = buildAuthoritativeReferenceAnswerPrompt(questionNo(question), [{
+    answer_text: referenceAnswerText,
+    is_correct: true,
+  }])
+  const supplementalAssets = buildSupplementalAssetPrompt(buildGroupReferencedAssetContent())
   const parts = [
     '请作为考试老师，基于下面题组材料讲解这道题。',
-    `【题组材料】\n${material || '无单独材料'}`,
-    `【题目】\n${question.question.stem}`,
+  ]
+  if (referenceAnswer) parts.push(referenceAnswer)
+  parts.push(`【题组材料】\n${material || '无单独材料'}`, `【题目】\n${question.question.stem}`)
+  if (supplementalAssets) parts.push(supplementalAssets)
+  parts.push(
     `【选项】\n${options}`,
     `【我的答案】\n${selectedAnswers.value[question.question.id] || '未填写'}`,
-  ]
+  )
   if (result) {
     parts.push(`【正确答案】\n${result.correct_answers.join('，') || '-'}`)
     const explanation = result.explanations?.map(item => item.explanation_text).filter(Boolean).join('\n')
     if (explanation) parts.push(`【已有解析】\n${explanation}`)
   }
-  parts.push('请说明解题思路、原文依据或关键步骤，并指出我应该如何复盘。')
+  parts.push('请给出完整推导、原文依据或关键步骤，并指出我应该如何复盘。不要省略关键计算，也不要把依赖 n 的量称为常数。')
   return parts.join('\n\n')
+}
+
+const maxSupplementalExplanationAssets = 6
+
+const buildGroupReferencedAssetContent = () => {
+  const questionContent = group.value?.questions.flatMap(item => [
+    item.question.stem,
+    ...(item.options || []).map(option => option.content),
+  ]) || []
+  return [group.value?.group.material_text || '', ...questionContent].join('\n')
+}
+
+const buildSupplementalAssetPrompt = (referencedContent: string) => {
+  const seen = new Set<string>()
+  const assetUris: string[] = []
+  for (const asset of group.value?.assets || []) {
+    const uri = asset.storage_uri?.trim()
+    if (asset.asset_type !== 'image' || !uri || referencedContent.includes(uri) || seen.has(uri)) continue
+    seen.add(uri)
+    assetUris.push(uri)
+    if (assetUris.length >= maxSupplementalExplanationAssets) break
+  }
+  if (!assetUris.length) return ''
+  const images = assetUris.map((uri, index) => `![题面补充公式 ${index + 1}](${uri})`).join('\n')
+  return `【题面补充公式】\n以下图片是题组中未被任何小题题干直接引用的公共候选公式，只使用与当前小题直接相关的条件：\n${images}`
 }
 
 const clipText = (text: string, limit: number) => {
@@ -541,7 +616,7 @@ onMounted(loadData)
   text-align: left;
   cursor: pointer;
 
-  span {
+  .option-key {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -552,7 +627,7 @@ onMounted(loadData)
     font-weight: 600;
   }
 
-  strong {
+  .option-content {
     min-width: 0;
     font-size: 14px;
     line-height: 22px;
@@ -603,21 +678,29 @@ onMounted(loadData)
     background: var(--td-success-color-1);
   }
 
-  p {
-    margin: 0;
-    color: var(--td-text-color-primary);
-    font-size: 13px;
-    line-height: 20px;
-  }
 }
 
 .answer-panel__head {
   align-items: center;
+}
 
-  span {
-    color: var(--td-text-color-secondary);
-    font-size: 12px;
-  }
+.answer-rich-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 4px;
+  min-width: 0;
+  color: var(--td-text-color-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.answer-label {
+  white-space: nowrap;
+}
+
+.answer-rich-content {
+  min-width: 0;
 }
 
 @media (max-width: 1080px) {
@@ -644,6 +727,14 @@ onMounted(loadData)
     :deep(.t-button) {
       flex: 1;
       min-width: 0;
+    }
+  }
+
+  .question-stem,
+  .option-content,
+  .answer-rich-content {
+    :deep(.katex) {
+      font-size: 0.9em;
     }
   }
 }

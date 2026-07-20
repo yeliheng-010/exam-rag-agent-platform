@@ -99,8 +99,29 @@ func (p *PluginQueryUnderstand) OnEvent(ctx context.Context,
 		return next()
 	}
 
+	// Formula images need isolated transcription before the generic multi-image
+	// rewrite. This prevents small fraction bars or denominators from being lost
+	// when the model must inspect several images at once.
+	queryForUnderstand := chatManage.Query
+	if useImages {
+		transcriptions := transcribeInlineFormulaImages(
+			ctx,
+			rewriteModel,
+			chatManage.Query,
+			chatManage.Images,
+		)
+		formulaContext := buildFormulaTranscriptionContext(transcriptions)
+		queryForUnderstand = applyFormulaTranscriptionContext(chatManage, formulaContext)
+		if formulaContext != "" {
+			pipelineInfo(ctx, "QueryUnderstand", "formula_transcription", map[string]interface{}{
+				"session_id":          chatManage.SessionID,
+				"transcription_count": len(transcriptions),
+			})
+		}
+	}
+
 	// --- Build prompts ---
-	systemContent, userContent := p.buildPrompts(chatManage, historyList)
+	systemContent, userContent := p.buildPrompts(chatManage, historyList, queryForUnderstand)
 
 	userMsg := chat.Message{Role: "user", Content: userContent}
 	if useImages {
@@ -280,7 +301,11 @@ func (p *PluginQueryUnderstand) selectModel(ctx context.Context, chatManage *typ
 }
 
 // buildPrompts constructs system and user prompts with placeholder replacement.
-func (p *PluginQueryUnderstand) buildPrompts(chatManage *types.ChatManage, historyList []*types.History) (string, string) {
+func (p *PluginQueryUnderstand) buildPrompts(
+	chatManage *types.ChatManage,
+	historyList []*types.History,
+	query string,
+) (string, string) {
 	userPrompt := p.config.Conversation.RewritePromptUser
 	if chatManage.RewritePromptUser != "" {
 		userPrompt = chatManage.RewritePromptUser
@@ -292,7 +317,7 @@ func (p *PluginQueryUnderstand) buildPrompts(chatManage *types.ChatManage, histo
 
 	conversationText := formatConversationHistory(historyList)
 
-	queryContent := chatManage.Query
+	queryContent := query
 	if len(chatManage.Images) > 0 {
 		queryContent += fmt.Sprintf("\n\n<images_uploaded count=\"%d\" />", len(chatManage.Images))
 	} else {

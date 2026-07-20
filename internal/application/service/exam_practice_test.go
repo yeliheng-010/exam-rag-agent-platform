@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,6 +80,65 @@ func TestExamPracticeService_CreateAttemptHidesAnswerMaterialUntilSubmit(t *test
 	}
 	if len(result.Explanations) != 1 || len(result.ChunkRefs) != 1 {
 		t.Fatalf("submit result explanations=%d chunk_refs=%d, want 1/1", len(result.Explanations), len(result.ChunkRefs))
+	}
+}
+
+func TestExamPracticeService_GetExplanationContextScopesCurrentSubquestion(t *testing.T) {
+	ctx := context.Background()
+	detail := newPracticeGroupDetail()
+	question := detail.Questions[0]
+	question.Question.QuestionNo = "16(1)"
+	question.Answers = []*types.QuestionAnswer{{
+		ID:         "answer-1",
+		QuestionID: question.Question.ID,
+		AnswerText: "（1）由递推式得到结论。\n式 (2) 仍属于当前小题。\n（2）下一小题答案不得返回。",
+		IsCorrect:  true,
+		CreatedAt:  time.Now(),
+	}}
+	svc := NewExamPracticeService(
+		&stubQuestionGroupWriter{created: []*types.QuestionGroupDetail{detail}},
+		newStubPracticeRepo(),
+		&stubExamQuestionDraftSpace{canRead: true},
+	).(*examPracticeService)
+	attempt, err := svc.CreateAttempt(ctx, 10000, "student-1", "group-1")
+	if err != nil {
+		t.Fatalf("CreateAttempt returned error: %v", err)
+	}
+
+	result, err := svc.GetExplanationContext(ctx, 10000, "student-1", attempt.Attempt.ID, question.Question.ID)
+
+	if err != nil {
+		t.Fatalf("GetExplanationContext returned error: %v", err)
+	}
+	if !strings.Contains(result.ReferenceAnswer, "式 (2) 仍属于当前小题") {
+		t.Fatalf("reference answer %q lost current-subquestion content", result.ReferenceAnswer)
+	}
+	if strings.Contains(result.ReferenceAnswer, "下一小题") {
+		t.Fatalf("reference answer %q leaked the next subquestion", result.ReferenceAnswer)
+	}
+}
+
+func TestExamPracticeService_GetExplanationContextRequiresOwnedAttempt(t *testing.T) {
+	ctx := context.Background()
+	svc, repo := newTestExamPracticeService()
+	repo.attempts = append(repo.attempts, &types.ExamPracticeAttempt{
+		ID:             "attempt-other",
+		TenantID:       10000,
+		UserID:         "student-2",
+		SpaceID:        "space-1",
+		QuestionBankID: "bank-1",
+		GroupID:        "group-1",
+		Status:         types.ExamPracticeAttemptStatusInProgress,
+		QuestionCount:  1,
+		StartedAt:      time.Now(),
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	})
+
+	_, err := svc.GetExplanationContext(ctx, 10000, "student-1", "attempt-other", "question-1")
+
+	if !errors.Is(err, ErrExamPermissionDenied) {
+		t.Fatalf("GetExplanationContext error = %v, want ErrExamPermissionDenied", err)
 	}
 }
 

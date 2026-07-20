@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -129,6 +131,31 @@ func (s *examPracticeService) GetAttemptDetail(
 		Attempt: attempt,
 		Group:   practiceQuestionGroupView(detail),
 		Answers: answers,
+	}, nil
+}
+
+func (s *examPracticeService) GetExplanationContext(
+	ctx context.Context,
+	tenantID uint64,
+	userID string,
+	attemptID string,
+	questionID string,
+) (*types.PracticeExplanationContext, error) {
+	attempt, err := s.ownedAttempt(ctx, tenantID, userID, attemptID)
+	if err != nil {
+		return nil, err
+	}
+	detail, err := s.readableQuestionGroup(ctx, tenantID, userID, attempt.GroupID)
+	if err != nil {
+		return nil, err
+	}
+	question := findPracticeQuestion(detail, strings.TrimSpace(questionID))
+	if question == nil || question.Question == nil {
+		return nil, ErrExamInvalidRequest
+	}
+	return &types.PracticeExplanationContext{
+		QuestionID:      question.Question.ID,
+		ReferenceAnswer: buildPracticeReferenceAnswer(question),
 	}, nil
 }
 
@@ -596,6 +623,55 @@ func mustPracticeJSON(value any) types.JSON {
 }
 
 var answerTokenSplitter = regexp.MustCompile(`[\s,，、;；/]+`)
+var practiceSubquestionSuffix = regexp.MustCompile(`[（(]\s*(\d+)\s*[）)]\s*$`)
+
+func buildPracticeReferenceAnswer(question *types.QuestionDetail) string {
+	if question == nil || question.Question == nil {
+		return ""
+	}
+	hasCorrect := false
+	for _, answer := range question.Answers {
+		hasCorrect = hasCorrect || answer != nil && answer.IsCorrect
+	}
+	seen := map[string]bool{}
+	parts := make([]string, 0, len(question.Answers))
+	for _, answer := range question.Answers {
+		if answer == nil || hasCorrect && !answer.IsCorrect {
+			continue
+		}
+		scoped := scopePracticeReferenceAnswer(question.Question.QuestionNo, answer.AnswerText)
+		if scoped != "" && !seen[scoped] {
+			seen[scoped] = true
+			parts = append(parts, scoped)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+func scopePracticeReferenceAnswer(questionNo string, answerText string) string {
+	trimmed := strings.TrimSpace(answerText)
+	match := practiceSubquestionSuffix.FindStringSubmatch(strings.TrimSpace(questionNo))
+	if trimmed == "" || len(match) != 2 {
+		return trimmed
+	}
+	current, err := strconv.Atoi(match[1])
+	if err != nil {
+		return trimmed
+	}
+	next := strconv.Itoa(current + 1)
+	boundary := `(?:^|\r?\n|<br\s*/?>|</p>)\s*(?:<p[^>]*>\s*)?(?:#{1,6}\s*)?`
+	patterns := []string{
+		fmt.Sprintf(`(?im)%s[（(]\s*%s\s*[）)]`, boundary, next),
+		fmt.Sprintf(`(?im)%s第\s*%s\s*(?:问|小题)`, boundary, next),
+	}
+	cut := len(trimmed)
+	for _, pattern := range patterns {
+		if loc := regexp.MustCompile(pattern).FindStringIndex(trimmed); loc != nil && loc[0] > 0 && loc[0] < cut {
+			cut = loc[0]
+		}
+	}
+	return strings.TrimSpace(trimmed[:cut])
+}
 
 func isPracticeAnswerCorrect(submitted string, correctAnswers []string) bool {
 	submittedTokens := normalizedPracticeAnswerTokens([]string{submitted})

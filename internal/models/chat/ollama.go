@@ -23,7 +23,7 @@ type OllamaChat struct {
 	ollamaService *ollama.OllamaService
 }
 
-const minimumOllamaContextWindow = 8192
+const minimumOllamaContextWindow = 16384
 
 func ollamaContextWindow(maxTokens int) int {
 	contextWindow := maxTokens * 2
@@ -107,9 +107,13 @@ func (c *OllamaChat) buildChatRequest(messages []Message, opts *ChatOptions, isS
 		if opts.TopP > 0 {
 			chatReq.Options["top_p"] = opts.TopP
 		}
-		if opts.MaxTokens > 0 {
-			chatReq.Options["num_predict"] = opts.MaxTokens
-			chatReq.Options["num_ctx"] = ollamaContextWindow(opts.MaxTokens)
+		completionTokens := opts.MaxTokens
+		if opts.MaxCompletionTokens > 0 {
+			completionTokens = opts.MaxCompletionTokens
+		}
+		if completionTokens > 0 {
+			chatReq.Options["num_predict"] = completionTokens
+			chatReq.Options["num_ctx"] = ollamaContextWindow(completionTokens)
 		}
 		if opts.Thinking != nil {
 			chatReq.Think = &ollamaapi.ThinkValue{

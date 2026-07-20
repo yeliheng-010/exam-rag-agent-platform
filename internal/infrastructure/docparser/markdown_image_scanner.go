@@ -11,6 +11,38 @@ type markdownImageTargetSpan struct {
 	TargetEnd   int
 }
 
+// ExtractMarkdownImagePaths returns image destinations from inline Markdown images.
+func ExtractMarkdownImagePaths(markdown string) []string {
+	spans := scanMarkdownImageTargets(markdown)
+	paths := make([]string, 0, len(spans))
+	for _, span := range spans {
+		if path, ok := markdownImagePath(markdown[span.TargetStart:span.TargetEnd]); ok {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+func markdownImagePath(raw string) (string, bool) {
+	start, end := trimMarkdownSpaceBounds(raw, 0, len(raw))
+	if start >= end {
+		return "", false
+	}
+	if raw[start] == '<' {
+		for i := start + 1; i < end; i++ {
+			if raw[i] == '>' && !isEscaped(raw, i) && isEmptyOrMarkdownImageTitleSuffix(raw[i+1:end]) {
+				return raw[start+1 : i], i > start+1
+			}
+		}
+		return "", false
+	}
+	if titleStart, ok := parseMarkdownImageTitleSuffix(raw[start:end]); ok {
+		end = start + titleStart
+		_, end = trimMarkdownSpaceBounds(raw, start, end)
+	}
+	return raw[start:end], start < end
+}
+
 func scanMarkdownImageTargets(markdown string) []markdownImageTargetSpan {
 	var spans []markdownImageTargetSpan
 	for i := 0; i+1 < len(markdown); i++ {

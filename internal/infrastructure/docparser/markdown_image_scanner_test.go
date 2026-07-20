@@ -96,6 +96,25 @@ func TestScanMarkdownImageTargets(t *testing.T) {
 	}
 }
 
+func TestExtractMarkdownImagePaths(t *testing.T) {
+	input := `before ![formula](local://10000/exports/a.png) ` +
+		`![figure](<local://10000/exports/figure (1).webp> "图 1") after`
+
+	got := ExtractMarkdownImagePaths(input)
+	want := []string{
+		"local://10000/exports/a.png",
+		"local://10000/exports/figure (1).webp",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d paths, want %d: %#v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("path %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func TestSplitMarkdownImageTarget(t *testing.T) {
 	refMap := map[string]types.ImageRef{
 		"images/a.png":          {OriginalRef: "images/a.png"},

@@ -6,6 +6,7 @@ import type {
   ExamPracticeAnswer,
   PracticeAnswerResult,
   PracticeAttemptDetail,
+  PracticeExplanationContext,
   PracticeAttemptSummary,
   PracticeAnswerReviewStatus,
   QuestionGroupDetail,
@@ -67,6 +68,10 @@ export function listPracticeAttempts(params?: ListPracticeAttemptsParams) {
 
 export function getPracticeAttempt(attemptId: string) {
   return get(`/api/v1/exam/practice/attempts/${attemptId}`) as unknown as Promise<ApiResponse<PracticeAttemptDetail>>
+}
+
+export function getPracticeExplanationContext(attemptId: string, questionId: string) {
+  return get(`/api/v1/exam/practice/attempts/${attemptId}/questions/${questionId}/explanation-context`) as unknown as Promise<ApiResponse<PracticeExplanationContext>>
 }
 
 export function listWrongQuestions(params?: ListWrongQuestionsParams) {

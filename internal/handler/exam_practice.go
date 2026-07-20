@@ -74,6 +74,22 @@ func (h *ExamPracticeHandler) GetAttempt(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": attempt})
 }
 
+func (h *ExamPracticeHandler) GetExplanationContext(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(types.UserIDContextKey.String())
+	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+
+	result, err := h.practiceService.GetExplanationContext(
+		ctx, tenantID, userID, c.Param("attempt_id"), c.Param("question_id"),
+	)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to get practice explanation context: %v", err)
+		writeExamError(c, err, "Failed to get practice explanation context")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}
+
 func (h *ExamPracticeHandler) ListWrongQuestions(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.GetString(types.UserIDContextKey.String())

@@ -8,7 +8,7 @@ func TestOllamaChatReservesContextForPromptAndCompletion(t *testing.T) {
 		maxTokens int
 		want      int
 	}{
-		{name: "minimum window", maxTokens: 2048, want: 8192},
+		{name: "minimum window", maxTokens: 2048, want: 16384},
 		{name: "large completion", maxTokens: 8192, want: 16384},
 	}
 
@@ -19,5 +19,16 @@ func TestOllamaChatReservesContextForPromptAndCompletion(t *testing.T) {
 				t.Fatalf("expected num_ctx %d, got %v", tt.want, got)
 			}
 		})
+	}
+}
+
+func TestOllamaChatUsesMaxCompletionTokens(t *testing.T) {
+	req := (&OllamaChat{}).buildChatRequest(nil, &ChatOptions{MaxCompletionTokens: 2048}, false)
+
+	if got := req.Options["num_predict"]; got != 2048 {
+		t.Fatalf("expected num_predict 2048, got %v", got)
+	}
+	if got := req.Options["num_ctx"]; got != 16384 {
+		t.Fatalf("expected num_ctx 16384, got %v", got)
 	}
 }

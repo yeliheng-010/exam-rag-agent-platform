@@ -696,6 +696,11 @@ export interface CreatePracticeAttemptResult {
   group: QuestionGroupDetail
 }
 
+export interface PracticeExplanationContext {
+  question_id: string
+  reference_answer: string
+}
+
 export interface PracticeAnswerResult {
   attempt: ExamPracticeAttempt
   answer: ExamPracticeAnswer

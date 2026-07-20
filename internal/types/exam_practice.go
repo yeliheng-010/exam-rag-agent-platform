@@ -111,6 +111,11 @@ type CreatePracticeAttemptResult struct {
 	Group   *QuestionGroupDetail `json:"group"`
 }
 
+type PracticeExplanationContext struct {
+	QuestionID      string `json:"question_id"`
+	ReferenceAnswer string `json:"reference_answer"`
+}
+
 type SubmitPracticeAnswerRequest struct {
 	QuestionID string `json:"question_id" binding:"required"`
 	AnswerText string `json:"answer_text" binding:"required"`
