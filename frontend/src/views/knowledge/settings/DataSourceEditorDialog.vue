@@ -13,6 +13,7 @@ import {
   deleteDataSource,
   putDataSourceCredentials,
   deleteDataSourceCredentials,
+  unwrapMaybeWrapped,
   type DataSource,
   type Resource,
 } from '@/api/datasource'
@@ -271,7 +272,7 @@ async function ensureChildrenLoaded(id: string) {
   loadingChildrenIds.value = new Set(loadingChildrenIds.value).add(id)
   try {
     const res = await listResources(tempDsId.value, id)
-    const children: Resource[] = res?.data || res || []
+    const children = unwrapMaybeWrapped(res)
     if (children.length > 0) {
       const existing = new Set(resources.value.map(r => r.external_id))
       const merged = resources.value.slice()
@@ -521,16 +522,16 @@ function selectType(def: ConnectorDef) {
 }
 
 // --- Test connection (stateless, no DB write) ---
-async function testConnection() {
+async function testConnection(): Promise<boolean> {
   syncRssAuthHeadersToCredentials()
-  if (!validateRssFeedUrls()) return
+  if (!validateRssFeedUrls()) return false
   if (!isEdit.value || !credentialsConfigured.value || replaceCredentialsMode.value) {
     const fields = currentDef.value?.fields || []
     for (const f of fields) {
       if (f.optional || f.fieldType === 'custom_headers') continue
       if (!form.value.config.credentials[f.key]) {
         MessagePlugin.warning(`${t(f.labelKey)} ${t('datasource.isRequired')}`)
-        return
+        return false
       }
     }
   }
@@ -555,12 +556,15 @@ async function testConnection() {
     }
     testResult.value = 'success'
     MessagePlugin.success(t('datasource.testSuccess'))
+    return true
   } catch (e: any) {
     testResult.value = 'error'
     testErrorMsg.value = e?.message || e?.error || ''
     MessagePlugin.error(t('datasource.testFailed'))
+    return false
+  } finally {
+    testing.value = false
   }
-  testing.value = false
 }
 
 // --- Load resources ---
@@ -573,7 +577,7 @@ async function loadResources() {
         knowledge_base_id: props.kbId,
         status: 'paused',
       } as any)
-      const created = res?.data || res
+      const created = unwrapMaybeWrapped(res)
       tempDsId.value = created.id
     } else if (!isEdit.value) {
       await updateDataSource(tempDsId.value, {
@@ -583,7 +587,7 @@ async function loadResources() {
     }
 
     const res = await listResources(tempDsId.value)
-    resources.value = res?.data || res || []
+    resources.value = unwrapMaybeWrapped(res)
     // Any parent that already arrived with children (connectors returning the
     // full tree, e.g. Notion) needs no further lazy fetch.
     const parentsWithChildren = new Set<string>()
@@ -736,8 +740,7 @@ async function nextStep() {
   if (step.value === 1) {
     if (!validateStep1Fields()) return
     if (needsConnectionTest() && testResult.value !== 'success') {
-      await testConnection()
-      if (testResult.value !== 'success') return
+      if (!(await testConnection())) return
     }
   }
   step.value++
@@ -819,7 +822,7 @@ async function handleSubmit() {
         knowledge_base_id: props.kbId,
         status: 'active',
       } as any)
-      const created = res?.data || res
+      const created = unwrapMaybeWrapped(res)
       dataSourceId = created.id
       tempDsId.value = created.id
     }

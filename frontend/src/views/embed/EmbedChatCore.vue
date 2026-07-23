@@ -49,9 +49,9 @@
           <div v-if="session.role === 'user'">
             <EmbedUserMessage
               :content="String(session.content || '')"
-              :mentioned_items="session.mentioned_items"
-              :images="session.images"
-              :attachments="session.attachments"
+              :mentioned_items="asArray(session.mentioned_items)"
+              :images="asEmbedImages(session.images)"
+              :attachments="asEmbedAttachments(session.attachments)"
               :embeddedMode="true"
               :embed-channel-id="channelId"
               :embed-token="token"
@@ -142,6 +142,18 @@ const visitorIdRef = toRef(props, 'visitorId')
 const suggestedQuestions = ref<SuggestedQuestion[]>([])
 const suggestedLoading = ref(false)
 const hostContextRef = ref<Record<string, unknown>>(props.hostContext || {})
+
+type EmbedImage = { url?: string; data?: string }
+type EmbedAttachment = { file_name: string; file_size?: number }
+
+const asArray = (value: unknown): unknown[] => Array.isArray(value) ? value : []
+const asEmbedImages = (value: unknown): EmbedImage[] =>
+  asArray(value).filter((item): item is EmbedImage => !!item && typeof item === 'object')
+const asEmbedAttachments = (value: unknown): EmbedAttachment[] =>
+  asArray(value).filter((item): item is EmbedAttachment => {
+    if (!item || typeof item !== 'object') return false
+    return typeof (item as { file_name?: unknown }).file_name === 'string'
+  })
 
 const embedWebSearchStorageKey = () => `weknora-embed-web-search:${props.channelId}`
 

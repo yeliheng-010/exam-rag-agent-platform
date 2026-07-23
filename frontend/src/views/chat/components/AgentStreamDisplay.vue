@@ -713,6 +713,7 @@ import agentIcon from '@/assets/img/agent.svg';
 import thinkingIcon from '@/assets/img/Frame3718.svg';
 
 interface SessionData {
+  [key: string]: unknown;
   id?: string;
   request_id?: string;
   debugRequest?: Record<string, unknown>;
@@ -1617,7 +1618,7 @@ const onRootClick = (e: Event) => {
     const slug = wikiEl.getAttribute('data-slug');
 
     // Determine the relevant KB ID
-    const kbId = getKbIdForWiki(slug);
+    const kbId = slug ? getKbIdForWiki(slug) : '';
 
     if (kbId && slug) {
       openWikiDrawer(kbId, slug);

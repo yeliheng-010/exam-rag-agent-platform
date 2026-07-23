@@ -233,6 +233,11 @@ import { listPracticeQuestionGroups } from '@/api/exam/practice'
 import { createAssignmentAttempt, listMyExamAssignments } from '@/api/exam/assignment'
 import { listKnowledgeBases } from '@/api/knowledge-base'
 import { useAuthStore } from '@/stores/auth'
+
+const getErrorMessage = (error: unknown): string | undefined => {
+  if (typeof error !== 'object' || error === null || !('message' in error)) return undefined
+  return typeof error.message === 'string' ? error.message : undefined
+}
 import { useSettingsStore } from '@/stores/settings'
 import type { KnowledgeBaseInfo } from '@/api/auth'
 import type { ExamAssignmentSummary, ExamClass, ExamDomain, ExamMaterialType, ExamSpace, ExamSpaceResource, QuestionBank, QuestionGroupPracticeSummary, QuestionGroupType, ReviewStatus } from '@/types/exam'
@@ -463,16 +468,25 @@ const startChat = (kbId: string) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const [domainRes, spaceRes, classRes, bankRes] = await Promise.all([
+    await authStore.refreshFromAuthMe()
+    const canLoadQuestionBanks = authStore.hasRole('contributor')
+    const [domainRes, spaceRes, classRes] = await Promise.all([
       listExamDomains(),
       ensurePersonalExamSpace(),
       listExamClasses(),
-      canUseQuestionBanks.value ? listQuestionBanks() : Promise.resolve({ data: [] }),
     ])
     domains.value = domainRes.data || []
     personalSpace.value = spaceRes.data || null
     classes.value = classRes.data || []
-    questionBanks.value = bankRes.data || []
+    questionBanks.value = []
+    if (canLoadQuestionBanks) {
+      try {
+        const bankRes = await listQuestionBanks()
+        questionBanks.value = bankRes.data || []
+      } catch (error: unknown) {
+        MessagePlugin.error(getErrorMessage(error) || '题库加载失败')
+      }
+    }
     await Promise.all([loadClassResources(), loadClassAssignments(), loadPracticeGroups()])
   } catch (error: any) {
     MessagePlugin.error(error?.message || '学习中心加载失败')

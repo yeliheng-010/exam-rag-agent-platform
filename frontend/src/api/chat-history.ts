@@ -46,17 +46,17 @@ export interface MessageSearchResult {
 
 // Get tenant chat history config via KV API
 export function getTenantChatHistoryConfig() {
-  return get('/api/v1/tenants/kv/chat-history-config')
+  return get<{ data?: ChatHistoryConfig }>('/api/v1/tenants/kv/chat-history-config')
 }
 
 // Update tenant chat history config via KV API
 export function updateTenantChatHistoryConfig(config: ChatHistoryConfig) {
-  return put('/api/v1/tenants/kv/chat-history-config', config)
+  return put<{ data?: ChatHistoryConfig }>('/api/v1/tenants/kv/chat-history-config', config)
 }
 
 // Get chat history KB statistics
 export function getChatHistoryKBStats() {
-  return get('/api/v1/messages/chat-history-stats')
+  return get<{ data?: ChatHistoryKBStats }>('/api/v1/messages/chat-history-stats')
 }
 
 // Search messages across all sessions (keyword + vector hybrid search)

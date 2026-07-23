@@ -185,7 +185,7 @@
                     <t-input ref="newTagInputRef" v-model="newTagName" size="small" :maxlength="40"
                       :placeholder="$t('knowledgeBase.tagNamePlaceholder')"
                       @enter="submitCreateTag"
-                      @keydown="(_v, ctx) => { if (ctx?.e?.key === 'Escape') { ctx.e.stopPropagation(); ctx.e.preventDefault(); cancelCreateTag() } }" />
+                      @keydown="(_v: string, ctx: { e?: KeyboardEvent }) => { if (ctx?.e?.key === 'Escape') { ctx.e.stopPropagation(); ctx.e.preventDefault(); cancelCreateTag() } }" />
                   </div>
                 </div>
                 <div class="tag-inline-actions">
@@ -210,7 +210,7 @@
                       <div class="tag-edit-input" @click.stop>
                         <t-input :ref="setEditingTagInputRefByTag(tag.id)" v-model="editingTagName" size="small"
                           :maxlength="40" @enter="submitEditTag"
-                          @keydown="(_v, ctx) => { if (ctx?.e?.key === 'Escape') { ctx.e.stopPropagation(); ctx.e.preventDefault(); cancelEditTag() } }" />
+                          @keydown="(_v: string, ctx: { e?: KeyboardEvent }) => { if (ctx?.e?.key === 'Escape') { ctx.e.stopPropagation(); ctx.e.preventDefault(); cancelEditTag() } }" />
                       </div>
                     </template>
                     <template v-else>
@@ -943,6 +943,7 @@ import {
   listKnowledgeBases,
   getFAQImportProgress,
   updateFAQImportResultDisplayStatus,
+  type KnowledgeBaseDetail,
 } from '@/api/knowledge-base'
 import * as XLSX from 'xlsx'
 import Papa from 'papaparse'
@@ -1086,7 +1087,7 @@ const hasMore = ref(true)
 const pageSize = 20
 let currentPage = 1
 const entrySearchKeyword = ref('')
-let entrySearchDebounce: ReturnType<typeof setTimeout> | null = null
+let entrySearchDebounce: number | null = null
 type TagInputInstance = ComponentPublicInstance<{ focus: () => void; select: () => void }>
 
 const tagList = ref<any[]>([])
@@ -1101,7 +1102,7 @@ const tagPage = ref(1)
 const tagHasMore = ref(false)
 const tagLoadingMore = ref(false)
 const tagTotal = ref(0)
-let tagSearchDebounce: ReturnType<typeof setTimeout> | null = null
+let tagSearchDebounce: number | null = null
 const editingTagInputRefs = new Map<string, TagInputInstance | null>()
 const setEditingTagInputRef = (el: TagInputInstance | null, tagId: string) => {
   if (el) {
@@ -1153,8 +1154,9 @@ const filteredTags = computed(() => {
   return tagList.value.filter((tag) => (tag.name || '').toLowerCase().includes(query))
 })
 
-const kbInfo = ref<any>(null)
-const knowledgeList = ref<Array<{ id: string; name: string; type?: string }>>([])
+const kbInfo = ref<KnowledgeBaseDetail | null>(null)
+type KnowledgeListItem = { id: string; name: string; type?: string }
+const knowledgeList = ref<KnowledgeListItem[]>([])
 
 const loadKnowledgeInfo = async (kbId: string) => {
   if (!kbId) {
@@ -1162,7 +1164,7 @@ const loadKnowledgeInfo = async (kbId: string) => {
     return
   }
   try {
-    const res: any = await getKnowledgeBaseById(kbId)
+    const res = await getKnowledgeBaseById(kbId)
     kbInfo.value = res?.data || null
     return kbInfo.value
   } catch (error) {
@@ -1174,8 +1176,8 @@ const loadKnowledgeInfo = async (kbId: string) => {
 
 const loadKnowledgeList = async () => {
   try {
-    const res: any = await listKnowledgeBases()
-    const myKbs = (res?.data || []).map((item: any) => ({
+    const res = await listKnowledgeBases()
+    const myKbs: KnowledgeListItem[] = (res?.data || []).map((item) => ({
       id: String(item.id),
       name: item.name,
       type: item.type,
@@ -1646,7 +1648,7 @@ const loadEntries = async (append = false) => {
   try {
     // If overallFAQTotal is not initialized, fetch it first (without tag_id filter)
     if (overallFAQTotal.value === 0 && !append) {
-      const totalRes = await listFAQEntries(props.kbId, {
+      const totalRes = await listFAQEntries<FAQEntry>(props.kbId, {
         page: 1,
         page_size: 1,
       })
@@ -1654,7 +1656,7 @@ const loadEntries = async (append = false) => {
       overallFAQTotal.value = totalData.total || 0
     }
 
-    const res = await listFAQEntries(props.kbId, {
+    const res = await listFAQEntries<FAQEntry>(props.kbId, {
       page: currentPage,
       page_size: pageSize,
       tag_id: selectedTagId.value || undefined,
@@ -2718,7 +2720,7 @@ const handleSearch = async () => {
   searching.value = true
   hasSearched.value = true
   try {
-    const res = await searchFAQEntries(props.kbId, {
+    const res = await searchFAQEntries<FAQEntry>(props.kbId, {
       query_text: searchForm.query.trim(),
       vector_threshold: searchForm.vectorThreshold,
       match_count: searchForm.matchCount,

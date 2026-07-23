@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import type { ComponentPublicInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { formatFileSize, getFileIcon } from '@/utils/files';
 import { useTagChipsOverflow } from '@/composables/useTagChipsOverflow';
@@ -59,6 +60,15 @@ const tagMap = computed(() => {
 const getTagName = (tagId?: string | number) => {
   if (!tagId && tagId !== 0) return '';
   return tagMap.value[String(tagId)]?.name || '';
+};
+const getItemTags = (item: KnowledgeItem): Tag[] => item.tags ?? [];
+const getItemTagNames = (item: KnowledgeItem) => getItemTags(item).map((tag) => tag.name).join(', ');
+const setTagChipsRef = (
+  el: Element | ComponentPublicInstance | null,
+  itemId: string,
+  totalCount: number,
+) => {
+  setupTagChipsObserver(el instanceof Element ? el : null, itemId, totalCount);
 };
 
 const formatTime = (time?: string) => {
@@ -221,7 +231,7 @@ const handleAction = (action: 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'de
         role="row" @click="emit('open', item)">
         <div class="cell cell-check" @click.stop>
           <t-checkbox class="doc-list-check" size="small" :checked="selectedIds.has(item.id)" :title="item.file_name"
-            @change="(c, ctx) => onRowCheckboxChange(item, c, ctx)" />
+            @change="(c: boolean, ctx: { e?: Event }) => onRowCheckboxChange(item, c, ctx)" />
         </div>
 
         <div class="cell cell-name">
@@ -236,21 +246,21 @@ const handleAction = (action: 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'de
 
 
         <div class="cell cell-tag">
-          <template v-if="item.tags && item.tags.length > 0">
-            <t-tooltip v-if="hasTagOverflow(item.id, item.tags.length)"
-              :content="item.tags.map((t: any) => t.name).join(', ')" placement="top">
-              <div class="row-tag-chips" :ref="(el: any) => setupTagChipsObserver(el, item.id, item.tags.length)"
+          <template v-if="getItemTags(item).length > 0">
+            <t-tooltip v-if="hasTagOverflow(item.id, getItemTags(item).length)"
+              :content="getItemTagNames(item)" placement="top">
+              <div class="row-tag-chips" :ref="el => setTagChipsRef(el, item.id, getItemTags(item).length)"
                 :class="{ 'is-clickable': canEdit }" @click.stop="canEdit && emit('tag-edit', item)">
-                <t-tag v-for="tag in item.tags.slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
+                <t-tag v-for="tag in getItemTags(item).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
                   variant="light-outline" class="row-tag">
                   {{ tag.name }}
                 </t-tag>
-                <span class="row-tag-overflow">+{{ getOverflowCount(item.id, item.tags.length) }}</span>
+                <span class="row-tag-overflow">+{{ getOverflowCount(item.id, getItemTags(item).length) }}</span>
               </div>
             </t-tooltip>
-            <div v-else class="row-tag-chips" :ref="(el: any) => setupTagChipsObserver(el, item.id, item.tags.length)"
+            <div v-else class="row-tag-chips" :ref="el => setTagChipsRef(el, item.id, getItemTags(item).length)"
               :class="{ 'is-clickable': canEdit }" @click.stop="canEdit && emit('tag-edit', item)">
-              <t-tag v-for="tag in item.tags.slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
+              <t-tag v-for="tag in getItemTags(item).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
                 variant="light-outline" class="row-tag">
                 {{ tag.name }}
               </t-tag>

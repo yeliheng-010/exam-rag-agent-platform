@@ -156,7 +156,7 @@
                                 }">
                                 <div class="session-list-row session-list-row--flat">
                                     <div class="session-list-row__body">
-                                        <SessionSidebarRow :item="subitem" :batch-mode="batchMode"
+                                        <SessionSidebarRow :item="{ ...subitem, title: subitem.title || t('menu.newSession') }" :batch-mode="batchMode"
                                             :active-path="currentSecondpath" :selected-ids="batchSelectedIds"
                                             :menu-options="buildSessionMenuOptions(subitem)"
                                             @navigate="gotopage(subitem.path)"
@@ -796,7 +796,7 @@ const menuChildToSessionRow = (item: Record<string, unknown>): SessionForGroupin
     return {
         id,
         path: typeof item.path === 'string' ? item.path : `chat/${id}`,
-        title: typeof item.title === 'string' ? item.title : undefined,
+        title: typeof item.title === 'string' ? item.title : t('menu.newSession'),
         is_pinned: !!item.is_pinned,
         created_at: typeof item.created_at === 'string' ? item.created_at : undefined,
         updated_at: typeof item.updated_at === 'string' ? item.updated_at : undefined,

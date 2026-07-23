@@ -43,7 +43,7 @@ export function createWebSearchProvider(data: Partial<WebSearchProviderEntity>) 
 
 // List all web search providers for the current tenant
 export function listWebSearchProviders() {
-  return get('/api/v1/web-search-providers')
+  return get<{ data?: WebSearchProviderEntity[] }>('/api/v1/web-search-providers')
 }
 
 // Get a single web search provider by ID

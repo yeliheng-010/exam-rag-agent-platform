@@ -60,6 +60,15 @@ export interface Resource {
   has_children?: boolean
 }
 
+export type MaybeWrapped<T> = T | { data?: T }
+
+export function unwrapMaybeWrapped<T>(response: MaybeWrapped<T>): T {
+  if (typeof response === 'object' && response !== null && 'data' in response) {
+    return response.data ?? response as T
+  }
+  return response as T
+}
+
 // --- API calls ---
 
 export function getConnectorTypes() {
@@ -67,7 +76,7 @@ export function getConnectorTypes() {
 }
 
 export function listDataSources(kbId: string) {
-  return get(`/api/v1/datasource?kb_id=${encodeURIComponent(kbId)}`)
+  return get<MaybeWrapped<DataSource[]>>(`/api/v1/datasource?kb_id=${encodeURIComponent(kbId)}`)
 }
 
 export function getDataSource(id: string) {
@@ -75,7 +84,7 @@ export function getDataSource(id: string) {
 }
 
 export function createDataSource(data: Partial<DataSource>) {
-  return post('/api/v1/datasource', data)
+  return post<MaybeWrapped<DataSource>>('/api/v1/datasource', data)
 }
 
 export function updateDataSource(id: string, data: Partial<DataSource>) {
@@ -100,14 +109,14 @@ export function validateCredentials(type: string, credentials: Record<string, an
 // space/node), which avoids traversing the whole tree up front.
 export function listResources(id: string, parentId?: string) {
   const query = parentId ? `?parent_id=${encodeURIComponent(parentId)}` : ''
-  return get(`/api/v1/datasource/${id}/resources${query}`, { timeout: 120000 })
+  return get<MaybeWrapped<Resource[]>>(`/api/v1/datasource/${id}/resources${query}`, { timeout: 120000 })
 }
 
 // resolveResourceAncestors returns the ExternalIDs of every parent that must be
 // expanded to reveal the given (possibly deeply nested) selections in a lazily
 // loaded picker. Used when editing a data source to restore an existing selection.
 export function resolveResourceAncestors(id: string, resourceIds: string[]) {
-  return post(`/api/v1/datasource/${id}/resource-ancestors`, { resource_ids: resourceIds }, { timeout: 120000 })
+  return post<{ ancestors: string[]; data?: { ancestors: string[] } }>(`/api/v1/datasource/${id}/resource-ancestors`, { resource_ids: resourceIds }, { timeout: 120000 })
 }
 
 export function triggerSync(id: string) {
@@ -123,7 +132,7 @@ export function resumeDataSource(id: string) {
 }
 
 export function getSyncLogs(id: string, limit = 20, offset = 0) {
-  return get(`/api/v1/datasource/${id}/logs?limit=${limit}&offset=${offset}`)
+  return get<MaybeWrapped<SyncLog[]>>(`/api/v1/datasource/${id}/logs?limit=${limit}&offset=${offset}`)
 }
 
 // ----------------------------------------------------------------------------

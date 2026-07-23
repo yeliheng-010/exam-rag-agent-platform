@@ -3,7 +3,6 @@
  */
 
 import DOMPurify from 'dompurify';
-import type { Config } from 'dompurify';
 import {
   domPurifySecurityHooks,
   domPurifySecurityOptions,
@@ -85,7 +84,7 @@ export function sanitizeMarkdownHTML(html: string): string {
 
   try {
     const preparedHTML = protectProviderImageSrcInHTML(html);
-    return DOMPurify.sanitize(preparedHTML, markdownDomPurifyConfig as Config);
+    return DOMPurify.sanitize(preparedHTML, markdownDomPurifyConfig);
   } catch (error) {
     console.error('Markdown HTML sanitization failed:', error);
     return escapeHTML(html);

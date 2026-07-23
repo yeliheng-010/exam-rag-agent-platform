@@ -206,6 +206,10 @@ type AgentDetailTarget = {
   sharedMeta?: { org_name?: string; shared_by_username?: string };
 };
 
+type SharedCustomAgentInfo = Omit<SharedAgentInfo, 'agent'> & {
+  agent: CustomAgent;
+};
+
 const dropdownStyle = ref<Record<string, string>>({});
 const activeDetail = ref<AgentDetailTarget | null>(null);
 const detailAnchorEl = ref<HTMLElement | null>(null);
@@ -235,13 +239,15 @@ const builtinAgents = computed(() => {
 
 const customAgents = computed(() => agentsList.value.filter(a => !a.is_builtin));
 
-const sharedAgentsList = computed<SharedAgentInfo[]>(() =>
-  (orgStore.sharedAgents || []).filter(shared => !shared.disabled_by_me),
+const sharedAgentsList = computed<SharedCustomAgentInfo[]>(() =>
+  (orgStore.sharedAgents || [])
+    .filter(shared => !shared.disabled_by_me)
+    .map(shared => ({ ...shared, agent: shared.agent as CustomAgent })),
 );
 
 const currentAgentSourceTenantId = computed(() => settingsStore.selectedAgentSourceTenantId ?? null);
 
-const isSharedAgentSelected = (shared: SharedAgentInfo) =>
+const isSharedAgentSelected = (shared: SharedCustomAgentInfo) =>
   props.currentAgentId === shared.agent.id && currentAgentSourceTenantId.value === String(shared.source_tenant_id);
 
 const isMyAgentSelected = (agent: CustomAgent) =>
@@ -397,8 +403,8 @@ const onOptionEnter = (agent: CustomAgent, event: MouseEvent, sourceTenantId?: s
   scheduleDetailPanelPosition();
 };
 
-const onSharedOptionEnter = (shared: SharedAgentInfo, event: MouseEvent) => {
-  onOptionEnter(shared.agent as CustomAgent, event, String(shared.source_tenant_id), {
+const onSharedOptionEnter = (shared: SharedCustomAgentInfo, event: MouseEvent) => {
+  onOptionEnter(shared.agent, event, String(shared.source_tenant_id), {
     org_name: shared.org_name,
     shared_by_username: shared.shared_by_username,
   });
@@ -433,13 +439,13 @@ const selectAgent = (agent: CustomAgent) => {
   emit('select', agent);
 };
 
-const selectSharedAgent = (shared: SharedAgentInfo) => {
+const selectSharedAgent = (shared: SharedCustomAgentInfo) => {
   const sourceTenantId = String(shared.source_tenant_id);
   if (getAgentNotReadyLabels(shared.agent, sourceTenantId).length > 0) {
-    emitAgentNotReady(shared.agent as CustomAgent, sourceTenantId);
+    emitAgentNotReady(shared.agent, sourceTenantId);
     return;
   }
-  emit('select', shared.agent as CustomAgent, sourceTenantId);
+  emit('select', shared.agent, sourceTenantId);
 };
 
 const goToSettings = (agent: CustomAgent, sourceTenantId?: string) => {

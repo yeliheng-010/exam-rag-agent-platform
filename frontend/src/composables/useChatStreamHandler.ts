@@ -259,7 +259,9 @@ export function useChatStreamHandler(options: UseChatStreamHandlerOptions) {
     const events: ChatMessage[] = []
 
     if (agentSteps && Array.isArray(agentSteps) && agentSteps.length > 0) {
-      agentSteps.forEach((step: ChatMessage) => {
+      agentSteps
+        .filter((step): step is ChatMessage => !!step && typeof step === 'object' && !Array.isArray(step))
+        .forEach((step) => {
         const stepTimestamp = step.timestamp ? new Date(String(step.timestamp)).getTime() : 0
         const toolCalls = step.tool_calls
         const hasToolCalls = toolCalls && Array.isArray(toolCalls) && toolCalls.length > 0

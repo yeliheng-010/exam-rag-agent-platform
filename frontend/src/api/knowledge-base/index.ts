@@ -18,7 +18,7 @@ export function listKnowledgeBases(params?: {
   if (params?.agent_id) query.set('agent_id', params.agent_id);
   if (params?.creator && params.creator !== 'all') query.set('creator', params.creator);
   const qs = query.toString();
-  return get(qs ? `/api/v1/knowledge-bases?${qs}` : '/api/v1/knowledge-bases');
+  return get<{ data: KnowledgeBaseDetail[] }>(qs ? `/api/v1/knowledge-bases?${qs}` : '/api/v1/knowledge-bases');
 }
 
 // Read-only vector-store binding metadata enriched onto every KB
@@ -51,6 +51,52 @@ export interface KnowledgeBaseStoreView {
   vector_store_engine_type?: string;
   vector_store_source?: VectorStoreSource;
   vector_store_status?: VectorStoreStatus;
+}
+
+export interface KnowledgeBaseDetail extends KnowledgeBaseStoreView {
+  id: string;
+  name: string;
+  description?: string;
+  creator_id?: string;
+  type?: 'document' | 'faq';
+  summary_model_id?: string;
+  embedding_model_id?: string;
+  faq_config?: { index_mode?: string; question_index_mode?: string };
+  chunking_config?: {
+    chunk_size?: number;
+    chunk_overlap?: number;
+    separators?: string[];
+    parser_engine_rules?: unknown;
+    enable_parent_child?: boolean;
+    parent_chunk_size?: number;
+    child_chunk_size?: number;
+    strategy?: string;
+    token_limit?: number;
+    languages?: string[];
+  };
+  storage_provider_config?: { provider?: string };
+  storage_config?: { provider?: string };
+  vlm_config?: { enabled?: boolean; model_id?: string };
+  asr_config?: { enabled?: boolean; model_id?: string; language?: string };
+  extract_config?: {
+    enabled?: boolean;
+    text?: string;
+    tags?: string[];
+    nodes?: Array<{ name: string; attributes?: unknown[] }>;
+    relations?: unknown[];
+  };
+  question_generation_config?: { enabled?: boolean; question_count?: number };
+  wiki_config?: {
+    synthesis_model_id?: string;
+    max_pages_per_ingest?: number;
+    extraction_granularity?: 'focused' | 'standard' | 'exhaustive';
+  };
+  indexing_strategy?: {
+    vector_enabled?: boolean;
+    keyword_enabled?: boolean;
+    wiki_enabled?: boolean;
+    graph_enabled?: boolean;
+  };
 }
 
 export function createKnowledgeBase(data: {
@@ -97,7 +143,7 @@ export function getKnowledgeBaseById(id: string, options?: { agent_id?: string }
   const query = new URLSearchParams();
   if (options?.agent_id) query.set('agent_id', options.agent_id);
   const qs = query.toString();
-  return get(qs ? `/api/v1/knowledge-bases/${id}?${qs}` : `/api/v1/knowledge-bases/${id}`);
+  return get<{ data: KnowledgeBaseDetail }>(qs ? `/api/v1/knowledge-bases/${id}?${qs}` : `/api/v1/knowledge-bases/${id}`);
 }
 
 export function updateKnowledgeBase(id: string, data: {
@@ -236,7 +282,7 @@ export function listKnowledgeFiles(
   if (params.start_time) query.append('start_time', params.start_time);
   if (params.end_time) query.append('end_time', params.end_time);
   const qs = query.toString();
-  return get(`/api/v1/knowledge-bases/${kbId}/knowledge?${qs}`);
+  return get<{ data: unknown[]; total: number }>(`/api/v1/knowledge-bases/${kbId}/knowledge?${qs}`);
 }
 
 export function getKnowledgeDetails(id: string, options?: { agent_id?: string }) {
@@ -297,7 +343,7 @@ export function getKnowledgeDetailsCon(id: string, page: number) {
 
 // Get chunk by chunk_id only (new endpoint - to be added to backend)
 export function getChunkByIdOnly(chunkId: string) {
-  return get(`/api/v1/chunks/by-id/${chunkId}`);
+  return get<{ data: { content?: string } }>(`/api/v1/chunks/by-id/${chunkId}`);
 }
 
 // Delete a single generated question from a chunk by question ID
@@ -352,12 +398,12 @@ const buildQuery = (params?: Record<string, any>) => {
   return queryString ? `?${queryString}` : '';
 };
 
-export function listFAQEntries(
+export function listFAQEntries<T = Record<string, unknown>>(
   kbId: string,
   params?: { page?: number; page_size?: number; tag_id?: number; keyword?: string },
 ) {
   const query = buildQuery(params);
-  return get(`/api/v1/knowledge-bases/${kbId}/faq/entries${query}`);
+  return get<{ data: { data: T[]; total: number } }>(`/api/v1/knowledge-bases/${kbId}/faq/entries${query}`);
 }
 
 export function upsertFAQEntries(kbId: string, data: { entries: any[]; mode: 'append' | 'replace' }) {
@@ -396,7 +442,7 @@ export function deleteFAQEntries(kbId: string, ids: number[]) {
   return del(`/api/v1/knowledge-bases/${kbId}/faq/entries`, { ids });
 }
 
-export function searchFAQEntries(
+export function searchFAQEntries<T = Record<string, unknown>>(
   kbId: string,
   data: {
     query_text: string
@@ -404,7 +450,7 @@ export function searchFAQEntries(
     match_count?: number
   }
 ) {
-  return post(`/api/v1/knowledge-bases/${kbId}/faq/search`, data);
+  return post<{ data: T[] }>(`/api/v1/knowledge-bases/${kbId}/faq/search`, data);
 }
 
 // Export FAQ entries as CSV file

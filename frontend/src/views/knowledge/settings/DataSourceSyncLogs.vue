@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getSyncLogs, type SyncLog } from '@/api/datasource'
+import { getSyncLogs, unwrapMaybeWrapped, type SyncLog } from '@/api/datasource'
 
 const props = defineProps<{
   dataSourceId: string
@@ -29,7 +29,7 @@ async function fetchLogs(reset = true) {
   try {
     const offset = reset ? 0 : logs.value.length
     const res = await getSyncLogs(props.dataSourceId, pageSize, offset)
-    const items = res?.data || res || []
+    const items = unwrapMaybeWrapped(res)
     logs.value = reset ? items : [...logs.value, ...items]
     hasMore.value = items.length === pageSize
   } catch { /* ignore */ }

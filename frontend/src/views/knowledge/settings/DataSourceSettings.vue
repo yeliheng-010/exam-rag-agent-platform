@@ -8,6 +8,7 @@ import {
   triggerSync,
   pauseDataSource,
   resumeDataSource,
+  unwrapMaybeWrapped,
   type DataSource,
 } from '@/api/datasource'
 import { humanizeCron, relativeTime } from '@/utils/cronHumanize'
@@ -53,7 +54,7 @@ async function loadList(silent = false) {
   if (!silent) loading.value = true
   try {
     const res = await listDataSources(props.kbId)
-    dataSources.value = res?.data || res || []
+    dataSources.value = unwrapMaybeWrapped(res)
     emit('count', dataSources.value.length)
 
     const hasRunningSync = dataSources.value.some(ds => ds.latest_sync_log?.status === 'running')

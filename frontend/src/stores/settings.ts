@@ -28,6 +28,10 @@ interface Settings {
   autoCheckUpdate?: boolean; // 是否自动检查并下载更新
 }
 
+type PersistedSettings = Settings & {
+  selectedTools?: string[];
+};
+
 // Agent 配置接口
 interface AgentConfig {
   maxIterations: number;
@@ -113,7 +117,7 @@ const defaultSettings: Settings = {
 function loadAndReconcileSettings(): Settings {
   const loaded = JSON.parse(
     localStorage.getItem("WeKnora_settings") || JSON.stringify(defaultSettings),
-  ) as Settings;
+  ) as PersistedSettings;
   loaded.selectedTags ||= [];
   loaded.selectedMCPServices ||= [];
   loaded.selectedSkills ||= loaded.selectedTools || [];

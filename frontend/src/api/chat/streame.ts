@@ -21,6 +21,15 @@ interface StreamOptions {
   chunkInterval?: number
 }
 
+export interface StreamChunk extends Record<string, unknown> {
+  response_type?: string
+  content?: string
+  data?: Record<string, unknown> & {
+    title?: string
+    session_id?: string
+  }
+}
+
 export function useStream() {
   // 响应式状态
   const output = ref('')              // 显示内容
@@ -198,9 +207,9 @@ export function useStream() {
     }
   }
 
-  let chunkHandler: ((data: any) => void) | null = null
+  let chunkHandler: ((data: StreamChunk) => void) | null = null
   // 注册块处理器
-  const onChunk = (handler: () => void) => {
+  const onChunk = (handler: (data: StreamChunk) => void) => {
     chunkHandler = handler
   }
 

@@ -3,7 +3,7 @@ import { get, post, put, del, postChat } from "../../utils/request";
 
 
 export async function createSessions(data = {}) {
-  return post("/api/v1/sessions", data);
+  return post<{ data?: { id?: string } }>("/api/v1/sessions", data);
 }
 
 export async function getSessionsList(page: number, page_size: number, source?: string) {

@@ -1,5 +1,6 @@
 // src/utils/request.js
 import axios from "axios";
+import type { AxiosProgressEvent, AxiosRequestConfig } from "axios";
 import { generateRandomString, MAX_FILE_SIZE_MB } from "./index";
 import i18n from '@/i18n'
 import { getApiBaseUrl } from './api-base';
@@ -246,24 +247,23 @@ instance.interceptors.response.use(
   }
 );
 
-export function get(url: string, config?: any) {
-  return instance.get(url, config);
+export function get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  return instance.get<unknown, T>(url, config);
 }
 
-export async function getDown(url: string) {
-  let res = await instance.get(url, {
+export function getDown(url: string): Promise<Blob> {
+  return instance.get<Blob, Blob>(url, {
     responseType: "blob",
   });
-  return res
 }
 
-export function postUpload(
+export function postUpload<T = unknown>(
   url: string,
-  data = {},
-  onUploadProgress?: (progressEvent: any) => void,
-  config: any = {},
-) {
-  return instance.post(url, data, {
+  data: unknown = {},
+  onUploadProgress?: (progressEvent: AxiosProgressEvent) => void,
+  config: AxiosRequestConfig = {},
+): Promise<T> {
+  return instance.post<unknown, T>(url, data, {
     ...config,
     headers: {
       "Content-Type": "multipart/form-data",
@@ -274,8 +274,8 @@ export function postUpload(
   });
 }
 
-export function postChat(url: string, data = {}) {
-  return instance.post(url, data, {
+export function postChat<T = unknown>(url: string, data: unknown = {}): Promise<T> {
+  return instance.post<unknown, T>(url, data, {
     headers: {
       "Content-Type": "text/event-stream;charset=utf-8",
       "X-Request-ID": `${generateRandomString(12)}`,
@@ -283,18 +283,18 @@ export function postChat(url: string, data = {}) {
   });
 }
 
-export function post(url: string, data = {}, config?: any) {
-  return instance.post(url, data, config);
+export function post<T = unknown>(url: string, data: unknown = {}, config?: AxiosRequestConfig): Promise<T> {
+  return instance.post<unknown, T>(url, data, config);
 }
 
-export function put(url: string, data = {}) {
-  return instance.put(url, data);
+export function put<T = unknown>(url: string, data: unknown = {}): Promise<T> {
+  return instance.put<unknown, T>(url, data);
 }
 
-export function patch(url: string, data = {}) {
-  return instance.patch(url, data);
+export function patch<T = unknown>(url: string, data: unknown = {}): Promise<T> {
+  return instance.patch<unknown, T>(url, data);
 }
 
-export function del(url: string, data?: any) {
-  return instance.delete(url, { data });
+export function del<T = unknown>(url: string, data?: unknown): Promise<T> {
+  return instance.delete<unknown, T>(url, { data });
 }

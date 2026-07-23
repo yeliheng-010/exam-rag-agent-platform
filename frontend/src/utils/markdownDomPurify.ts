@@ -16,7 +16,7 @@ export const domPurifySecurityOptions = {
   SANITIZE_DOM: true,
   SANITIZE_NAMED_PROPS: true,
   WHOLE_DOCUMENT: false,
-} as const;
+};
 
 /** Shared DOMPurify hooks: strip scripts/event attrs; noopener links; alt on images. */
 export const domPurifySecurityHooks = {
