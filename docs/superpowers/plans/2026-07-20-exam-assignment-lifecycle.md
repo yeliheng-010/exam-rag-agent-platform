@@ -1,5 +1,7 @@
 # 班级作业运营闭环实现计划
 
+> **审计状态（2026-07-23）：** 实现与验证已完成；下方未勾选框是未回填的历史执行记录，不代表当前功能缺失。完成证据见 [Phase 1 收尾审计报告](../reports/2026-07-23-phase1-closeout-audit.md)。
+
 > **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development 或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法跟踪进度。
 
 **目标：** 为班级练习任务补齐编辑、软撤回、重新发布、截止控制和继续已有 attempt 的运营闭环。

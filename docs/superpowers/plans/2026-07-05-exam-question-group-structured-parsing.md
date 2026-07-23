@@ -1,5 +1,7 @@
 # 考试题组结构化实现计划
 
+> **审计状态（2026-07-23）：** 实现与验证已完成；下方未勾选框是未回填的历史执行记录，不代表当前功能缺失。完成证据见 [Phase 1 收尾审计报告](../reports/2026-07-23-phase1-closeout-audit.md)。
+
 > **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法来跟踪进度。
 
 **目标：** 将考试抽题链路从扁平题目升级为 `QuestionGroup + Question`，让高考英语阅读和高考数学图文题可以以真实题组形态进入题库、校对页和学生可用的对话上下文。

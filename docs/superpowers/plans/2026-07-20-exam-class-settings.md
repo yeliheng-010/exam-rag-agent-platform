@@ -1,5 +1,7 @@
 # 班级设置与可逆归档实现计划
 
+> **审计状态（2026-07-23）：** 实现与验证已完成；下方未勾选框是未回填的历史执行记录，不代表当前功能缺失。完成证据见 [Phase 1 收尾审计报告](../reports/2026-07-23-phase1-closeout-audit.md)。
+
 > **执行方式：** 使用 `superpowers:executing-plans` 串行执行；所有生产代码遵循 red -> green -> refactor。完成前使用 `requesting-code-review` 和 `verification-before-completion`。
 
 **目标：** 完成班主任专属的班级元数据编辑、可逆归档和真实成员上限，并保证归档班级不能产生新的作业行为。
