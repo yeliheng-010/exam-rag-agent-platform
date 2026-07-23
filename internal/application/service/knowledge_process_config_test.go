@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	werrors "github.com/Tencent/WeKnora/internal/errors"
+	"github.com/Tencent/WeKnora/internal/infrastructure/chunker"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -122,6 +123,29 @@ func TestBuildSplitterConfigFromChunking_UsesEffectiveChunkingConfig(t *testing.
 	require.Equal(t, 1500, cfg.ChunkSize)
 	require.Equal(t, 120, cfg.ChunkOverlap)
 	require.Equal(t, "character", cfg.Strategy)
+}
+
+func TestBuildParentChildConfigs_InheritsAdaptiveSettings(t *testing.T) {
+	t.Parallel()
+
+	cc := types.ChunkingConfig{
+		ChunkSize:         512,
+		ChunkOverlap:      80,
+		ParentChunkSize:   4096,
+		ChildChunkSize:    384,
+		Strategy:          chunker.StrategyAuto,
+		TokenLimit:        256,
+		Languages:         []string{chunker.LangEnglish},
+		EnableParentChild: true,
+	}
+	parent, child := buildParentChildConfigs(cc, buildSplitterConfigFromChunking(cc))
+
+	require.Equal(t, chunker.StrategyAuto, parent.Strategy)
+	require.Equal(t, []string{chunker.LangEnglish}, parent.Languages)
+	require.Zero(t, parent.TokenLimit, "parent chunks are not embedded")
+	require.Equal(t, chunker.StrategyAuto, child.Strategy)
+	require.Equal(t, []string{chunker.LangEnglish}, child.Languages)
+	require.Equal(t, 256, child.TokenLimit)
 }
 
 func TestEffectiveChunkingConfig_ResolveParserEngineFromOverrides(t *testing.T) {

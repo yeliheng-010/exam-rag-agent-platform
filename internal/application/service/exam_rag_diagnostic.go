@@ -241,10 +241,11 @@ func buildExamRAGDiagnosticCases(raw []types.ExamRAGDiagnosticCase, bank *types.
 			name = fmt.Sprintf("case_%d", index+1)
 		}
 		cases = append(cases, types.ExamRAGDiagnosticCase{
-			Name:             name,
-			Query:            query,
-			RequiredPhrases:  examrag.CleanIDs(item.RequiredPhrases),
-			ExpectedChunkIDs: examrag.CleanIDs(item.ExpectedChunkIDs),
+			Name:                     name,
+			Query:                    query,
+			RequiredPhrases:          examrag.CleanIDs(item.RequiredPhrases),
+			ExpectedChunkIDs:         examrag.CleanIDs(item.ExpectedChunkIDs),
+			RequiredRetrievalPhrases: examrag.CleanIDs(item.RequiredRetrievalPhrases),
 		})
 	}
 	return cases, usedDefault, nil
@@ -279,64 +280,12 @@ func toExamRAGDiagnosticEvalCases(cases []types.ExamRAGDiagnosticCase) []examrag
 	out := make([]examrag.ExamContextRetrievalEvalCase, 0, len(cases))
 	for _, item := range cases {
 		out = append(out, examrag.ExamContextRetrievalEvalCase{
-			Name:             item.Name,
-			Query:            item.Query,
-			RequiredPhrases:  item.RequiredPhrases,
-			ExpectedChunkIDs: item.ExpectedChunkIDs,
+			Name:                     item.Name,
+			Query:                    item.Query,
+			RequiredPhrases:          item.RequiredPhrases,
+			ExpectedChunkIDs:         item.ExpectedChunkIDs,
+			RequiredRetrievalPhrases: item.RequiredRetrievalPhrases,
 		})
 	}
 	return out
-}
-
-func toExamRAGDiagnosticSummary(summary examrag.ExamContextRetrievalEvalSummary) types.ExamRAGDiagnosticSummary {
-	results := make([]types.ExamRAGDiagnosticResultItem, 0, len(summary.Results))
-	for _, item := range summary.Results {
-		results = append(results, types.ExamRAGDiagnosticResultItem{
-			Name:              item.Name,
-			Query:             item.Query,
-			Passed:            item.Passed,
-			RetrievalPassed:   item.RetrievalPassed,
-			AnswerPassed:      item.AnswerPassed,
-			RetrievalScore:    item.RetrievalScore,
-			AnswerScore:       item.AnswerScore,
-			MatchedChunkIDs:   copyDiagnosticStrings(item.MatchedChunkIDs),
-			MissingChunkIDs:   copyDiagnosticStrings(item.MissingChunkIDs),
-			RetrievedChunkIDs: copyDiagnosticStrings(item.RetrievedChunkIDs),
-			MatchedPhrases:    copyDiagnosticStrings(item.MatchedPhrases),
-			MissingPhrases:    copyDiagnosticStrings(item.MissingPhrases),
-			ContextLabel:      item.ContextLabel,
-			SourceChunkIDs:    copyDiagnosticStrings(item.SourceChunkIDs),
-			CandidateChunkIDs: copyDiagnosticStrings(item.CandidateChunkIDs),
-			ContextSource:     item.ContextSource,
-			GroupID:           item.GroupID,
-			SearchTraces:      append([]*types.SearchTrace{}, item.SearchTraces...),
-			DurationMS:        item.DurationMS,
-			ReciprocalRank:    item.ReciprocalRank,
-			Error:             item.Error,
-		})
-	}
-	return types.ExamRAGDiagnosticSummary{
-		Total:                    summary.Total,
-		Passed:                   summary.Passed,
-		RetrievalPassed:          summary.RetrievalPassed,
-		AnswerPassed:             summary.AnswerPassed,
-		HitRate:                  summary.HitRate,
-		RetrievalHitRate:         summary.RetrievalHitRate,
-		AnswerHitRate:            summary.AnswerHitRate,
-		RecallAtK:                summary.RecallAtK,
-		MeanReciprocalRank:       summary.MeanReciprocalRank,
-		RankedCaseCount:          summary.RankedCaseCount,
-		StructuredResolutionRate: summary.StructuredResolutionRate,
-		StructuredResolved:       summary.StructuredResolved,
-		AverageDurationMS:        summary.AverageDurationMS,
-		FailedCaseCount:          summary.FailedCaseCount,
-		Results:                  results,
-	}
-}
-
-func copyDiagnosticStrings(values []string) []string {
-	if values == nil {
-		return []string{}
-	}
-	return append([]string{}, values...)
 }

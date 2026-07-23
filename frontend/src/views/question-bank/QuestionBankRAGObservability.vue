@@ -113,7 +113,7 @@ import {
 } from '@/api/exam/question-bank'
 import type { ExamRAGEvaluationRun, ExamRAGEvaluationRunStatus, QuestionBank } from '@/types/exam'
 import RAGEvaluationRunDetail from './RAGEvaluationRunDetail.vue'
-import { compareRunConfigurations, compareRunMetrics, formatRAGRate, getRunMetrics, runStatusLabel } from './ragEvaluationViewModel'
+import { compareChunkingSnapshots, compareRunConfigurations, compareRunMetrics, formatRAGRate, getRunMetrics, runStatusLabel } from './ragEvaluationViewModel'
 
 const route = useRoute()
 const router = useRouter()
@@ -137,6 +137,7 @@ const comparisonRows = computed(() => comparisonRuns.value.length === 2
   ? [
       ...compareRunConfigurations(comparisonRuns.value[0], comparisonRuns.value[1]),
       ...compareRunMetrics(comparisonRuns.value[0], comparisonRuns.value[1]),
+			...compareChunkingSnapshots(comparisonRuns.value[0], comparisonRuns.value[1]),
     ]
   : [])
 

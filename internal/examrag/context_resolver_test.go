@@ -12,11 +12,39 @@ import (
 
 type stubContextResolverQuestionRepo struct {
 	interfaces.ExamQuestionRepository
-	detail       *types.QuestionGroupDetail
-	gotTenantID  uint64
-	gotChunkIDs  []string
-	gotGroupID   string
-	groupLookups int
+	detail               *types.QuestionGroupDetail
+	evaluationCandidates []*types.QuestionGroupDetail
+	gotTenantID          uint64
+	gotChunkIDs          []string
+	gotGroupID           string
+	gotEvaluationKBIDs   []string
+	gotEvaluationAnchors []string
+	groupLookups         int
+	evaluationLookups    int
+}
+
+func (r *stubContextResolverQuestionRepo) ListEvaluationQuestionGroupCandidates(
+	_ context.Context,
+	tenantID uint64,
+	knowledgeBaseIDs []string,
+) ([]*types.QuestionGroupDetail, error) {
+	r.gotTenantID = tenantID
+	r.gotEvaluationKBIDs = append([]string{}, knowledgeBaseIDs...)
+	r.evaluationLookups++
+	return r.evaluationCandidates, nil
+}
+
+func (r *stubContextResolverQuestionRepo) ListEvaluationQuestionGroupCandidatesForSourcePhrases(
+	_ context.Context,
+	tenantID uint64,
+	knowledgeBaseIDs []string,
+	sourcePhrases []string,
+) ([]*types.QuestionGroupDetail, error) {
+	r.gotTenantID = tenantID
+	r.gotEvaluationKBIDs = append([]string{}, knowledgeBaseIDs...)
+	r.gotEvaluationAnchors = append([]string{}, sourcePhrases...)
+	r.evaluationLookups++
+	return r.evaluationCandidates, nil
 }
 
 func (r *stubContextResolverQuestionRepo) FindQuestionGroupDetailByChunkIDs(
@@ -79,8 +107,8 @@ func TestResolverResolveQuerySearchesChunksAndBuildsStructuredContext(t *testing
 			FusionMethod:    types.SearchTraceFusionRRF,
 		},
 		results: []*types.SearchResult{
-			{ID: "chunk-21", SubChunkID: []string{"sub-21", "chunk-21"}},
-			{ID: "chunk-22", SubChunkID: []string{"sub-22"}},
+			{ID: "chunk-21", Content: "first retrieved content", SubChunkID: []string{"sub-21", "chunk-21"}},
+			{ID: "chunk-22", Content: "second retrieved content", SubChunkID: []string{"sub-22"}},
 		},
 	}
 	resolver := NewExamQuestionContextResolver(ExamQuestionContextResolverConfig{
@@ -134,6 +162,15 @@ func TestResolverResolveQuerySearchesChunksAndBuildsStructuredContext(t *testing
 	if got := strings.Join(result.RetrievedChunkIDs, ","); got != "chunk-21,sub-21,chunk-22,sub-22" {
 		t.Fatalf("retrieved chunk IDs = %q", got)
 	}
+	if got := strings.Join(result.RetrievedContents, "|"); got != "first retrieved content|second retrieved content" {
+		t.Fatalf("retrieved contents = %q", got)
+	}
+	if got := rankedItemPrimaryIDs(result.RetrievedItems); strings.Join(got, ",") != "chunk-21,chunk-22" {
+		t.Fatalf("retrieved ranked items = %v", got)
+	}
+	if got := rankedItemPrimaryIDs(result.CandidateItems); strings.Join(got, ",") != "chunk-21,chunk-22" {
+		t.Fatalf("candidate ranked items = %v", got)
+	}
 	if got := strings.Join(result.SourceChunkIDs, ","); got != "chunk-a1,chunk-21" {
 		t.Fatalf("source chunk IDs = %q", got)
 	}
@@ -151,104 +188,6 @@ func TestResolverResolveQuerySearchesChunksAndBuildsStructuredContext(t *testing
 	}
 	if !strings.Contains(result.Bundle.Content, "B. Los Angeles Rams") {
 		t.Fatalf("missing structured answer context:\n%s", result.Bundle.Content)
-	}
-}
-
-func TestResolverEvalResolverUsesProductionRetrievalPath(t *testing.T) {
-	t.Parallel()
-
-	repo := &stubContextResolverQuestionRepo{detail: newResolverStructuredReadingGroup()}
-	kbService := &stubContextResolverKBService{
-		results: []*types.SearchResult{
-			{ID: "chunk-21", SubChunkID: []string{"sub-21"}},
-		},
-	}
-	resolver := NewExamQuestionContextResolver(ExamQuestionContextResolverConfig{
-		QuestionRepo:         repo,
-		KnowledgeBaseService: kbService,
-		SearchTargets: types.SearchTargets{
-			{Type: types.SearchTargetTypeKnowledgeBase, KnowledgeBaseID: "kb-1", TenantID: 10000},
-		},
-	})
-
-	evalResolver := resolver.EvalResolver(10000, []string{"kb-1"})
-	resolution, err := evalResolver(context.Background(), "first reading question 21 answer")
-	if err != nil {
-		t.Fatalf("EvalResolver returned error: %v", err)
-	}
-	bundle := resolution.Bundle
-	if bundle == nil || !strings.Contains(bundle.Content, "SoFi Stadium is the go-to destination.") {
-		t.Fatalf("expected structured bundle, got %#v", bundle)
-	}
-	if got := strings.Join(resolution.RetrievedChunkIDs, ","); got != "chunk-21,sub-21" {
-		t.Fatalf("retrieved chunk IDs = %q", got)
-	}
-	if got := strings.Join(repo.gotChunkIDs, ","); got != "chunk-21,sub-21" {
-		t.Fatalf("repo chunk IDs = %q", got)
-	}
-}
-
-func TestResolverResolveReportsNoStructuredContext(t *testing.T) {
-	t.Parallel()
-
-	resolver := NewExamQuestionContextResolver(ExamQuestionContextResolverConfig{
-		QuestionRepo:         &stubContextResolverQuestionRepo{},
-		KnowledgeBaseService: &stubContextResolverKBService{results: []*types.SearchResult{{ID: "chunk-404"}}},
-		SearchTargets: types.SearchTargets{
-			{Type: types.SearchTargetTypeKnowledgeBase, KnowledgeBaseID: "kb-1", TenantID: 10000},
-		},
-	})
-
-	result, err := resolver.Resolve(context.Background(), ExamQuestionContextResolveRequest{
-		Query:            "missing question group",
-		KnowledgeBaseIDs: []string{"kb-1"},
-	})
-	if err != nil {
-		t.Fatalf("Resolve returned error: %v", err)
-	}
-	if result.ContextSource != types.ExamRAGContextSourceNone {
-		t.Fatalf("context source = %q", result.ContextSource)
-	}
-	if result.Bundle != nil || result.GroupID != "" {
-		t.Fatalf("unexpected structured result = %#v", result)
-	}
-}
-
-func TestResolverEvaluateRetrievalUsesSharedEvalSummary(t *testing.T) {
-	t.Parallel()
-
-	repo := &stubContextResolverQuestionRepo{detail: newResolverStructuredReadingGroup()}
-	kbService := &stubContextResolverKBService{
-		results: []*types.SearchResult{
-			{ID: "chunk-21", SubChunkID: []string{"sub-21"}},
-		},
-	}
-	resolver := NewExamQuestionContextResolver(ExamQuestionContextResolverConfig{
-		QuestionRepo:         repo,
-		KnowledgeBaseService: kbService,
-		SearchTargets: types.SearchTargets{
-			{Type: types.SearchTargetTypeKnowledgeBase, KnowledgeBaseID: "kb-1", TenantID: 10000},
-		},
-	})
-
-	summary := resolver.EvaluateRetrieval(context.Background(), ExamQuestionContextEvalRequest{
-		TenantID:         10000,
-		KnowledgeBaseIDs: []string{"kb-1"},
-		Cases: []ExamContextRetrievalEvalCase{
-			{
-				Name:             "q21_answer",
-				Query:            "first reading question 21 answer",
-				RequiredPhrases:  []string{"B. Los Angeles Rams"},
-				ExpectedChunkIDs: []string{"chunk-21"},
-			},
-		},
-	})
-
-	if summary.Total != 1 || summary.Passed != 1 {
-		t.Fatalf("summary = %#v", summary)
-	}
-	if summary.RetrievalHitRate != 1 || summary.AnswerHitRate != 1 {
-		t.Fatalf("rates = %.2f %.2f", summary.RetrievalHitRate, summary.AnswerHitRate)
 	}
 }
 

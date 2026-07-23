@@ -160,8 +160,10 @@ type ProcessChunksOptions struct {
 	// ParentChunks holds parent chunk data when parent-child chunking is enabled.
 	// When set, the chunks passed to processChunks are child chunks, and each
 	// child's ParentIndex references an entry in this slice.
-	ParentChunks []types.ParsedParentChunk
-	Metadata     map[string]string
+	ParentChunks        []types.ParsedParentChunk
+	ChunkingConfig      types.ChunkingConfig
+	ChunkingDiagnostics ChunkingExecutionDiagnostics
+	Metadata            map[string]string
 }
 
 // finalizeIndexedKnowledgeState makes a document retrievable as soon as chunks
@@ -240,11 +242,16 @@ func buildParentChildConfigs(cc types.ChunkingConfig, base chunker.SplitterConfi
 		ChunkSize:    parentSize,
 		ChunkOverlap: base.ChunkOverlap, // reuse configured overlap for parents
 		Separators:   base.Separators,
+		Strategy:     base.Strategy,
+		Languages:    append([]string{}, base.Languages...),
 	}
 	child = chunker.SplitterConfig{
 		ChunkSize:    childSize,
 		ChunkOverlap: childSize / 5, // ~20% overlap for child chunks
 		Separators:   base.Separators,
+		Strategy:     base.Strategy,
+		TokenLimit:   base.TokenLimit,
+		Languages:    append([]string{}, base.Languages...),
 	}
 	return
 }
@@ -258,6 +265,20 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	var options ProcessChunksOptions
 	if len(opts) > 0 {
 		options = opts[0]
+	}
+	if options.ChunkingConfig.ChunkSize == 0 {
+		options.ChunkingConfig = kb.ChunkingConfig
+	}
+	if options.ChunkingDiagnostics.TextChunkCount == 0 && len(chunks) > 0 {
+		base := buildSplitterConfigFromChunking(options.ChunkingConfig)
+		targetSize := base.ChunkSize
+		if options.ChunkingConfig.EnableParentChild {
+			_, child := buildParentChildConfigs(options.ChunkingConfig, base)
+			targetSize = child.ChunkSize
+		}
+		options.ChunkingDiagnostics = buildChunkingDiagnostics(
+			options.ChunkingConfig, "", nil, nil, chunks, len(options.ParentChunks), targetSize,
+		)
 	}
 
 	// Check if knowledge is being deleted/cancelled before processing.
@@ -485,9 +506,9 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	// Save chunks to database — ALWAYS, regardless of indexing strategy.
 	// Chunks are needed for wiki generation, graph extraction, and summary generation
 	// even when vector/keyword indexing is disabled.
-	s.beginStage(ctx, knowledge.ID, types.StageChunking, types.JSONMap{
-		"chunks_planned": len(insertChunks),
-	})
+	chunkingInput := chunkingSpanInput(options.ChunkingConfig)
+	chunkingInput["chunks_planned"] = len(insertChunks)
+	s.beginStage(ctx, knowledge.ID, types.StageChunking, chunkingInput)
 	if err := s.chunkService.CreateChunks(ctx, insertChunks); err != nil {
 		knowledge.ParseStatus = types.ParseStatusFailed
 		knowledge.ErrorMessage = err.Error()
@@ -501,10 +522,10 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	for _, c := range insertChunks {
 		totalChunkChars += len(c.Content)
 	}
-	s.endStage(ctx, knowledge.ID, types.StageChunking, types.JSONMap{
-		"chunks_written":   len(insertChunks),
-		"total_text_chars": totalChunkChars,
-	})
+	chunkingOutput := chunkingSpanOutput(options.ChunkingDiagnostics)
+	chunkingOutput["chunks_written"] = len(insertChunks)
+	chunkingOutput["total_text_chars"] = totalChunkChars
+	s.endStage(ctx, knowledge.ID, types.StageChunking, chunkingOutput)
 
 	// Create index information and perform vector indexing — only when vector/keyword is enabled.
 	// Chunks are ALWAYS saved to DB (above) because wiki and graph need them even without vector indexing.
@@ -3018,55 +3039,25 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 		logger.Infof(ctx, "Resolved %d total images for knowledge %s", len(storedImages), knowledge.ID)
 	}
 
-	// Step 3: Split into chunks using Go chunker
-	chunkCfg := buildSplitterConfigFromChunking(eff.ChunkingConfig)
-
+	// Step 3: Split into chunks using the shared executor.
+	execution := executeChunking(convertResult.MarkdownContent, eff.ChunkingConfig)
 	processOpts := ProcessChunksOptions{
 		EnableQuestionGeneration: payload.EnableQuestionGeneration,
 		QuestionCount:            payload.QuestionCount,
 		EnableMultimodel:         payload.EnableMultimodel,
 		StoredImages:             storedImages,
+		ParentChunks:             execution.ParentChunks,
+		ChunkingConfig:           eff.ChunkingConfig,
+		ChunkingDiagnostics:      execution.Diagnostics,
 	}
 
 	if convertResult != nil {
 		processOpts.Metadata = convertResult.Metadata
 	}
 
-	if eff.ChunkingConfig.EnableParentChild {
-		parentCfg, childCfg := buildParentChildConfigs(eff.ChunkingConfig, chunkCfg)
-		pcResult := chunker.SplitParentChild(convertResult.MarkdownContent, parentCfg, childCfg)
-		chunks = make([]types.ParsedChunk, len(pcResult.Children))
-		for i, c := range pcResult.Children {
-			chunks[i] = types.ParsedChunk{
-				Content:       c.Content,
-				ContextHeader: c.ContextHeader,
-				Seq:           c.Seq,
-				Start:         c.Start,
-				End:           c.End,
-				ParentIndex:   c.ParentIndex,
-			}
-		}
-		parentChunks := make([]types.ParsedParentChunk, len(pcResult.Parents))
-		for i, p := range pcResult.Parents {
-			parentChunks[i] = types.ParsedParentChunk{Content: p.Content, Seq: p.Seq, Start: p.Start, End: p.End}
-		}
-		processOpts.ParentChunks = parentChunks
-		logger.Infof(ctx, "Split document into %d parent + %d child chunks for knowledge %s",
-			len(pcResult.Parents), len(pcResult.Children), knowledge.ID)
-	} else {
-		splitChunks := chunker.Split(convertResult.MarkdownContent, chunkCfg)
-		chunks = make([]types.ParsedChunk, len(splitChunks))
-		for i, c := range splitChunks {
-			chunks[i] = types.ParsedChunk{
-				Content:       c.Content,
-				ContextHeader: c.ContextHeader,
-				Seq:           c.Seq,
-				Start:         c.Start,
-				End:           c.End,
-			}
-		}
-		logger.Infof(ctx, "Split document into %d chunks for knowledge %s", len(chunks), knowledge.ID)
-	}
+	chunks = execution.Chunks
+	logger.Infof(ctx, "Split document into %d parent + %d text chunks for knowledge %s",
+		len(execution.ParentChunks), len(execution.Chunks), knowledge.ID)
 
 	// Step 4: Process chunks (vectorize + index + enqueue async tasks)
 	s.processChunks(ctx, kb, knowledge, chunks, processOpts)

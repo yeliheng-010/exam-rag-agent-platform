@@ -20,7 +20,7 @@ func TestExamRAGEvaluationWorkerCompletesRunWithCaseFailures(t *testing.T) {
 			Results: []types.ExamRAGDiagnosticResultItem{{Name: "case-1", Passed: true}, {Name: "case-2", Error: "search failed"}},
 		},
 	}}
-	svc := NewExamRAGEvaluationService(repo, testRAGQuestionService(), diagnostic, testRAGTenantService(), &examRAGEvaluationEnqueuerStub{})
+	svc := NewExamRAGEvaluationService(repo, testRAGQuestionService(), diagnostic, testRAGTenantService(), newExamRAGChunkQualityRepoStub(), &examRAGEvaluationEnqueuerStub{})
 
 	err := svc.ProcessRunTask(context.Background(), testRAGEvaluationTask(t, "run-1"))
 
@@ -44,7 +44,7 @@ func TestExamRAGEvaluationWorkerPersistsTerminalFailure(t *testing.T) {
 	repo := newExamRAGEvaluationRunRepoStub()
 	repo.runs["run-1"] = testQueuedRAGEvaluationRun("run-1")
 	diagnostic := &examRAGEvaluationDiagnosticStub{err: errRAGEvaluationWorker}
-	svc := NewExamRAGEvaluationService(repo, testRAGQuestionService(), diagnostic, testRAGTenantService(), &examRAGEvaluationEnqueuerStub{})
+	svc := NewExamRAGEvaluationService(repo, testRAGQuestionService(), diagnostic, testRAGTenantService(), newExamRAGChunkQualityRepoStub(), &examRAGEvaluationEnqueuerStub{})
 
 	err := svc.ProcessRunTask(context.Background(), testRAGEvaluationTask(t, "run-1"))
 
@@ -59,7 +59,7 @@ func TestExamRAGEvaluationWorkerRejectsNilDiagnosticResult(t *testing.T) {
 	repo := newExamRAGEvaluationRunRepoStub()
 	repo.runs["run-1"] = testQueuedRAGEvaluationRun("run-1")
 	diagnostic := &examRAGEvaluationDiagnosticStub{}
-	svc := NewExamRAGEvaluationService(repo, testRAGQuestionService(), diagnostic, testRAGTenantService(), &examRAGEvaluationEnqueuerStub{})
+	svc := NewExamRAGEvaluationService(repo, testRAGQuestionService(), diagnostic, testRAGTenantService(), newExamRAGChunkQualityRepoStub(), &examRAGEvaluationEnqueuerStub{})
 
 	err := svc.ProcessRunTask(context.Background(), testRAGEvaluationTask(t, "run-1"))
 
@@ -74,7 +74,7 @@ func TestExamRAGEvaluationWorkerSkipsTerminalRun(t *testing.T) {
 	run.Status = types.ExamRAGEvaluationRunStatusCompleted
 	repo.runs[run.ID] = run
 	diagnostic := &examRAGEvaluationDiagnosticStub{}
-	svc := NewExamRAGEvaluationService(repo, testRAGQuestionService(), diagnostic, testRAGTenantService(), &examRAGEvaluationEnqueuerStub{})
+	svc := NewExamRAGEvaluationService(repo, testRAGQuestionService(), diagnostic, testRAGTenantService(), newExamRAGChunkQualityRepoStub(), &examRAGEvaluationEnqueuerStub{})
 
 	require.NoError(t, svc.ProcessRunTask(context.Background(), testRAGEvaluationTask(t, "run-1")))
 	require.Zero(t, diagnostic.calls)
@@ -91,7 +91,7 @@ func testQueuedRAGEvaluationRun(id string) *types.ExamRAGEvaluationRun {
 	return &types.ExamRAGEvaluationRun{
 		ID: id, TenantID: 10000, QuestionBankID: "bank-1", CreatedBy: "teacher-1",
 		EvaluationKind: types.ExamEvaluationKindRAG,
-		Status: types.ExamRAGEvaluationRunStatusQueued, RequestSnapshot: request, Progress: progress,
+		Status:         types.ExamRAGEvaluationRunStatusQueued, RequestSnapshot: request, Progress: progress,
 		CreatedAt: now, UpdatedAt: now,
 	}
 }

@@ -1,0 +1,177 @@
+[
+  {
+    "name": "E01-赛事表格",
+    "query": "Which team will play the most games at the stadium this month?",
+    "required_phrases": ["Answer: B"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["Los Angeles Chargers v Los Angeles Rams"]
+  },
+  {
+    "name": "E02-酒店位置",
+    "query": "Which hotel is nearest to the stadium?",
+    "required_phrases": ["Answer: A"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["Right across the street, Sonder Lüm Hotel"]
+  },
+  {
+    "name": "E03-停车规则",
+    "query": "What do you need to do if you want to park at the stadium?",
+    "required_phrases": ["Answer: C"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["park strictly in your assigned zone"]
+  },
+  {
+    "name": "E04-词义查询习惯",
+    "query": "What does Kevin usually do to get the meaning of a word?",
+    "required_phrases": ["Answer: A"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["my fifth-grade son Kevin asked me about the meaning of a word"]
+  },
+  {
+    "name": "E05-查纸质词典体验",
+    "query": "How did Kevin feel while looking up the word in the dictionary?",
+    "required_phrases": ["Answer: D"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["It took him a few tries to find the word in question"]
+  },
+  {
+    "name": "E06-第一本词典",
+    "query": "What can we learn about the author's first dictionary?",
+    "required_phrases": ["Answer: C"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["I had my first dictionary as a gift for my 13th birthday"]
+  },
+  {
+    "name": "E07-学习动机",
+    "query": "What has the author come to realize about learning?",
+    "required_phrases": ["Answer: B"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["the curiosity and the appetite"]
+  },
+  {
+    "name": "E08-树木研究",
+    "query": "What does the new study imply regarding oaks and sweetgums?",
+    "required_phrases": ["Answer: C"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["produce huge amounts of a chemical substance called isoprene"]
+  },
+  {
+    "name": "E09-陶土艺术实验",
+    "query": "What was the beauty group asked to do with the clay objects?",
+    "required_phrases": ["Answer: B"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["187 people were invited to visit Kettle’s Yard gallery"]
+  },
+  {
+    "name": "M26-01-中位数与选项",
+    "query": "样本数据 6,8,4,5,12 的中位数为多少？",
+    "required_phrases": ["Answer: B"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["样本数据"]
+  },
+  {
+    "name": "M26-02-平面向量公式",
+    "query": "已知平面向量 a、b 不共线且满足向量等式，求 x、y 的关系。",
+    "required_phrases": ["Answer: A"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["已知平面向量"]
+  },
+  {
+    "name": "M26-03-抛物线焦点",
+    "query": "两条抛物线都经过点 (4,8)，求它们焦点之间的距离。",
+    "required_phrases": ["Answer: D"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["已知抛物线"]
+  },
+  {
+    "name": "M26-04-一百零八塔",
+    "query": "一百零八塔按 12 行排列并两两分组后，组和等差数列的公差是多少？",
+    "required_phrases": ["Answer: B"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["一百零八塔位于宁夏回族自治区青铜峡市"]
+  },
+  {
+    "name": "M26-05-三维随机变量",
+    "query": "从三维空间 64 个点去掉 P(1,1,1) 后随机取点，求 X 的数学期望。",
+    "required_phrases": ["Answer: A"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["随机取一个点"]
+  },
+  {
+    "name": "M26-06-二面角",
+    "query": "空间中点 C、D 到直线 AB 的距离分别为 2 和 1，二面角 C-AB-D 为 60 度，判断结论。",
+    "required_phrases": ["Answer: BC"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["动点C到直线AB 的距离为2"]
+  },
+  {
+    "name": "M26-07-三圆弦长",
+    "query": "直线与三个圆均有两个交点，比较被三个圆截得的弦长。",
+    "required_phrases": ["Answer: BCD"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["截得的弦长分别为"]
+  },
+  {
+    "name": "M26-08-跨页双曲线填空",
+    "query": "双曲线 5x^2-6y^2=1 的离心率是多少？",
+    "required_phrases": ["Answer: $\\frac{\\sqrt{66}}{6}$"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["的离心率为__________"]
+  },
+  {
+    "name": "M25-01-风速表格与图片",
+    "query": "帆船比赛的视风风速、船速和真风风速之间是什么关系？",
+    "required_phrases": ["Answer: A"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["帆船比赛中，运动员可借助风力计测定风速的大小与方向"]
+  },
+  {
+    "name": "M25-02-圆与直线图片公式",
+    "query": "2025 数学第 7 题中，圆上到直线距离为 1 的点有且仅有 2 个时，求 r 的范围。",
+    "required_phrases": ["Answer: B"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["距离为1的点有且仅有2个"]
+  },
+  {
+    "name": "M25-03-正三棱柱图片",
+    "query": "2025 数学第 9 题中，正三棱柱内 D 为 BC 中点时判断空间关系。",
+    "required_phrases": ["Answer: BD"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["在正三棱柱"]
+  },
+  {
+    "name": "M25-04-抛物线多选题",
+    "query": "2025 数学第 10 题中，抛物线焦点 F、弦 AB、垂足 D 与点 E 满足哪些关系？",
+    "required_phrases": ["Answer: ACD"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["过*F*的一条直线交*C*于*A*，*B*两点"]
+  },
+  {
+    "name": "M25-05-等比数列填空",
+    "query": "正项等比数列前 4 项和为 4、前 8 项和为 68，求公比。",
+    "required_phrases": ["Answer: 2"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["若一个等比数列的各项均为正数"]
+  },
+  {
+    "name": "M25-06-有放回抽球",
+    "query": "5 个编号球有放回抽取 3 次，至少被抽出一次的球数 X 的期望是多少？",
+    "required_phrases": ["Answer: $\\frac{61}{25}$"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["有5个相同的球，分别标有数字1，2，3，4，5"]
+  },
+  {
+    "name": "M25-07-跨页列联表",
+    "query": "超声波检查结果与患病情况的列联表如何做独立性检验？",
+    "required_phrases": ["（2）有关"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["为研究某疾病与超声波检查结果的关系"]
+  },
+  {
+    "name": "M25-08-解析几何图片链",
+    "query": "解析几何题中动点 P 不在 y 轴上，点 R 在射线 AP 上时如何求解？",
+    "required_phrases": ["$3(\\sqrt{3}+\\sqrt{2})$"],
+    "expected_chunk_ids": [],
+    "required_retrieval_phrases": ["已知动点*P*不在*y*轴上"]
+  }
+]

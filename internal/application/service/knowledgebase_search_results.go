@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"slices"
 
 	"github.com/Tencent/WeKnora/internal/logger"
@@ -256,7 +255,15 @@ func (s *knowledgeBaseService) assembleSearchResults(
 	// Second pass: Add enrichment chunks (parent, nearby, relation)
 	if !skipEnrichment {
 		for chunkID, chunk := range chunkMap {
-			if addedChunkIDs[chunkID] || !s.isSearchableChunk(chunk) {
+			if addedChunkIDs[chunkID] {
+				continue
+			}
+			matchType, exists := idx.matchTypes[chunkID]
+			if !exists {
+				logger.Warnf(ctx, "Unkonwn match type for chunk: %s", chunkID)
+				continue
+			}
+			if !s.isEnrichmentSearchableChunk(chunk, matchType) {
 				continue
 			}
 
@@ -266,13 +273,6 @@ func (s *knowledgeBaseService) assembleSearchResults(
 			}
 
 			if knowledge, ok := knowledgeMap[chunk.KnowledgeID]; ok {
-				matchType := types.MatchTypeParentChunk
-				if specificType, exists := idx.matchTypes[chunkID]; exists {
-					matchType = specificType
-				} else {
-					logger.Warnf(ctx, "Unkonwn match type for chunk: %s", chunkID)
-					continue
-				}
 				matchedContent := idx.matchedContents[chunkID]
 				searchResults = append(searchResults, s.buildSearchResult(chunk, knowledge, score, matchType, matchedContent))
 			}
@@ -280,63 +280,4 @@ func (s *knowledgeBaseService) assembleSearchResults(
 	}
 
 	return searchResults
-}
-
-// collectRelatedChunkIDs extracts related chunk IDs from a chunk.
-func (s *knowledgeBaseService) collectRelatedChunkIDs(chunk *types.Chunk, processedIDs map[string]bool) []string {
-	var relatedIDs []string
-	if len(chunk.RelationChunks) > 0 {
-		var relations []string
-		if err := json.Unmarshal(chunk.RelationChunks, &relations); err == nil {
-			for _, id := range relations {
-				if !processedIDs[id] {
-					relatedIDs = append(relatedIDs, id)
-					processedIDs[id] = true
-				}
-			}
-		}
-	}
-	return relatedIDs
-}
-
-// buildSearchResult creates a search result from chunk and knowledge.
-func (s *knowledgeBaseService) buildSearchResult(chunk *types.Chunk,
-	knowledge *types.Knowledge,
-	score float64,
-	matchType types.MatchType,
-	matchedContent string,
-) *types.SearchResult {
-	return &types.SearchResult{
-		ID:                chunk.ID,
-		Content:           chunk.Content,
-		KnowledgeID:       chunk.KnowledgeID,
-		ChunkIndex:        chunk.ChunkIndex,
-		KnowledgeTitle:    knowledge.Title,
-		StartAt:           chunk.StartAt,
-		EndAt:             chunk.EndAt,
-		Seq:               chunk.ChunkIndex,
-		Score:             score,
-		MatchType:         matchType,
-		Metadata:          knowledge.GetMetadata(),
-		ChunkType:         string(chunk.ChunkType),
-		ParentChunkID:     chunk.ParentChunkID,
-		ImageInfo:         chunk.ImageInfo,
-		KnowledgeFilename:    knowledge.FileName,
-		KnowledgeSource:      knowledge.Source,
-		KnowledgeChannel:     knowledge.Channel,
-		KnowledgeDescription: knowledge.Description,
-		ChunkMetadata:     chunk.Metadata,
-		MatchedContent:    matchedContent,
-		KnowledgeBaseID:   knowledge.KnowledgeBaseID,
-	}
-}
-
-// isSearchableChunk checks if a chunk type should be included in search results.
-func (s *knowledgeBaseService) isSearchableChunk(chunk *types.Chunk) bool {
-	return slices.Contains([]types.ChunkType{
-		types.ChunkTypeText, types.ChunkTypeSummary,
-		types.ChunkTypeTableColumn, types.ChunkTypeTableSummary,
-		types.ChunkTypeFAQ,
-		types.ChunkTypeImageOCR, types.ChunkTypeImageCaption,
-	}, chunk.ChunkType)
 }

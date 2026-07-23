@@ -10,10 +10,11 @@ type ExamContextEvalCase = searchutil.ExamContextEvalCase
 type ExamContextRetrievalEvalSummary = searchutil.ExamContextRetrievalEvalSummary
 
 type ExamContextRetrievalEvalCase struct {
-	Name             string
-	Query            string
-	RequiredPhrases  []string
-	ExpectedChunkIDs []string
+	Name                     string
+	Query                    string
+	RequiredPhrases          []string
+	ExpectedChunkIDs         []string
+	RequiredRetrievalPhrases []string
 }
 
 type ExamQuestionContextEvalRequest struct {
@@ -42,7 +43,8 @@ func toSearchutilEvalCases(cases []ExamContextRetrievalEvalCase) []searchutil.Ex
 				Query:           evalCase.Query,
 				RequiredPhrases: evalCase.RequiredPhrases,
 			},
-			ExpectedChunkIDs: evalCase.ExpectedChunkIDs,
+			ExpectedChunkIDs:         evalCase.ExpectedChunkIDs,
+			RequiredRetrievalPhrases: evalCase.RequiredRetrievalPhrases,
 		})
 	}
 	return out

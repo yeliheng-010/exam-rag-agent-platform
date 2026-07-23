@@ -454,6 +454,15 @@ export interface ExamRAGDiagnosticCase {
   query: string
   required_phrases: string[]
   expected_chunk_ids: string[]
+  required_retrieval_phrases?: string[]
+}
+
+export interface ExamRAGDiagnosticRankedItem {
+  rank: number
+  knowledge_base_id: string
+  local_rank: number
+  chunk_ids: string[]
+  contents: string[]
 }
 
 export interface ExamRAGDiagnosticResultItem {
@@ -463,20 +472,28 @@ export interface ExamRAGDiagnosticResultItem {
   retrieval_passed: boolean
   answer_passed: boolean
   retrieval_score: number
+  candidate_retrieval_score?: number
+  candidate_retrieval_passed?: boolean
   answer_score: number
   matched_chunk_ids: string[]
   missing_chunk_ids: string[]
   retrieved_chunk_ids: string[]
+  retrieved_items?: ExamRAGDiagnosticRankedItem[]
+  matched_retrieval_phrases?: string[]
+  missing_retrieval_phrases?: string[]
   matched_phrases: string[]
   missing_phrases: string[]
   context_label: string
   source_chunk_ids: string[]
-	 candidate_chunk_ids: string[]
-	 context_source: 'none' | 'structured_question_group'
-	 group_id: string
-	 search_traces: SearchTrace[]
-	 duration_ms: number
-	 reciprocal_rank: number
+  candidate_chunk_ids: string[]
+  candidate_items?: ExamRAGDiagnosticRankedItem[]
+  context_source: 'none' | 'structured_question_group' | 'evaluation_anchor_match'
+  group_id: string
+  association_confidence?: number
+  search_traces: SearchTrace[]
+  duration_ms: number
+  reciprocal_rank: number
+  first_relevant_rank?: number
   error: string
 }
 
@@ -488,13 +505,15 @@ export interface ExamRAGDiagnosticSummary {
   hit_rate: number
   retrieval_hit_rate: number
   answer_hit_rate: number
-	 recall_at_k: number
-	 mean_reciprocal_rank: number
-	 ranked_case_count: number
-	 structured_resolution_rate: number
-	 structured_resolved: number
-	 average_duration_ms: number
-	 failed_case_count: number
+  recall_at_k: number
+  candidate_recall?: number
+  candidate_hit_rate?: number
+  mean_reciprocal_rank: number
+  ranked_case_count: number
+  structured_resolution_rate: number
+  structured_resolved: number
+  average_duration_ms: number
+  failed_case_count: number
   results: ExamRAGDiagnosticResultItem[]
 }
 
@@ -550,6 +569,39 @@ export interface RunExamRAGEvaluationPayload {
 	keyword_threshold?: number
 }
 
+export interface ChunkingConfigSnapshot {
+	strategy: string
+	chunk_size: number
+	chunk_overlap: number
+	enable_parent_child: boolean
+	parent_chunk_size: number
+	child_chunk_size: number
+	token_limit: number
+	languages: string[]
+}
+
+export interface ExamRAGChunkingSnapshot {
+	knowledge_base_id: string
+	config: ChunkingConfigSnapshot
+	knowledge_count: number
+	text_chunk_count: number
+	parent_chunk_count: number
+	min_chars: number
+	p50_chars: number
+	p90_chars: number
+	max_chars: number
+	tiny_chunk_rate: number
+	oversize_rate: number
+	parent_coverage: number
+	actual_tier_counts: Record<string, number>
+	unknown_tier_count: number
+}
+
+export type ExamRAGEvaluationRequestSnapshot = Required<RunExamRAGEvaluationPayload> & {
+	used_default_cases?: boolean
+	chunking_snapshots?: ExamRAGChunkingSnapshot[]
+}
+
 export interface ExamRAGEvaluationProgress {
 	completed_cases: number
 	total_cases: number
@@ -567,7 +619,7 @@ export interface ExamRAGEvaluationRun {
 	created_by: string
 	status: ExamRAGEvaluationRunStatus
 	progress: ExamRAGEvaluationProgress
-	request_snapshot: Required<RunExamRAGEvaluationPayload>
+	request_snapshot: ExamRAGEvaluationRequestSnapshot
 	result_snapshot?: ExamRAGDiagnosticResult
 	error_message: string
 	started_at?: string

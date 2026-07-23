@@ -47,6 +47,46 @@ func TestSplitWithDiagnostics_EmptyText(t *testing.T) {
 	}
 }
 
+func TestSplitParentChildWithDiagnostics_ReportsParentAndChildTiers(t *testing.T) {
+	text := strings.Repeat("Paragraph one has enough words to split. Paragraph two continues the material.\n\n", 30)
+	parentCfg := SplitterConfig{
+		ChunkSize: 260, ChunkOverlap: 30,
+		Separators: []string{"\n\n", ". "}, Strategy: StrategyLegacy,
+	}
+	childCfg := SplitterConfig{
+		ChunkSize: 80, ChunkOverlap: 10,
+		Separators: []string{". ", " "}, Strategy: StrategyLegacy,
+	}
+
+	result, diag := SplitParentChildWithDiagnostics(text, parentCfg, childCfg)
+
+	if len(result.Children) == 0 || len(result.Parents) == 0 {
+		t.Fatalf("expected parent-child chunks, got parents=%d children=%d", len(result.Parents), len(result.Children))
+	}
+	if diag == nil || diag.Parent == nil {
+		t.Fatal("parent-child diagnostics must include parent diagnostics")
+	}
+	if diag.Parent.SelectedTier != TierLegacy {
+		t.Fatalf("parent tier = %s, want legacy", diag.Parent.SelectedTier)
+	}
+	if got := diag.ChildTierCounts[TierLegacy]; got != len(result.Parents) {
+		t.Fatalf("legacy child tier count = %d, want %d", got, len(result.Parents))
+	}
+	if len(diag.Rejected) != 0 {
+		t.Fatalf("legacy splitter should not report rejections: %+v", diag.Rejected)
+	}
+}
+
+func TestSplitParentChildWithDiagnostics_EmptyText(t *testing.T) {
+	result, diag := SplitParentChildWithDiagnostics("", DefaultConfig(), DefaultConfig())
+	if len(result.Parents) != 0 || len(result.Children) != 0 {
+		t.Fatalf("empty input produced chunks: %+v", result)
+	}
+	if diag == nil || diag.Parent == nil || diag.Parent.SelectedTier != TierLegacy {
+		t.Fatalf("empty input diagnostics = %+v", diag)
+	}
+}
+
 // TestSplit_AndDiagnostics_AgreeOnChunks ensures Split (no diagnostics)
 // and SplitWithDiagnostics produce the same chunk set for a given input.
 // They run independent loops as of the post-audit refactor — this test

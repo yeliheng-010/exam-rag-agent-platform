@@ -18,12 +18,14 @@ type examRAGEvaluationService struct {
 	questionService interfaces.ExamQuestionService
 	diagnostic      interfaces.ExamRAGDiagnosticService
 	tenantService   interfaces.TenantService
+	chunkQuality    interfaces.ExamRAGChunkQualityRepository
 	taskEnqueuer    interfaces.TaskEnqueuer
 }
 
 type examRAGEvaluationRequestSnapshot struct {
 	types.RunExamRAGDiagnosticRequest
-	UsedDefaultCases bool `json:"used_default_cases"`
+	UsedDefaultCases  bool                            `json:"used_default_cases"`
+	ChunkingSnapshots []types.ExamRAGChunkingSnapshot `json:"chunking_snapshots,omitempty"`
 }
 
 func NewExamRAGEvaluationService(
@@ -31,11 +33,12 @@ func NewExamRAGEvaluationService(
 	questionService interfaces.ExamQuestionService,
 	diagnostic interfaces.ExamRAGDiagnosticService,
 	tenantService interfaces.TenantService,
+	chunkQuality interfaces.ExamRAGChunkQualityRepository,
 	taskEnqueuer interfaces.TaskEnqueuer,
 ) interfaces.ExamRAGEvaluationService {
 	return &examRAGEvaluationService{
 		repo: repo, questionService: questionService, diagnostic: diagnostic,
-		tenantService: tenantService, taskEnqueuer: taskEnqueuer,
+		tenantService: tenantService, chunkQuality: chunkQuality, taskEnqueuer: taskEnqueuer,
 	}
 }
 
@@ -50,7 +53,14 @@ func (s *examRAGEvaluationService) CreateRun(
 	if err != nil {
 		return nil, err
 	}
-	run, err := newExamRAGEvaluationRun(tenantID, userID, preparation)
+	if s.chunkQuality == nil {
+		return nil, errors.New("exam RAG chunk quality repository is not configured")
+	}
+	chunkingSnapshots, err := s.chunkQuality.Snapshot(ctx, tenantID, preparation.Request.KnowledgeBaseIDs)
+	if err != nil {
+		return nil, err
+	}
+	run, err := newExamRAGEvaluationRun(tenantID, userID, preparation, chunkingSnapshots)
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +117,7 @@ func newExamRAGEvaluationRun(
 	tenantID uint64,
 	userID string,
 	preparation *types.ExamRAGDiagnosticPreparation,
+	chunkingSnapshots []types.ExamRAGChunkingSnapshot,
 ) (*types.ExamRAGEvaluationRun, error) {
 	if preparation == nil || preparation.QuestionBank == nil {
 		return nil, ErrExamInvalidRequest
@@ -114,6 +125,7 @@ func newExamRAGEvaluationRun(
 	request, err := json.Marshal(examRAGEvaluationRequestSnapshot{
 		RunExamRAGDiagnosticRequest: preparation.Request,
 		UsedDefaultCases:            preparation.UsedDefaultCases,
+		ChunkingSnapshots:           chunkingSnapshots,
 	})
 	if err != nil {
 		return nil, err
@@ -126,7 +138,7 @@ func newExamRAGEvaluationRun(
 	return &types.ExamRAGEvaluationRun{
 		ID: uuid.NewString(), TenantID: tenantID, QuestionBankID: preparation.QuestionBank.ID,
 		EvaluationKind: types.ExamEvaluationKindRAG,
-		CreatedBy: userID, Status: types.ExamRAGEvaluationRunStatusQueued,
+		CreatedBy:      userID, Status: types.ExamRAGEvaluationRunStatusQueued,
 		Progress: progress, RequestSnapshot: request, CreatedAt: now, UpdatedAt: now,
 	}, nil
 }

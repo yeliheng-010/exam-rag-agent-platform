@@ -171,6 +171,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewExamQuestionDraftRepository))
 	must(container.Provide(repository.NewExamQuestionGroupDraftRepository))
 	must(container.Provide(repository.NewExamRAGEvaluationRepository))
+	must(container.Provide(repository.NewExamRAGChunkQualityRepository))
 	must(container.Provide(repository.NewExamEvaluationCenterRepository))
 	must(container.Provide(repository.NewBillingRepository))
 	must(container.Provide(repository.NewKBShareRepository))

@@ -17,7 +17,8 @@ func TestExamRAGEvaluationServiceCreatesQueuedRun(t *testing.T) {
 	repo := newExamRAGEvaluationRunRepoStub()
 	diagnostic := &examRAGEvaluationDiagnosticStub{preparation: testRAGPreparation()}
 	enqueuer := &examRAGEvaluationEnqueuerStub{}
-	svc := NewExamRAGEvaluationService(repo, testRAGQuestionService(), diagnostic, testRAGTenantService(), enqueuer)
+	chunkQuality := newExamRAGChunkQualityRepoStub()
+	svc := NewExamRAGEvaluationService(repo, testRAGQuestionService(), diagnostic, testRAGTenantService(), chunkQuality, enqueuer)
 
 	run, err := svc.CreateRun(context.Background(), 10000, "teacher-1", "bank-1", &types.RunExamRAGDiagnosticRequest{})
 
@@ -37,6 +38,21 @@ func TestExamRAGEvaluationServiceCreatesQueuedRun(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(run.RequestSnapshot, &snapshot))
 	require.True(t, snapshot.UsedDefaultCases)
+	var immutable struct {
+		ChunkingSnapshots []types.ExamRAGChunkingSnapshot `json:"chunking_snapshots"`
+	}
+	require.NoError(t, json.Unmarshal(run.RequestSnapshot, &immutable))
+	require.Equal(t, "kb-1", immutable.ChunkingSnapshots[0].KnowledgeBaseID)
+	require.Equal(t, "auto", immutable.ChunkingSnapshots[0].Config.Strategy)
+	require.Equal(t, uint64(10000), chunkQuality.tenantID)
+	require.Equal(t, []string{"kb-1"}, chunkQuality.kbIDs)
+
+	chunkQuality.snapshots[0].Config.Strategy = "legacy"
+	var reread struct {
+		ChunkingSnapshots []types.ExamRAGChunkingSnapshot `json:"chunking_snapshots"`
+	}
+	require.NoError(t, json.Unmarshal(run.RequestSnapshot, &reread))
+	require.Equal(t, "auto", reread.ChunkingSnapshots[0].Config.Strategy)
 }
 
 func TestExamRAGEvaluationServiceScopesReadByQuestionBankPermission(t *testing.T) {
@@ -51,7 +67,7 @@ func TestExamRAGEvaluationServiceScopesReadByQuestionBankPermission(t *testing.T
 	})
 	repo.runs["run-1"] = run
 	questionSvc := testRAGQuestionService()
-	svc := NewExamRAGEvaluationService(repo, questionSvc, &examRAGEvaluationDiagnosticStub{}, testRAGTenantService(), &examRAGEvaluationEnqueuerStub{})
+	svc := NewExamRAGEvaluationService(repo, questionSvc, &examRAGEvaluationDiagnosticStub{}, testRAGTenantService(), newExamRAGChunkQualityRepoStub(), &examRAGEvaluationEnqueuerStub{})
 
 	runs, err := svc.ListRuns(context.Background(), 10000, "teacher-1", "bank-1", 20)
 	require.NoError(t, err)
@@ -64,6 +80,20 @@ func TestExamRAGEvaluationServiceScopesReadByQuestionBankPermission(t *testing.T
 	require.NotEmpty(t, repo.runs["run-1"].ResultSnapshot)
 	_, err = svc.GetRun(context.Background(), 10000, "teacher-1", "bank-2", "run-1")
 	require.ErrorIs(t, err, repository.ErrQuestionBankNotFound)
+}
+
+func TestCompactRAGEvaluationResultSnapshotPreservesMissingCandidateMetrics(t *testing.T) {
+	legacy := types.JSON(`{"used_default_cases":true,"summary":{"total":1,"recall_at_k":0.5,"results":[]}}`)
+
+	compacted := compactRAGEvaluationResultSnapshot(legacy)
+
+	var snapshot map[string]any
+	require.NoError(t, json.Unmarshal(compacted, &snapshot))
+	summary := snapshot["summary"].(map[string]any)
+	_, hasCandidateRecall := summary["candidate_recall"]
+	_, hasCandidateHitRate := summary["candidate_hit_rate"]
+	require.False(t, hasCandidateRecall)
+	require.False(t, hasCandidateHitRate)
 }
 
 func testRAGQuestionService() *stubExamRAGDiagnosticQuestionService {
@@ -192,3 +222,30 @@ func (r *examRAGEvaluationRunRepoStub) UpdateRun(_ context.Context, tenantID uin
 }
 
 var errRAGEvaluationWorker = errors.New("evaluation unavailable")
+
+type examRAGChunkQualityRepoStub struct {
+	tenantID  uint64
+	kbIDs     []string
+	snapshots []types.ExamRAGChunkingSnapshot
+	err       error
+}
+
+func newExamRAGChunkQualityRepoStub() *examRAGChunkQualityRepoStub {
+	return &examRAGChunkQualityRepoStub{snapshots: []types.ExamRAGChunkingSnapshot{
+		{
+			KnowledgeBaseID:  "kb-1",
+			Config:           types.ChunkingConfigSnapshot{Strategy: "auto", ChunkSize: 512},
+			ActualTierCounts: map[string]int{"heading": 1},
+		},
+	}}
+}
+
+func (s *examRAGChunkQualityRepoStub) Snapshot(
+	_ context.Context,
+	tenantID uint64,
+	kbIDs []string,
+) ([]types.ExamRAGChunkingSnapshot, error) {
+	s.tenantID = tenantID
+	s.kbIDs = append([]string{}, kbIDs...)
+	return s.snapshots, s.err
+}

@@ -126,6 +126,26 @@ func TestDefaultExamRAGDiagnosticCasesSelectsMathQualityChecks(t *testing.T) {
 	}
 }
 
+func TestBuildExamRAGDiagnosticCasesNormalizesRetrievalPhraseGold(t *testing.T) {
+	t.Parallel()
+
+	cases, usedDefault, err := buildExamRAGDiagnosticCases([]types.ExamRAGDiagnosticCase{
+		{
+			Name: " stable_case ", Query: " query ",
+			RequiredPhrases:          []string{"answer", "answer"},
+			ExpectedChunkIDs:         []string{"chunk-1", "chunk-1"},
+			RequiredRetrievalPhrases: []string{" source phrase ", "source phrase", ""},
+		},
+	}, &types.QuestionBank{})
+
+	if err != nil || usedDefault || len(cases) != 1 {
+		t.Fatalf("cases=%#v usedDefault=%v err=%v", cases, usedDefault, err)
+	}
+	if got := strings.Join(cases[0].RequiredRetrievalPhrases, ","); got != "source phrase" {
+		t.Fatalf("retrieval phrases = %q", got)
+	}
+}
+
 type stubExamRAGDiagnosticQuestionService struct {
 	interfaces.ExamQuestionService
 	bank *types.QuestionBank

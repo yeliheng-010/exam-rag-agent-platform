@@ -81,6 +81,15 @@ type Diagnostics struct {
 	Profile *DocProfile `json:"profile,omitempty"`
 }
 
+// ParentChildDiagnostics captures the strategy selected for the parent pass
+// and the tier distribution across the child passes. Rejected contains the
+// combined fallback reasons from both levels without retaining chunk content.
+type ParentChildDiagnostics struct {
+	Parent          *Diagnostics         `json:"parent"`
+	ChildTierCounts map[StrategyTier]int `json:"child_tier_counts"`
+	Rejected        []TierRejection      `json:"rejected"`
+}
+
 // SplitWithDiagnostics is the same as Split but also returns the
 // diagnostic trace (selected tier, full chain, rejection reasons,
 // profile when available). Use this for the chunker preview endpoint
@@ -133,22 +142,39 @@ func SplitWithDiagnostics(text string, cfg SplitterConfig) ([]Chunk, *Diagnostic
 // is bounded by O(sum(parent_size)) ≈ O(N) total, which is the same
 // order as the original parent profiling pass.
 func SplitParentChild(text string, parentCfg, childCfg SplitterConfig) ParentChildResult {
-	if text == "" {
-		return ParentChildResult{}
-	}
-	parentCfg = ensureDefaults(parentCfg)
-	childCfg = ensureDefaults(childCfg)
+	result, _ := SplitParentChildWithDiagnostics(text, parentCfg, childCfg)
+	return result
+}
 
-	parents := Split(text, parentCfg)
+// SplitParentChildWithDiagnostics is the observable counterpart to
+// SplitParentChild. It keeps the same chunk output while recording the actual
+// parent tier and the selected tier for every child split.
+func SplitParentChildWithDiagnostics(
+	text string,
+	parentCfg, childCfg SplitterConfig,
+) (ParentChildResult, *ParentChildDiagnostics) {
+	diag := &ParentChildDiagnostics{
+		Parent:          &Diagnostics{SelectedTier: TierLegacy},
+		ChildTierCounts: make(map[StrategyTier]int),
+	}
+	if text == "" {
+		return ParentChildResult{}, diag
+	}
+
+	parents, parentDiag := SplitWithDiagnostics(text, parentCfg)
+	diag.Parent = parentDiag
+	diag.Rejected = append(diag.Rejected, parentDiag.Rejected...)
 	if len(parents) == 0 {
-		return ParentChildResult{}
+		return ParentChildResult{}, diag
 	}
 
 	var newParents []Chunk
 	var children []ChildChunk
 	childSeq := 0
 	for _, parent := range parents {
-		subs := Split(parent.Content, childCfg)
+		subs, childDiag := SplitWithDiagnostics(parent.Content, childCfg)
+		diag.ChildTierCounts[childDiag.SelectedTier]++
+		diag.Rejected = append(diag.Rejected, childDiag.Rejected...)
 
 		parentIndex := -1
 		if len(subs) > 1 || (len(subs) == 1 && subs[0].Content != parent.Content) {
@@ -164,7 +190,7 @@ func SplitParentChild(text string, parentCfg, childCfg SplitterConfig) ParentChi
 			childSeq++
 		}
 	}
-	return ParentChildResult{Parents: newParents, Children: children}
+	return ParentChildResult{Parents: newParents, Children: children}, diag
 }
 
 // mergeBreadcrumbs combines the parent and child heading breadcrumbs into a

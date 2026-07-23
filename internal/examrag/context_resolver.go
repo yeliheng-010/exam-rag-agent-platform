@@ -44,16 +44,20 @@ type ExamQuestionContextResolveRequest struct {
 }
 
 type ExamQuestionContextResolveResult struct {
-	Bundle            *searchutil.ExamQuestionContextBundle
-	Detail            *types.QuestionGroupDetail
-	TenantID          uint64
-	GroupID           string
-	RetrievedChunkIDs []string
-	CandidateChunkIDs []string
-	SourceChunkIDs    []string
-	ContextSource     types.ExamRAGContextSource
-	SearchTraces      []*types.SearchTrace
-	DurationMS        int64
+	Bundle                *searchutil.ExamQuestionContextBundle
+	Detail                *types.QuestionGroupDetail
+	TenantID              uint64
+	GroupID               string
+	RetrievedChunkIDs     []string
+	RetrievedContents     []string
+	RetrievedItems        []ExamContextRankedItem
+	CandidateChunkIDs     []string
+	CandidateItems        []ExamContextRankedItem
+	SourceChunkIDs        []string
+	ContextSource         types.ExamRAGContextSource
+	AssociationConfidence float64
+	SearchTraces          []*types.SearchTrace
+	DurationMS            int64
 }
 
 func NewExamQuestionContextResolver(cfg ExamQuestionContextResolverConfig) *ExamQuestionContextResolver {
@@ -85,21 +89,7 @@ func (r *ExamQuestionContextResolver) Resolve(
 	req ExamQuestionContextResolveRequest,
 ) (*ExamQuestionContextResolveResult, error) {
 	startedAt := time.Now()
-	if r == nil {
-		return nil, fmt.Errorf("exam question context resolver is not configured")
-	}
-	if r.questionRepo == nil {
-		return nil, fmt.Errorf("exam question repository is not configured")
-	}
-
-	query := strings.TrimSpace(req.Query)
-	groupID := strings.TrimSpace(req.GroupID)
-	chunkIDs := CleanIDs(req.ChunkIDs)
-	if query == "" {
-		return nil, fmt.Errorf("query is required")
-	}
-
-	tenantID, err := r.resolveTenantID(ctx, req.TenantID, req.KnowledgeBaseIDs)
+	query, groupID, chunkIDs, tenantID, err := r.resolveRequestScope(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -109,13 +99,20 @@ func (r *ExamQuestionContextResolver) Resolve(
 		ContextSource: types.ExamRAGContextSourceNone,
 	}
 	if groupID == "" && len(chunkIDs) == 0 {
-		chunkIDs, result.SearchTraces, err = r.searchChunkIDsForQuery(ctx, query, req.KnowledgeBaseIDs, tenantID)
+		result.RetrievedItems, result.CandidateItems, result.SearchTraces, err = r.searchRankedItemsForKBs(
+			ctx, query, req.KnowledgeBaseIDs, tenantID,
+		)
 		if err != nil {
 			return nil, err
 		}
-		result.RetrievedChunkIDs = append([]string{}, chunkIDs...)
+		result.RetrievedChunkIDs = rankedItemChunkIDs(result.RetrievedItems)
+		result.RetrievedContents = rankedItemContents(result.RetrievedItems)
+		result.CandidateChunkIDs = rankedItemChunkIDs(result.CandidateItems)
+		chunkIDs = append([]string{}, result.RetrievedChunkIDs...)
 	}
-	result.CandidateChunkIDs = append([]string{}, chunkIDs...)
+	if len(result.CandidateChunkIDs) == 0 {
+		result.CandidateChunkIDs = append([]string{}, chunkIDs...)
+	}
 	if len(result.RetrievedChunkIDs) == 0 {
 		result.RetrievedChunkIDs = append([]string{}, chunkIDs...)
 	}
@@ -129,44 +126,58 @@ func (r *ExamQuestionContextResolver) Resolve(
 		return result, nil
 	}
 
-	bundle := searchutil.BuildStructuredExamQuestionContextBundle(query, detail)
-	if bundle == nil {
+	if !setResolvedQuestionGroup(
+		result, query, detail, types.ExamRAGContextSourceStructuredQuestionGroup, 0,
+	) {
 		result.DurationMS = time.Since(startedAt).Milliseconds()
 		return result, nil
+	}
+	result.DurationMS = time.Since(startedAt).Milliseconds()
+	return result, nil
+}
+
+func (r *ExamQuestionContextResolver) resolveRequestScope(
+	ctx context.Context,
+	req ExamQuestionContextResolveRequest,
+) (string, string, []string, uint64, error) {
+	if r == nil {
+		return "", "", nil, 0, fmt.Errorf("exam question context resolver is not configured")
+	}
+	if r.questionRepo == nil {
+		return "", "", nil, 0, fmt.Errorf("exam question repository is not configured")
+	}
+	query := strings.TrimSpace(req.Query)
+	if query == "" {
+		return "", "", nil, 0, fmt.Errorf("query is required")
+	}
+	tenantID, err := r.resolveTenantID(ctx, req.TenantID, req.KnowledgeBaseIDs)
+	if err != nil {
+		return "", "", nil, 0, err
+	}
+	return query, strings.TrimSpace(req.GroupID), CleanIDs(req.ChunkIDs), tenantID, nil
+}
+
+func setResolvedQuestionGroup(
+	result *ExamQuestionContextResolveResult,
+	query string,
+	detail *types.QuestionGroupDetail,
+	source types.ExamRAGContextSource,
+	confidence float64,
+) bool {
+	if result == nil || detail == nil || detail.Group == nil {
+		return false
+	}
+	bundle := searchutil.BuildStructuredExamQuestionContextBundle(query, detail)
+	if bundle == nil {
+		return false
 	}
 	result.Detail = detail
 	result.Bundle = bundle
 	result.GroupID = detail.Group.ID
 	result.SourceChunkIDs = append([]string{}, bundle.SourceChunkIDs...)
-	result.ContextSource = types.ExamRAGContextSourceStructuredQuestionGroup
-	result.DurationMS = time.Since(startedAt).Milliseconds()
-	return result, nil
-}
-
-func (r *ExamQuestionContextResolver) EvalResolver(
-	tenantID uint64,
-	knowledgeBaseIDs []string,
-) searchutil.ExamContextBundleResolver {
-	return func(ctx context.Context, query string) (*searchutil.ExamContextResolution, error) {
-		result, err := r.Resolve(ctx, ExamQuestionContextResolveRequest{
-			Query:            query,
-			TenantID:         tenantID,
-			KnowledgeBaseIDs: knowledgeBaseIDs,
-		})
-		if result == nil {
-			return nil, err
-		}
-		return &searchutil.ExamContextResolution{
-			Bundle:            result.Bundle,
-			RetrievedChunkIDs: append([]string{}, result.RetrievedChunkIDs...),
-			CandidateChunkIDs: append([]string{}, result.CandidateChunkIDs...),
-			SourceChunkIDs:    append([]string{}, result.SourceChunkIDs...),
-			ContextSource:     result.ContextSource,
-			GroupID:           result.GroupID,
-			SearchTraces:      append([]*types.SearchTrace{}, result.SearchTraces...),
-			DurationMS:        result.DurationMS,
-		}, err
-	}
+	result.ContextSource = source
+	result.AssociationConfidence = confidence
+	return true
 }
 
 func (r *ExamQuestionContextResolver) loadQuestionGroupDetail(
@@ -182,101 +193,6 @@ func (r *ExamQuestionContextResolver) loadQuestionGroupDetail(
 		return nil, nil
 	}
 	return r.questionRepo.FindQuestionGroupDetailByChunkIDs(ctx, tenantID, chunkIDs)
-}
-
-func (r *ExamQuestionContextResolver) searchChunkIDsForQuery(
-	ctx context.Context,
-	query string,
-	kbIDs []string,
-	tenantID uint64,
-) ([]string, []*types.SearchTrace, error) {
-	if r.knowledgeBaseService == nil {
-		return nil, nil, fmt.Errorf("knowledge base service is not configured")
-	}
-
-	targets, err := r.selectSearchTargets(kbIDs, tenantID)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(targets) == 0 {
-		return nil, nil, fmt.Errorf("no accessible knowledge bases available for exam question context search")
-	}
-
-	seen := make(map[string]bool)
-	chunkIDs := make([]string, 0, r.matchCount)
-	traces := make([]*types.SearchTrace, 0, len(targets))
-	traceService, traceEnabled := r.knowledgeBaseService.(interfaces.KnowledgeBaseSearchTraceService)
-	for _, target := range targets {
-		if target == nil || strings.TrimSpace(target.KnowledgeBaseID) == "" {
-			continue
-		}
-		params := types.SearchParams{
-			QueryText:        query,
-			MatchCount:       r.matchCount,
-			VectorThreshold:  r.vectorThreshold,
-			KeywordThreshold: r.keywordThreshold,
-			KnowledgeIDs:     CleanIDs(target.KnowledgeIDs),
-			TagIDs:           CleanIDs(target.TagIDs),
-		}
-		var results []*types.SearchResult
-		var trace *types.SearchTrace
-		if traceEnabled {
-			results, trace, err = traceService.HybridSearchWithTrace(ctx, target.KnowledgeBaseID, params)
-		} else {
-			results, err = r.knowledgeBaseService.HybridSearch(ctx, target.KnowledgeBaseID, params)
-		}
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to search knowledge base %s: %w", target.KnowledgeBaseID, err)
-		}
-		if trace != nil {
-			traces = append(traces, trace)
-		}
-		for _, result := range results {
-			if result == nil {
-				continue
-			}
-			chunkIDs = appendChunkID(chunkIDs, seen, result.ID)
-			for _, subID := range result.SubChunkID {
-				chunkIDs = appendChunkID(chunkIDs, seen, subID)
-			}
-		}
-	}
-	return chunkIDs, traces, nil
-}
-
-func (r *ExamQuestionContextResolver) selectSearchTargets(
-	kbIDs []string,
-	tenantID uint64,
-) (types.SearchTargets, error) {
-	requested := CleanIDs(kbIDs)
-	requestedSet := make(map[string]bool, len(requested))
-	for _, kbID := range requested {
-		requestedSet[kbID] = true
-	}
-
-	targets := make(types.SearchTargets, 0, len(r.searchTargets))
-	for _, target := range r.searchTargets {
-		if target == nil || strings.TrimSpace(target.KnowledgeBaseID) == "" {
-			continue
-		}
-		if len(requestedSet) > 0 {
-			if requestedSet[target.KnowledgeBaseID] {
-				targets = append(targets, target)
-				delete(requestedSet, target.KnowledgeBaseID)
-			}
-			continue
-		}
-		if tenantID != 0 && target.TenantID != 0 && target.TenantID != tenantID {
-			continue
-		}
-		targets = append(targets, target)
-	}
-	if len(requestedSet) > 0 {
-		for kbID := range requestedSet {
-			return nil, fmt.Errorf("knowledge base %s is not accessible", kbID)
-		}
-	}
-	return targets, nil
 }
 
 func (r *ExamQuestionContextResolver) resolveTenantID(
@@ -357,13 +273,4 @@ func CleanIDs(values []string) []string {
 		out = append(out, value)
 	}
 	return out
-}
-
-func appendChunkID(ids []string, seen map[string]bool, id string) []string {
-	id = strings.TrimSpace(id)
-	if id == "" || seen[id] {
-		return ids
-	}
-	seen[id] = true
-	return append(ids, id)
 }

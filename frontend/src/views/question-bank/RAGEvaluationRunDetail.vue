@@ -1,5 +1,33 @@
 <template>
   <div class="run-detail">
+    <section class="chunking-snapshot" aria-label="切块快照">
+      <header>
+        <h4>切块快照</h4>
+        <span>{{ chunkingRows.length ? `${chunkingRows.length} 个知识库` : '未记录' }}</span>
+      </header>
+      <div v-if="chunkingRows.length" class="chunking-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>知识库</th><th>策略 / 实际 tier</th><th>块数量</th><th>P50 / P90</th>
+              <th>Tiny</th><th>Oversize</th><th>父块覆盖</th><th>未知 tier</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in chunkingRows" :key="row.knowledgeBaseID">
+              <td data-label="知识库"><code>{{ row.knowledgeBaseID }}</code></td>
+              <td data-label="策略 / 实际 tier"><strong>{{ row.requestedStrategy }}</strong><span>{{ row.actualTiers }}</span></td>
+              <td data-label="块数量">{{ row.chunks }}</td>
+              <td data-label="P50 / P90">{{ row.sizes }}</td>
+              <td data-label="Tiny">{{ row.tinyRate }}</td>
+              <td data-label="Oversize">{{ row.oversizeRate }}</td>
+              <td data-label="父块覆盖">{{ row.parentCoverage }}</td>
+              <td data-label="未知 tier">{{ row.unknownTiers }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
     <t-empty v-if="!result" size="small" :description="emptyDescription" />
     <template v-else>
       <div class="result-meta">
@@ -16,18 +44,22 @@
               <p>{{ item.query }}</p>
             </div>
             <div class="case-rates">
-              <span>召回 {{ formatRAGRate(item.retrieval_score) }}</span>
+              <span>Top-K {{ caseRetrievalRate(item) }}</span>
+              <span>候选 {{ caseCandidateRate(item) }}</span>
               <span>答案 {{ formatRAGRate(item.answer_score) }}</span>
             </div>
             <t-tag size="small" :theme="caseTheme(item)" variant="light">{{ caseStatus(item) }}</t-tag>
           </summary>
           <div class="case-body">
             <dl>
-              <div><dt>上下文来源</dt><dd>{{ item.context_source || 'none' }}</dd></div>
+              <div><dt>上下文来源</dt><dd>{{ formatContextSource(item.context_source) }}</dd></div>
+              <div><dt>关联置信度</dt><dd>{{ formatAssociationConfidence(item.context_source, item.association_confidence) }}</dd></div>
               <div><dt>题组 ID</dt><dd>{{ item.group_id || '-' }}</dd></div>
               <div><dt>耗时</dt><dd>{{ formatRAGDuration(item.duration_ms) }}</dd></div>
-              <div><dt>MRR</dt><dd>{{ item.reciprocal_rank?.toFixed(3) || '0.000' }}</dd></div>
+              <div><dt>首个相关排名</dt><dd>{{ formatFirstRelevantRank(item) }}</dd></div>
+              <div><dt>候选全集召回</dt><dd>{{ caseCandidateRate(item) }}</dd></div>
             </dl>
+            <p v-if="item.missing_retrieval_phrases?.length" class="missing-line">缺失检索金标：{{ item.missing_retrieval_phrases.join('、') }}</p>
             <p v-if="item.missing_phrases?.length" class="missing-line">缺失证据：{{ item.missing_phrases.join('、') }}</p>
             <p v-if="item.error" class="error-line">{{ item.error }}</p>
             <RAGEvaluationTrace :item="item" />
@@ -42,11 +74,32 @@
 import { computed } from 'vue'
 import type { ExamRAGDiagnosticResultItem, ExamRAGEvaluationRun } from '@/types/exam'
 import RAGEvaluationTrace from './RAGEvaluationTrace.vue'
-import { formatRAGDuration, formatRAGRate } from './ragEvaluationViewModel'
+import {
+  caseHasRetrievalGold,
+  formatAssociationConfidence,
+  formatContextSource,
+  formatFirstRelevantRank,
+  formatRAGDuration,
+  formatRAGRate,
+  formatRankedRate,
+  formatOptionalRankedRate,
+  getChunkingSnapshotRows,
+} from './ragEvaluationViewModel'
 
 const props = defineProps<{ run: ExamRAGEvaluationRun }>()
 const result = computed(() => props.run.result_snapshot)
+const chunkingRows = computed(() => getChunkingSnapshotRows(props.run))
 const emptyDescription = computed(() => props.run.status === 'failed' ? '本次运行失败' : '评测结果生成中')
+
+const caseRetrievalRate = (item: ExamRAGDiagnosticResultItem) => formatRankedRate(
+  item.retrieval_score,
+  caseHasRetrievalGold(item) ? 1 : 0,
+)
+
+const caseCandidateRate = (item: ExamRAGDiagnosticResultItem) => formatOptionalRankedRate(
+  item.candidate_retrieval_score,
+  caseHasRetrievalGold(item) ? 1 : 0,
+)
 
 const caseTheme = (item: ExamRAGDiagnosticResultItem) => {
   if (item.error) return 'danger'
@@ -60,134 +113,4 @@ const caseStatus = (item: ExamRAGDiagnosticResultItem) => {
 }
 </script>
 
-<style lang="less" scoped>
-.run-detail,
-.case-list {
-  display: grid;
-  gap: 12px;
-}
-
-.result-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-  color: var(--td-text-color-secondary);
-  font-size: 12px;
-}
-
-.case-row {
-  border-top: 1px solid var(--td-component-stroke);
-
-  summary {
-    display: grid;
-    grid-template-columns: 34px minmax(180px, 1fr) auto auto;
-    align-items: center;
-    gap: 12px;
-    min-height: 74px;
-    cursor: pointer;
-    list-style: none;
-
-    &::-webkit-details-marker {
-      display: none;
-    }
-  }
-}
-
-.case-index {
-  color: var(--td-text-color-placeholder);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-
-.case-copy {
-  min-width: 0;
-
-  strong {
-    display: block;
-    overflow-wrap: anywhere;
-    font-size: 14px;
-  }
-
-  p {
-    margin: 4px 0 0;
-    overflow: hidden;
-    color: var(--td-text-color-secondary);
-    font-size: 12px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
-.case-rates {
-  display: flex;
-  gap: 12px;
-  color: var(--td-text-color-secondary);
-  font-size: 12px;
-}
-
-.case-body {
-  display: grid;
-  gap: 14px;
-  padding: 0 0 18px 46px;
-
-  dl {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
-    margin: 0;
-  }
-
-  dl div {
-    min-width: 0;
-    padding: 9px 10px;
-    background: var(--td-bg-color-secondarycontainer);
-    border-radius: 6px;
-  }
-
-  dt {
-    margin-bottom: 4px;
-    color: var(--td-text-color-placeholder);
-    font-size: 11px;
-  }
-
-  dd {
-    margin: 0;
-    overflow-wrap: anywhere;
-    font-size: 12px;
-    font-weight: 600;
-  }
-}
-
-.missing-line,
-.error-line {
-  margin: 0;
-  font-size: 12px;
-  line-height: 20px;
-}
-
-.missing-line {
-  color: var(--td-warning-color);
-}
-
-.error-line {
-  color: var(--td-error-color);
-}
-
-@media (max-width: 720px) {
-  .case-row summary {
-    grid-template-columns: 28px minmax(0, 1fr) auto;
-  }
-
-  .case-rates {
-    display: none;
-  }
-
-  .case-body {
-    padding-left: 0;
-
-    dl {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-}
-</style>
+<style lang="less" scoped src="./RAGEvaluationRunDetail.less"></style>

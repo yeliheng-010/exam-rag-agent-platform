@@ -13,7 +13,6 @@ import (
 	"time"
 
 	werrors "github.com/Tencent/WeKnora/internal/errors"
-	"github.com/Tencent/WeKnora/internal/infrastructure/chunker"
 	"github.com/Tencent/WeKnora/internal/infrastructure/docparser"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/tracing/langfuse"
@@ -1140,13 +1139,14 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 	processOverrides, _ := knowledge.ProcessOverrides()
 	eff := ResolveProcessConfig(kb, processOverrides)
 
-	// Manual content is markdown - chunk directly with Go chunker
-	chunkCfg := buildSplitterConfigFromChunking(eff.ChunkingConfig)
-
-	var parsed []types.ParsedChunk
+	// Manual content is markdown - chunk directly with the shared executor.
+	execution := executeChunking(clean, eff.ChunkingConfig)
 	opts := ProcessChunksOptions{
-		EnableMultimodel: eff.EnableMultimodel && len(resolvedImages) > 0,
-		StoredImages:     resolvedImages,
+		EnableMultimodel:    eff.EnableMultimodel && len(resolvedImages) > 0,
+		StoredImages:        resolvedImages,
+		ParentChunks:        execution.ParentChunks,
+		ChunkingConfig:      eff.ChunkingConfig,
+		ChunkingDiagnostics: execution.Diagnostics,
 	}
 	if eff.QuestionGenerationConfig.Enabled {
 		opts.EnableQuestionGeneration = true
@@ -1156,44 +1156,11 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 		}
 	}
 
-	if eff.ChunkingConfig.EnableParentChild {
-		parentCfg, childCfg := buildParentChildConfigs(eff.ChunkingConfig, chunkCfg)
-		pcResult := chunker.SplitParentChild(clean, parentCfg, childCfg)
-		parsed = make([]types.ParsedChunk, len(pcResult.Children))
-		for i, c := range pcResult.Children {
-			parsed[i] = types.ParsedChunk{
-				Content:       c.Content,
-				ContextHeader: c.ContextHeader,
-				Seq:           c.Seq,
-				Start:         c.Start,
-				End:           c.End,
-				ParentIndex:   c.ParentIndex,
-			}
-		}
-		parentChunks := make([]types.ParsedParentChunk, len(pcResult.Parents))
-		for i, p := range pcResult.Parents {
-			parentChunks[i] = types.ParsedParentChunk{Content: p.Content, Seq: p.Seq, Start: p.Start, End: p.End}
-		}
-		opts.ParentChunks = parentChunks
-	} else {
-		splitChunks := chunker.Split(clean, chunkCfg)
-		parsed = make([]types.ParsedChunk, len(splitChunks))
-		for i, c := range splitChunks {
-			parsed[i] = types.ParsedChunk{
-				Content:       c.Content,
-				ContextHeader: c.ContextHeader,
-				Seq:           c.Seq,
-				Start:         c.Start,
-				End:           c.End,
-			}
-		}
-	}
-
 	if doSync {
-		s.processChunks(ctx, kb, knowledge, parsed, opts)
+		s.processChunks(ctx, kb, knowledge, execution.Chunks, opts)
 		return
 	}
 
 	newCtx := logger.CloneContext(ctx)
-	go s.processChunks(newCtx, kb, knowledge, parsed, opts)
+	go s.processChunks(newCtx, kb, knowledge, execution.Chunks, opts)
 }

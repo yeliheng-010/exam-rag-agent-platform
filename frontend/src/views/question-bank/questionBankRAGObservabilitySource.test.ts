@@ -7,7 +7,9 @@ const api = read('../../api/exam/question-bank.ts')
 const router = read('../../router/index.ts')
 const detail = read('./QuestionBankDetail.vue')
 const page = read('./QuestionBankRAGObservability.vue')
+const style = read('./QuestionBankRAGObservability.less')
 const runDetail = read('./RAGEvaluationRunDetail.vue')
+const runDetailStyle = read('./RAGEvaluationRunDetail.less')
 const trace = read('./RAGEvaluationTrace.vue')
 const viewModel = read('./ragEvaluationViewModel.ts')
 
@@ -30,11 +32,16 @@ test('covers async states, polling, metrics, history and comparison', () => {
   for (const token of ['queued', 'running', 'failed', 'completed', 'setInterval', 'clearInterval']) {
     assert.match(page, new RegExp(token))
   }
-  for (const label of ['总体通过率', '召回覆盖', '答案覆盖', '结构化解析率', '平均耗时']) {
+  for (const label of ['总体通过率', 'Top-K 命中率', '候选 Recall', '答案覆盖', '结构化解析率', '平均耗时']) {
     assert.match(page + viewModel, new RegExp(label))
   }
   assert.match(page, /selectedComparisonRunIds/)
   assert.match(page, /compareRunConfigurations/)
+	assert.match(page + runDetail, /切块快照/)
+	assert.match(page + viewModel, /compareChunkingSnapshots/)
+	assert.match(runDetail + viewModel, /无检索金标/)
+	assert.match(runDetail + viewModel, /未记录/)
+	assert.match(style, /grid-template-columns:\s*repeat\(9,/)
 })
 
 test('renders all retrieval trace stages and copyable chunk ids', () => {
@@ -46,7 +53,11 @@ test('renders all retrieval trace stages and copyable chunk ids', () => {
 })
 
 test('wraps long case names before the mobile status tag', () => {
-  assert.match(runDetail, /\.case-copy\s*\{[\s\S]*?strong\s*\{[^}]*overflow-wrap:\s*anywhere/)
+  assert.match(runDetail + runDetailStyle, /\.case-copy\s*\{[\s\S]*?strong\s*\{[^}]*overflow-wrap:\s*anywhere/)
+})
+
+test('reserves mobile space for the fixed notification button', () => {
+  assert.match(runDetailStyle, /\.case-row summary\s*\{[^}]*padding-right:\s*40px/)
 })
 
 test('guards polling from overlap and stale active-run responses', () => {
