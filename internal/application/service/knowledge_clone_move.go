@@ -356,6 +356,13 @@ func getKBCloneProgressKey(taskID string) string {
 	return kbCloneProgressKeyPrefix + taskID
 }
 
+func recordKBCloneTarget(progress *types.KBCloneProgress, target *types.KnowledgeBase) {
+	if progress == nil || target == nil {
+		return
+	}
+	progress.TargetID = target.ID
+}
+
 // ProcessKBClone handles Asynq knowledge base clone tasks
 func (s *knowledgeService) ProcessKBClone(ctx context.Context, t *asynq.Task) error {
 	var payload types.KBClonePayload
@@ -413,6 +420,11 @@ func (s *knowledgeService) ProcessKBClone(ctx context.Context, t *asynq.Task) er
 		logger.Errorf(ctx, "Failed to copy knowledge base: %v", err)
 		handleError(progress, err, "Failed to copy knowledge base configuration")
 		return err
+	}
+	recordKBCloneTarget(progress, dstKB)
+	progress.UpdatedAt = time.Now().Unix()
+	if err := s.saveKBCloneProgress(ctx, progress); err != nil {
+		logger.Warnf(ctx, "Failed to save cloned knowledge base target ID: %v", err)
 	}
 
 	// Use different sync strategies based on knowledge base type
